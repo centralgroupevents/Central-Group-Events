@@ -1,16 +1,101 @@
 import type { Express } from "express";
-import { createServer, type Server } from "http";
+import type { Server } from "http";
 import { storage } from "./storage";
+import { api } from "@shared/routes";
+import { z } from "zod";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  app.post(api.subscribers.create.path, async (req, res) => {
+    try {
+      const input = api.subscribers.create.input.parse(req.body);
+      await storage.createSubscriber(input);
+      res.status(201).json({ message: "Successfully subscribed to the newsletter!" });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join('.'),
+        });
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+  app.post(api.bookings.create.path, async (req, res) => {
+    try {
+      const input = api.bookings.create.input.parse(req.body);
+      await storage.createBooking(input);
+      res.status(201).json({ message: "Booking request submitted successfully! We'll be in touch." });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join('.'),
+        });
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get(api.events.list.path, async (req, res) => {
+    try {
+      const region = req.query.region as string;
+      const eventList = await storage.getEvents(region);
+      res.status(200).json(eventList);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Seed data function
+  await seedDatabase();
 
   return httpServer;
+}
+
+async function seedDatabase() {
+  const existingEvents = await storage.getEvents();
+  if (existingEvents.length === 0) {
+    const seedEvents = [
+      {
+        title: "Summer Vibes Day Party",
+        description: "The hottest day party in Central NJ with live DJs and drinks.",
+        date: "2026-07-15",
+        region: "Central NJ",
+        imageUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+        ticketLink: "https://example.com/tickets",
+      },
+      {
+        title: "Midnight R&B Lounge",
+        description: "Smooth R&B hits all night long.",
+        date: "2026-07-22",
+        region: "North NJ",
+        imageUrl: "https://images.unsplash.com/photo-1470229722913-7c090be5f5ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+        ticketLink: "https://example.com/tickets",
+      },
+      {
+        title: "Beachfront Bash",
+        description: "Exclusive beachfront party to start the weekend right.",
+        date: "2026-07-29",
+        region: "South NJ",
+        imageUrl: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+        ticketLink: "https://example.com/tickets",
+      },
+      {
+        title: "Techno Warehouse",
+        description: "Underground techno from 10PM to late.",
+        date: "2026-08-05",
+        region: "North NJ",
+        imageUrl: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+        ticketLink: "https://example.com/tickets",
+      }
+    ];
+
+    for (const event of seedEvents) {
+      await storage.createEvent(event);
+    }
+  }
 }
