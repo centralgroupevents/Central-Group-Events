@@ -166,7 +166,7 @@ export default function Home() {
             transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
             className="mt-6 text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto font-light"
           >
-            We promote the hottest events across North, Central, and South NJ — and help venues pack their rooms every weekend.
+            We've promoted 85+ events across NJ every week. Newsletter. Reels. Paid Ads. SMS Blasts. Influencers. All in one package.
           </motion.p>
           
           <motion.div 
@@ -207,9 +207,9 @@ export default function Home() {
             className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-white/10"
           >
             {[
-              { num: "15+", label: "Events Curated Weekly" },
-              { num: "85+", label: "Venues Promoted" },
-              { num: "100%", label: "NJ Based & Focused" }
+              { num: "85+", label: "Events Promoted Weekly" },
+              { num: "15K+", label: "Newsletter Subscribers" },
+              { num: "3x", label: "Average Attendance Increase" }
             ].map((stat, i) => (
               <motion.div key={i} variants={staggerItem} className="py-4 md:py-0 flex flex-col items-center justify-center">
                 <h3 className="text-4xl md:text-5xl font-black text-white mb-2 font-display">{stat.num}</h3>
@@ -500,10 +500,10 @@ export default function Home() {
             <div className="hidden md:block absolute top-12 left-1/8 right-1/8 h-0.5 bg-gradient-to-r from-primary/10 via-primary/50 to-primary/10 z-0" />
             
             {[
-              { num: "01", title: "Submit Details", desc: "Fill out the booking form with your event info." },
-              { num: "02", title: "Strategy Call", desc: "Quick call to align on vision and timeline." },
-              { num: "03", title: "Promotion Rollout", desc: "We execute across all channels—newsletter, reels, ads, SMS." },
-              { num: "04", title: "Packed Event", desc: "Your venue fills up. You focus on the experience." }
+              { num: "01", title: "Submit Details", desc: "Fill out the booking form. Takes 3 minutes. Tell us your event, date, region, and budget." },
+              { num: "02", title: "Strategy Call", desc: "We jump on a quick 15-minute call to align on your vision, goals, and promotion timeline." },
+              { num: "03", title: "Promotion Rollout", desc: "We execute across newsletter, Instagram reels, Meta ads, SMS blasts, and influencer reposts — all timed strategically." },
+              { num: "04", title: "Packed Event", desc: "Your venue fills up. Doors are packed. You focus on the experience — we handle the crowd." }
             ].map((step, i) => (
               <motion.div 
                 key={i}
@@ -674,11 +674,11 @@ export default function Home() {
             </span>
           </div>
           <p className="text-muted-foreground text-sm text-center md:text-left">
-            © {new Date().getFullYear()} Central Event Pack. All rights reserved.
+            © {new Date().getFullYear()} Central Group Events. All rights reserved.
           </p>
           <div className="flex gap-4">
-            <a href="#" className="text-muted-foreground hover:text-white transition-colors">Instagram</a>
-            <a href="#" className="text-muted-foreground hover:text-white transition-colors">Contact</a>
+            <a href="https://www.instagram.com/centralgroupevents" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-white transition-colors">Instagram</a>
+            <a href="#book" className="text-muted-foreground hover:text-white transition-colors">Contact</a>
           </div>
         </div>
       </footer>
