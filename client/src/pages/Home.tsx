@@ -635,6 +635,7 @@ export default function Home() {
                           <SelectItem value="Music">Music</SelectItem>
                           <SelectItem value="Party">Party</SelectItem>
                           <SelectItem value="Special Event">Special Event</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
