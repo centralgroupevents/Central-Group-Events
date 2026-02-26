@@ -14,7 +14,11 @@ declare module "http" {
   }
 }
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: process.env.NODE_ENV === "production",
+  })
+);
 
 const allowedOrigins = [
   "https://www.centralgroupevents.com",
