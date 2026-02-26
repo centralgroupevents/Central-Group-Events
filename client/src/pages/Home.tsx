@@ -727,7 +727,6 @@ export default function Home() {
           <div className="mt-6 pt-6 border-t border-white/5 flex flex-col sm:flex-row justify-center gap-6 text-xs text-muted-foreground">
             <a href="/legal/terms" className="hover:text-white transition-colors">Terms of Service</a>
             <a href="/legal/privacy" className="hover:text-white transition-colors">Privacy Policy</a>
-            <a href="/legal/dpa" className="hover:text-white transition-colors">DPA</a>
           </div>
         </div>
       </footer>
