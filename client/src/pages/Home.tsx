@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { 
   ArrowRight, Calendar, Megaphone, Video, MessageSquare, 
-  Users, CheckCircle2, Ticket, MapPin, Loader2, Sparkles
+  Users, CheckCircle2, Ticket, MapPin, Loader2, Sparkles, Instagram
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
