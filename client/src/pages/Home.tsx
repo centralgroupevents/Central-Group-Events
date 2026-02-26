@@ -23,7 +23,7 @@ import { Navigation } from "@/components/Navigation";
 const newsletterSchema = z.object({
   name: z.string().min(2, "Name is required"),
   email: z.string().email("Invalid email address"),
-  region: z.string().min(1, "Region is required"),
+  region: z.string().optional(),
 });
 
 const bookingSchema = z.object({
@@ -314,20 +314,20 @@ export default function Home() {
                           <SelectItem value="North NJ">North NJ</SelectItem>
                           <SelectItem value="Central NJ">Central NJ</SelectItem>
                           <SelectItem value="South NJ">South NJ</SelectItem>
-                          <SelectItem value="All Regions">All Regions</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <Button 
-                  type="submit" 
-                  size="lg" 
-                  disabled={subscribeMutation.isPending}
+                <Button
+                  size="lg"
                   className="h-12 px-8 rounded-xl bg-primary text-white hover:bg-primary/90 font-semibold md:w-auto w-full"
+                  asChild
                 >
-                  {subscribeMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : "Subscribe"}
+                  <a href="https://www.centralgroupevents.com/" target="_blank" rel="noopener noreferrer">
+                    Subscribe
+                  </a>
                 </Button>
               </form>
             </Form>
