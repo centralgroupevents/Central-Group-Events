@@ -120,6 +120,10 @@ export default function Home() {
   const [activeRegion, setActiveRegion] = useState("All");
   const { data: events, isLoading: eventsLoading } = useEvents(activeRegion);
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const upcomingEvents = (events || []).filter(event => new Date(event.date) >= today);
+
   return (
     <div className="min-h-screen bg-background text-foreground overflow-hidden">
       <Navigation />
@@ -366,17 +370,17 @@ export default function Home() {
                 <div className="flex justify-center items-center h-64">
                   <Loader2 className="w-10 h-10 animate-spin text-primary" />
                 </div>
-              ) : events && events.length > 0 ? (
+              ) : upcomingEvents.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {events.map((event) => (
+                  {upcomingEvents.map((event) => (
                     <motion.div key={event.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
                       <Card className="bg-secondary/50 border-white/10 overflow-hidden hover:border-primary/40 transition-all duration-300 group flex flex-col h-full">
                         <div className="relative h-48 overflow-hidden">
-                          {/* event placeholder abstract lights */}
                           <img 
-                            src={event.imageUrl || `https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=800&auto=format&fit=crop`} 
+                            src={event.imageUrl || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=800&auto=format&fit=crop"} 
                             alt={event.title}
                             className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                            onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=800&auto=format&fit=crop"; }}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
                           <div className="absolute bottom-3 left-3 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold border border-white/20 flex items-center gap-1">
@@ -401,8 +405,8 @@ export default function Home() {
               ) : (
                 <div className="flex flex-col items-center justify-center h-64 text-center glass-panel rounded-3xl border-dashed">
                   <Calendar className="w-12 h-12 text-muted-foreground mb-4" />
-                  <h4 className="text-xl font-bold mb-2">No events found</h4>
-                  <p className="text-muted-foreground max-w-md">There are currently no events listed for this region. Check back soon or submit your own event!</p>
+                  <h4 className="text-xl font-bold mb-2">No upcoming events</h4>
+                  <p className="text-muted-foreground max-w-md">No upcoming events in this region. Check back soon or submit your event!</p>
                 </div>
               )}
             </TabsContent>
