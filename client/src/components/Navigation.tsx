@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Sparkles, Instagram } from "lucide-react";
+import { Menu, X, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function TikTokIcon({ className }: { className?: string }) {
@@ -36,14 +36,12 @@ export function Navigation() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-        <a href="#" className="flex items-center gap-2 group">
-          <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center shadow-lg group-hover:shadow-accent/50 transition-all duration-300">
-            {/* TODO: replace with <img src="/images/cge-logo.png" alt="CGE Logo" className="w-10 h-10 object-contain" /> when logo is ready */}
-            <Sparkles className="w-5 h-5 text-black" />
-          </div>
-          <span className="font-display font-bold text-xl tracking-tight text-white group-hover:text-primary transition-colors">
-            CGE<span className="text-primary group-hover:text-white transition-colors">.</span>
-          </span>
+        <a href="#" className="flex items-center">
+          <img
+            src="/images/cge-logo.png"
+            alt="Central Group Events"
+            className="h-10 w-auto object-contain"
+          />
         </a>
 
         {/* Desktop Nav */}

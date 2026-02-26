@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { 
   ArrowRight, Calendar, Megaphone, Video, MessageSquare, 
-  Users, CheckCircle2, Ticket, MapPin, Loader2, Sparkles, Instagram
+  Users, CheckCircle2, Ticket, MapPin, Loader2, Instagram
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -698,11 +698,12 @@ export default function Home() {
       <footer className="py-12 border-t border-white/5 bg-black">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-6 h-6 text-primary" />
-              <span className="font-display font-bold text-2xl tracking-tight text-white">
-                CGE<span className="text-primary">.</span>
-              </span>
+            <div className="flex items-center">
+              <img
+                src="/images/cge-logo.png"
+                alt="Central Group Events"
+                className="h-8 w-auto object-contain"
+              />
             </div>
             <p className="text-muted-foreground text-sm text-center md:text-left">
               © {new Date().getFullYear()} Central Group Events. All rights reserved.
