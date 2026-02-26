@@ -436,7 +436,7 @@ export default function Home() {
                   ))}
                 </ul>
                 <Button className="w-full rounded-xl bg-white/10 hover:bg-white/20 text-white" asChild>
-                  <a href="#book">Get Started</a>
+                  <a href="https://buy.stripe.com/test_28EfZhdbD6Dvfm93l75ZC00" target="_blank" rel="noopener noreferrer">Get Started</a>
                 </Button>
               </Card>
             </motion.div>
@@ -459,7 +459,7 @@ export default function Home() {
                   ))}
                 </ul>
                 <Button className="w-full rounded-xl bg-white text-primary hover:bg-white/90 font-bold text-lg h-12" asChild>
-                  <a href="#book">Get Started</a>
+                  <a href="https://buy.stripe.com/test_aFaaEX5Jbfa1fm98Fr5ZC01" target="_blank" rel="noopener noreferrer">Get Started</a>
                 </Button>
               </Card>
             </motion.div>
@@ -479,7 +479,7 @@ export default function Home() {
                   ))}
                 </ul>
                 <Button className="w-full rounded-xl bg-white/10 hover:bg-white/20 text-white" asChild>
-                  <a href="#book">Get Started</a>
+                  <a href="https://buy.stripe.com/test_3cI3cvb3vd1T1vjg7T5ZC02" target="_blank" rel="noopener noreferrer">Get Started</a>
                 </Button>
               </Card>
             </motion.div>
