@@ -670,19 +670,36 @@ export default function Home() {
 
       {/* FOOTER */}
       <footer className="py-12 border-t border-white/5 bg-black">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-primary" />
-            <span className="font-display font-bold text-2xl tracking-tight text-white">
-              CGE<span className="text-primary">.</span>
-            </span>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-6 h-6 text-primary" />
+              <span className="font-display font-bold text-2xl tracking-tight text-white">
+                CGE<span className="text-primary">.</span>
+              </span>
+            </div>
+            <p className="text-muted-foreground text-sm text-center md:text-left">
+              © {new Date().getFullYear()} Central Group Events. All rights reserved.
+            </p>
+            <div className="flex gap-6 items-center">
+              <a href="https://www.instagram.com/centralgroupevents/" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-white transition-colors">
+                <Instagram className="w-5 h-5" />
+              </a>
+              <a href="https://www.tiktok.com/@centralgroupevents" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.19 8.19 0 004.79 1.54V6.78a4.85 4.85 0 01-1.02-.09z"/></svg>
+              </a>
+              <a href="https://www.facebook.com/centralgroupevents" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+              </a>
+              <a href="mailto:centralgroupevents@gmail.com" className="text-muted-foreground hover:text-white transition-colors text-sm">
+                centralgroupevents@gmail.com
+              </a>
+            </div>
           </div>
-          <p className="text-muted-foreground text-sm text-center md:text-left">
-            © {new Date().getFullYear()} Central Group Events. All rights reserved.
-          </p>
-          <div className="flex gap-4">
-            <a href="https://www.instagram.com/centralgroupevents" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-white transition-colors">Instagram</a>
-            <a href="#book" className="text-muted-foreground hover:text-white transition-colors">Contact</a>
+          <div className="mt-6 pt-6 border-t border-white/5 flex flex-col sm:flex-row justify-center gap-6 text-xs text-muted-foreground">
+            <a href="/legal/terms" className="hover:text-white transition-colors">Terms of Service</a>
+            <a href="/legal/privacy" className="hover:text-white transition-colors">Privacy Policy</a>
+            <a href="/legal/dpa" className="hover:text-white transition-colors">DPA</a>
           </div>
         </div>
       </footer>
