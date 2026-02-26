@@ -207,7 +207,7 @@ export default function Home() {
           >
             {[
               { num: "85+", label: "Events Promoted Weekly" },
-              { num: "15K+", label: "Newsletter Subscribers" },
+              { num: "15+", label: "Events Curated In-House" },
               { num: "3x", label: "Average Attendance Increase" }
             ].map((stat, i) => (
               <motion.div key={i} variants={staggerItem} className="py-4 md:py-0 flex flex-col items-center justify-center">
@@ -238,12 +238,12 @@ export default function Home() {
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
             {[
-              { icon: MessageSquare, title: "Weekly Newsletter", desc: "15K+ subscribers get the weekend lineup every Thursday directly to their inbox." },
+              { icon: MessageSquare, title: "Weekly Newsletter", desc: "Hundreds of active NJ subscribers get the weekend event lineup every Thursday. Your event lands directly in their inbox — not lost in a feed algorithm." },
               { icon: Calendar, title: "Curated Event Calendar", desc: "Your event featured on our high-traffic NJ event hub visited by thousands." },
               { icon: Megaphone, title: "Paid Ads + Organic", desc: "We combine highly targeted Meta ads with grassroots community distribution." },
               { icon: Video, title: "Reel Production", desc: "Scroll-stopping, high-energy Instagram reels that drive real ticket sales." },
-              { icon: Ticket, title: "SMS Blast Network", desc: "Direct text message campaigns to thousands of active NJ nightlife fans." },
-              { icon: Users, title: "Influencer Collabs", desc: "We tap local NJ influencers and tastemakers who actually move crowds." }
+              { icon: Ticket, title: "SMS Blast Network", desc: "Direct SMS campaigns to opted-in NJ nightlife fans. Texts get opened. Posts get scrolled past." },
+              { icon: Users, title: "Influencer Collabs", desc: "We tap in with local NJ influencers and tastemakers with real audiences — people who actually move crowds, not just collect followers." }
             ].map((service, i) => (
               <motion.div key={i} variants={staggerItem}>
                 <Card className="bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-primary/50 transition-all duration-300 h-full group overflow-hidden relative">
@@ -658,7 +658,7 @@ export default function Home() {
                   type="submit" 
                   size="lg" 
                   disabled={bookingMutation.isPending}
-                  className="w-full h-14 text-lg rounded-xl bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white font-bold shadow-[0_0_20px_rgba(139,92,246,0.3)] mt-4"
+                  className="w-full h-14 text-lg rounded-xl bg-primary hover:bg-primary/90 text-white font-bold mt-4"
                 >
                   {bookingMutation.isPending ? <Loader2 className="w-6 h-6 animate-spin" /> : "Book Your Event Promotion"}
                 </Button>
