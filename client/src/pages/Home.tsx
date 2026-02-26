@@ -625,13 +625,16 @@ export default function Home() {
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl><SelectTrigger className="bg-black/40 border-white/10 h-12 rounded-xl"><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
                         <SelectContent className="bg-secondary border-white/10 text-white">
-                          <SelectItem value="Grand Opening">Grand Opening</SelectItem>
-                          <SelectItem value="Weekly Night">Weekly Night</SelectItem>
-                          <SelectItem value="Holiday Event">Holiday Event</SelectItem>
-                          <SelectItem value="Private Party">Private Party</SelectItem>
-                          <SelectItem value="Album Release">Album Release</SelectItem>
-                          <SelectItem value="Pop-Up Event">Pop-Up Event</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
+                          <SelectItem value="Brunch">Brunch</SelectItem>
+                          <SelectItem value="Concert">Concert</SelectItem>
+                          <SelectItem value="Dance Class">Dance Class</SelectItem>
+                          <SelectItem value="DJ Set">DJ Set</SelectItem>
+                          <SelectItem value="Festival">Festival</SelectItem>
+                          <SelectItem value="Happy Hour">Happy Hour</SelectItem>
+                          <SelectItem value="Live Music">Live Music</SelectItem>
+                          <SelectItem value="Music">Music</SelectItem>
+                          <SelectItem value="Party">Party</SelectItem>
+                          <SelectItem value="Special Event">Special Event</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
