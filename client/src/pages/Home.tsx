@@ -27,15 +27,15 @@ const newsletterSchema = z.object({
 });
 
 const bookingSchema = z.object({
-  venueName: z.string().min(2, "Venue Name is required"),
-  contactName: z.string().min(2, "Contact Name is required"),
-  phone: z.string().min(10, "Valid phone number required"),
+  venueName: z.string().min(2, "Venue Name is required").max(100, "Venue name too long"),
+  contactName: z.string().min(2, "Contact Name is required").max(100, "Contact name too long"),
+  phone: z.string().min(10, "Valid phone number required").max(20, "Phone number too long"),
   email: z.string().email("Invalid email"),
   eventDate: z.string().min(1, "Date is required"),
   region: z.string().min(1, "Region is required"),
   eventType: z.string().min(1, "Event type is required"),
   budgetRange: z.string().min(1, "Budget range is required"),
-  instagramHandle: z.string().optional(),
+  instagramHandle: z.string().max(50, "Instagram handle too long").optional(),
 });
 
 const fadeIn = {

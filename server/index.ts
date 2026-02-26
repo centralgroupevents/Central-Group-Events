@@ -1,4 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -11,6 +13,21 @@ declare module "http" {
     rawBody: unknown;
   }
 }
+
+app.use(helmet());
+
+const allowedOrigins = [
+  "https://www.centralgroupevents.com",
+  "https://centralgroupevents.com",
+];
+app.use(
+  cors({
+    origin: process.env.NODE_ENV === "production"
+      ? allowedOrigins
+      : true,
+    credentials: true,
+  })
+);
 
 app.use(
   express.json({

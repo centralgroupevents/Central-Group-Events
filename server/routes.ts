@@ -1,14 +1,35 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
+import rateLimit from "express-rate-limit";
+import { body, validationResult } from "express-validator";
+
+const formLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: "Too many submissions, please try again later." },
+});
+
+const bookingValidators = [
+  body("email").isEmail().withMessage("Invalid email address").normalizeEmail(),
+  body("phone").matches(/^[\d\s\-\+\(\)]+$/).withMessage("Invalid phone number"),
+  body("eventDate").notEmpty().withMessage("Event date is required"),
+  body("venueName").trim().escape(),
+  body("contactName").trim().escape(),
+  body("instagramHandle").optional().trim().escape(),
+  body("region").trim().escape(),
+  body("eventType").trim().escape(),
+  body("budgetRange").trim().escape(),
+  body("additionalInfo").optional().trim().escape(),
+];
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  app.post(api.subscribers.create.path, async (req, res) => {
+  app.post(api.subscribers.create.path, formLimiter, async (req, res) => {
     try {
       const input = api.subscribers.create.input.parse(req.body);
       await storage.createSubscriber(input);
@@ -24,7 +45,14 @@ export async function registerRoutes(
     }
   });
 
-  app.post(api.bookings.create.path, async (req, res) => {
+  app.post(api.bookings.create.path, formLimiter, ...bookingValidators, async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: errors.array()[0].msg,
+        field: (errors.array()[0] as any).path,
+      });
+    }
     try {
       const input = api.bookings.create.input.parse(req.body);
       await storage.createBooking(input);
