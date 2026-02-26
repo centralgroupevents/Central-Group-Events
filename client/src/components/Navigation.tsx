@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
 function TikTokIcon({ className }: { className?: string }) {
   return (
@@ -38,7 +39,7 @@ export function Navigation() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         <a href="#" className="flex items-center">
           <img
-            src="/images/cge-logo.png"
+            src={cgeLogo}
             alt="Central Group Events"
             className="h-10 w-auto object-contain"
           />

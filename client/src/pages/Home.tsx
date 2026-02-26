@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 
 import { useEvents, useSubscribeNewsletter, useCreateBooking } from "@/hooks/use-landing";
 import { Navigation } from "@/components/Navigation";
+import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
 // Re-defining schemas here for the form resolvers to match the API contract
 const newsletterSchema = z.object({
@@ -700,7 +701,7 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center">
               <img
-                src="/images/cge-logo.png"
+                src={cgeLogo}
                 alt="Central Group Events"
                 className="h-8 w-auto object-contain"
               />
