@@ -5,6 +5,15 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { body, validationResult } from "express-validator";
+import nodemailer from "nodemailer";
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
 
 const formLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -34,6 +43,38 @@ export async function registerRoutes(
       const input = api.subscribers.create.input.parse(req.body);
       await storage.createSubscriber(input);
       res.status(201).json({ message: "Successfully subscribed to the newsletter!" });
+      try {
+        await transporter.sendMail({
+          from: `"CGE Website" <${process.env.GMAIL_USER}>`,
+          to: "centralgroupevents@gmail.com",
+          subject: `📧 New Newsletter Signup — ${input.name}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
+              <h1 style="color: #8B2FC9; margin-bottom: 4px;">New Newsletter Subscriber</h1>
+              <p style="color: #999; margin-bottom: 32px;">Submitted via centralgroupevents.com</p>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999; width: 40%;">Name</td>
+                  <td style="padding: 12px 0; color: #fff; font-weight: bold;">${input.name}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Email</td>
+                  <td style="padding: 12px 0; color: #fff;"><a href="mailto:${input.email}" style="color: #8B2FC9;">${input.email}</a></td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Region</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.region || "Not specified"}</td>
+                </tr>
+              </table>
+              <p style="color: #555; font-size: 12px; margin-top: 24px; text-align: center;">
+                Central Group Events • centralgroupevents@gmail.com
+              </p>
+            </div>
+          `,
+        });
+      } catch (emailError) {
+        console.error("Email notification failed:", emailError);
+      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({
@@ -57,6 +98,67 @@ export async function registerRoutes(
       const input = api.bookings.create.input.parse(req.body);
       await storage.createBooking(input);
       res.status(201).json({ message: "Booking request submitted successfully! We'll be in touch." });
+      try {
+        await transporter.sendMail({
+          from: `"CGE Website" <${process.env.GMAIL_USER}>`,
+          to: "centralgroupevents@gmail.com",
+          subject: `🎉 New Event Promotion Request — ${input.venueName}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
+              <h1 style="color: #8B2FC9; margin-bottom: 4px;">New Promotion Request</h1>
+              <p style="color: #999; margin-bottom: 32px;">Submitted via centralgroupevents.com</p>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999; width: 40%;">Venue Name</td>
+                  <td style="padding: 12px 0; color: #fff; font-weight: bold;">${input.venueName}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Contact Name</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.contactName}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Email</td>
+                  <td style="padding: 12px 0; color: #fff;"><a href="mailto:${input.email}" style="color: #8B2FC9;">${input.email}</a></td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Phone</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.phone}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Event Date</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.eventDate}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Region</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.region}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Event Type</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.eventType}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Budget Range</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.budgetRange}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Instagram</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.instagramHandle || "Not provided"}</td>
+                </tr>
+              </table>
+              <div style="margin-top: 32px; padding: 16px; background: #8B2FC9; border-radius: 8px; text-align: center;">
+                <a href="mailto:${input.email}" style="color: white; font-weight: bold; font-size: 16px; text-decoration: none;">
+                  Reply to ${input.contactName} →
+                </a>
+              </div>
+              <p style="color: #555; font-size: 12px; margin-top: 24px; text-align: center;">
+                Central Group Events • centralgroupevents@gmail.com
+              </p>
+            </div>
+          `,
+        });
+      } catch (emailError) {
+        console.error("Email notification failed:", emailError);
+      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({

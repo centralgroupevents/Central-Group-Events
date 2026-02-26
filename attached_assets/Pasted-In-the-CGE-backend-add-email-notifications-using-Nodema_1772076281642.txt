@@ -1,0 +1,121 @@
+In the CGE backend, add email notifications using Nodemailer for booking and newsletter submissions.
+
+1. Install nodemailer:
+npm install nodemailer
+npm install @types/nodemailer --save-dev
+
+2. In server/routes.ts (or wherever booking and newsletter POST endpoints are), add at the top:
+
+import nodemailer from 'nodemailer';
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
+
+3. In the booking POST endpoint, after successfully saving the booking, add:
+
+await transporter.sendMail({
+  from: `"CGE Website" <${process.env.GMAIL_USER}>`,
+  to: 'centralgroupevents@gmail.com',
+  subject: `🎉 New Event Promotion Request — ${bookingData.venueName}`,
+  html: `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
+      <h1 style="color: #8B2FC9; margin-bottom: 4px;">New Promotion Request</h1>
+      <p style="color: #999; margin-bottom: 32px;">Submitted via centralgroupevents.com</p>
+      
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999; width: 40%;">Venue Name</td>
+          <td style="padding: 12px 0; color: #fff; font-weight: bold;">${bookingData.venueName}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Contact Name</td>
+          <td style="padding: 12px 0; color: #fff;">${bookingData.contactName}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Email</td>
+          <td style="padding: 12px 0; color: #fff;"><a href="mailto:${bookingData.email}" style="color: #8B2FC9;">${bookingData.email}</a></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Phone</td>
+          <td style="padding: 12px 0; color: #fff;">${bookingData.phone}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Event Date</td>
+          <td style="padding: 12px 0; color: #fff;">${bookingData.eventDate}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Region</td>
+          <td style="padding: 12px 0; color: #fff;">${bookingData.region}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Event Type</td>
+          <td style="padding: 12px 0; color: #fff;">${bookingData.eventType}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Budget Range</td>
+          <td style="padding: 12px 0; color: #fff;">${bookingData.budgetRange}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Instagram</td>
+          <td style="padding: 12px 0; color: #fff;">${bookingData.instagramHandle || 'Not provided'}</td>
+        </tr>
+      </table>
+
+      <div style="margin-top: 32px; padding: 16px; background: #8B2FC9; border-radius: 8px; text-align: center;">
+        <a href="mailto:${bookingData.email}" style="color: white; font-weight: bold; font-size: 16px; text-decoration: none;">
+          Reply to ${bookingData.contactName} →
+        </a>
+      </div>
+
+      <p style="color: #555; font-size: 12px; margin-top: 24px; text-align: center;">
+        Central Group Events • centralgroupevents@gmail.com
+      </p>
+    </div>
+  `,
+});
+
+4. In the newsletter POST endpoint, after successfully saving the subscriber, add:
+
+await transporter.sendMail({
+  from: `"CGE Website" <${process.env.GMAIL_USER}>`,
+  to: 'centralgroupevents@gmail.com',
+  subject: `📧 New Newsletter Signup — ${newsletterData.name}`,
+  html: `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
+      <h1 style="color: #8B2FC9; margin-bottom: 4px;">New Newsletter Subscriber</h1>
+      <p style="color: #999; margin-bottom: 32px;">Submitted via centralgroupevents.com</p>
+      
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999; width: 40%;">Name</td>
+          <td style="padding: 12px 0; color: #fff; font-weight: bold;">${newsletterData.name}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Email</td>
+          <td style="padding: 12px 0; color: #fff;"><a href="mailto:${newsletterData.email}" style="color: #8B2FC9;">${newsletterData.email}</a></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #222;">
+          <td style="padding: 12px 0; color: #999;">Region</td>
+          <td style="padding: 12px 0; color: #fff;">${newsletterData.region || 'Not specified'}</td>
+        </tr>
+      </table>
+
+      <p style="color: #555; font-size: 12px; margin-top: 24px; text-align: center;">
+        Central Group Events • centralgroupevents@gmail.com
+      </p>
+    </div>
+  `,
+});
+
+5. Wrap both sendMail calls in try/catch so a failed email does not break the form submission:
+try {
+  await transporter.sendMail({...});
+} catch (emailError) {
+  console.error('Email notification failed:', emailError);
+  // Don't throw — form submission should still succeed
+}
