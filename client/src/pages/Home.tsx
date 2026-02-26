@@ -36,7 +36,6 @@ const bookingSchema = z.object({
   eventType: z.string().min(1, "Event type is required"),
   budgetRange: z.string().min(1, "Budget range is required"),
   instagramHandle: z.string().optional(),
-  readyToMoveForward: z.string().min(1, "Please select an option"),
 });
 
 const fadeIn = {
@@ -92,8 +91,8 @@ export default function Home() {
   const bookingForm = useForm<z.infer<typeof bookingSchema>>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
-      venueName: "", contactName: "", phone: "", email: "", eventDate: "", 
-      region: "", eventType: "", budgetRange: "", instagramHandle: "", readyToMoveForward: ""
+      venueName: "", contactName: "", phone: "", email: "", eventDate: "",
+      region: "", eventType: "", budgetRange: "", instagramHandle: ""
     }
   });
   const bookingMutation = useCreateBooking();
@@ -617,10 +616,10 @@ export default function Home() {
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl><SelectTrigger className="bg-black/40 border-white/10 h-12 rounded-xl"><SelectValue placeholder="Select budget" /></SelectTrigger></FormControl>
                         <SelectContent className="bg-secondary border-white/10 text-white">
-                          <SelectItem value="$500 - $750">$500 - $750</SelectItem>
-                          <SelectItem value="$750 - $1,200">$750 - $1,200</SelectItem>
-                          <SelectItem value="$1,200+">$1,200+</SelectItem>
-                          <SelectItem value="Not Sure Yet">Not Sure Yet</SelectItem>
+                          <SelectItem value="Under $150">Under $150</SelectItem>
+                          <SelectItem value="$151 - $300">$151 - $300</SelectItem>
+                          <SelectItem value="$300 - $500">$300 - $500</SelectItem>
+                          <SelectItem value="$501+">$501+</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -636,19 +635,24 @@ export default function Home() {
                   </FormItem>
                 )}/>
 
-                <FormField control={bookingForm.control} name="readyToMoveForward" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-white/80">Ready to move forward if aligned with budget? *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl><SelectTrigger className="bg-black/40 border-white/10 h-12 rounded-xl"><SelectValue placeholder="Select one" /></SelectTrigger></FormControl>
-                      <SelectContent className="bg-secondary border-white/10 text-white">
-                        <SelectItem value="Yes — Let's go">Yes — Let's go</SelectItem>
-                        <SelectItem value="Need More Info">Need More Info</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}/>
+                <FormItem>
+                  <FormLabel className="text-white/80">Upload Event Flyer (Optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="bg-black/40 border-white/10 h-12 rounded-xl text-white/80 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary/20 file:text-primary file:font-medium hover:file:bg-primary/30 cursor-pointer"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          console.log("Flyer selected:", file.name);
+                        }
+                      }}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground mt-1">Upload from camera roll or take a photo</p>
+                </FormItem>
 
                 <Button 
                   type="submit" 

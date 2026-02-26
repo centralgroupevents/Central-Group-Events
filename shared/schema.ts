@@ -21,7 +21,7 @@ export const promotionBookings = pgTable("promotion_bookings", {
   eventType: text("event_type").notNull(),
   budgetRange: text("budget_range").notNull(),
   instagramHandle: text("instagram_handle"),
-  readyToMoveForward: text("ready_to_move_forward").notNull(),
+  readyToMoveForward: text("ready_to_move_forward"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -41,6 +41,7 @@ export const insertSubscriberSchema = createInsertSchema(newsletterSubscribers).
 });
 export const insertBookingSchema = createInsertSchema(promotionBookings).omit({ id: true, createdAt: true }).extend({
   email: z.string().email(),
+  readyToMoveForward: z.string().optional(),
 });
 export const insertEventSchema = createInsertSchema(events).omit({ id: true, createdAt: true });
 
