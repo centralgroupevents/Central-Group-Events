@@ -37,8 +37,9 @@ export function Navigation() {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         <a href="#" className="flex items-center gap-2 group">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg group-hover:shadow-primary/50 transition-all duration-300">
-            <Sparkles className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center shadow-lg group-hover:shadow-accent/50 transition-all duration-300">
+            {/* TODO: replace with <img src="/images/cge-logo.png" alt="CGE Logo" className="w-10 h-10 object-contain" /> when logo is ready */}
+            <Sparkles className="w-5 h-5 text-black" />
           </div>
           <span className="font-display font-bold text-xl tracking-tight text-white group-hover:text-primary transition-colors">
             CGE<span className="text-primary group-hover:text-white transition-colors">.</span>
@@ -84,7 +85,7 @@ export function Navigation() {
           </a>
           <Button
             asChild
-            className="rounded-full bg-white text-black hover:bg-white/90 hover:scale-105 transition-all duration-300 shadow-[0_0_20px_rgba(255,255,255,0.2)] font-semibold"
+            className="rounded-full bg-accent text-black hover:bg-accent/90 hover:scale-105 transition-all duration-300 font-semibold"
           >
             <a href="#book">Book Promotion</a>
           </Button>
@@ -150,7 +151,7 @@ export function Navigation() {
               </div>
               <Button
                 asChild
-                className="w-full mt-2 rounded-xl bg-primary text-white hover:bg-primary/90"
+                className="w-full mt-2 rounded-xl bg-accent text-black hover:bg-accent/90"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <a href="#book">Book Promotion</a>

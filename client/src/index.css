@@ -19,8 +19,8 @@
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
     
-    /* Vibrant Electric Purple/Violet for that nightlife vibe */
-    --primary: 262 83% 58%;
+    /* CGE Logo Purple */
+    --primary: 280 62% 48%;
     --primary-foreground: 0 0% 100%;
     
     --secondary: 240 3.7% 15.9%;
@@ -29,16 +29,16 @@
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 240 5% 64.9%;
     
-    /* Cyan accent */
-    --accent: 189 94% 43%;
-    --accent-foreground: 0 0% 98%;
+    /* CGE Logo Gold/Yellow */
+    --accent: 38 82% 52%;
+    --accent-foreground: 0 0% 0%;
     
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
-    --ring: 262 83% 58%;
+    --ring: 280 62% 48%;
     
     --radius: 0.75rem;
   }

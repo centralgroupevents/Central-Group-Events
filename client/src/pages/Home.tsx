@@ -158,7 +158,7 @@ export default function Home() {
             className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-6 leading-[1.1]"
           >
             New Jersey's <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-400 to-accent text-glow">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-yellow-400 to-amber-400 text-glow">
               Social Scene, Amplified.
             </span>
           </motion.h1>
@@ -215,7 +215,7 @@ export default function Home() {
               { num: "3x", label: "Average Attendance Increase" }
             ].map((stat, i) => (
               <motion.div key={i} variants={staggerItem} className="py-4 md:py-0 flex flex-col items-center justify-center">
-                <h3 className="text-4xl md:text-5xl font-black text-white mb-2 font-display">{stat.num}</h3>
+                <h3 className="text-4xl md:text-5xl font-black text-accent mb-2 font-display">{stat.num}</h3>
                 <p className="text-muted-foreground font-medium uppercase tracking-wider text-sm">{stat.label}</p>
               </motion.div>
             ))}
@@ -448,7 +448,7 @@ export default function Home() {
             {/* Growth (Popular) */}
             <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: 0.1 }}>
               <Card className="bg-gradient-to-b from-primary/20 to-secondary/80 border-primary/50 p-8 rounded-3xl relative transform md:-translate-y-4 shadow-2xl shadow-primary/20">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-white px-4 py-1 rounded-full text-xs font-bold tracking-widest uppercase">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-accent text-black px-4 py-1 rounded-full text-xs font-bold tracking-widest uppercase">
                   Most Popular
                 </div>
                 <h4 className="text-2xl font-bold mb-2 text-white">Growth</h4>
