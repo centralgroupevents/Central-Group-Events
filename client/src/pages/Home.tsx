@@ -121,9 +121,7 @@ export default function Home() {
   const [activeRegion, setActiveRegion] = useState("All");
   const { data: events, isLoading: eventsLoading } = useEvents(activeRegion);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const upcomingEvents = (events || []).filter(event => new Date(event.date) >= today);
+  const upcomingEvents = events || [];
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-hidden">
