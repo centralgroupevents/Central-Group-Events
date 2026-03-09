@@ -180,6 +180,42 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/events", async (req: Request, res: Response) => {
+    try {
+      const { insertEventSchema } = await import("@shared/schema");
+      const input = insertEventSchema.parse(req.body);
+      const event = await storage.createEvent(input);
+      res.status(201).json(event);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/events/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid event id" });
+      const event = await storage.updateEvent(id, req.body);
+      res.status(200).json(event);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/events/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid event id" });
+      await storage.deleteEvent(id);
+      res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Seed data function
   await seedDatabase();
   await seedRealEvents();
