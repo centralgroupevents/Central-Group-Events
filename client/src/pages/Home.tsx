@@ -385,12 +385,12 @@ export default function Home() {
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
                           <div className="absolute bottom-3 left-3 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold border border-white/20 flex items-center gap-1">
-                            <MapPin className="w-3 h-3" /> {event.region}
+                            <MapPin className="w-3 h-3" /> {(event as any).city ? `${(event as any).city}, ${event.region.replace(" NJ", "")}` : event.region}
                           </div>
                         </div>
                         <CardHeader className="flex-1 pb-2">
                           <CardTitle className="text-xl line-clamp-2 leading-tight">{event.title}</CardTitle>
-                          <CardDescription className="text-primary font-medium mt-2">{event.date}</CardDescription>
+                          <CardDescription className="text-primary font-medium mt-2">{new Date(event.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</CardDescription>
                         </CardHeader>
                         <CardContent className="pt-0 mt-auto">
                           <Button className="w-full rounded-xl bg-white/10 hover:bg-primary text-white border border-white/10 hover:border-primary transition-all duration-300" asChild>

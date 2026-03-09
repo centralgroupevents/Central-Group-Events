@@ -31,6 +31,7 @@ export const events = pgTable("events", {
   description: text("description").notNull(),
   date: text("date").notNull(),
   region: text("region").notNull(),
+  city: text("city"),
   imageUrl: text("image_url").notNull(),
   ticketLink: text("ticket_link"),
   createdAt: timestamp("created_at").defaultNow(),
