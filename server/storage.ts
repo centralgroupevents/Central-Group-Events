@@ -10,7 +10,7 @@ import {
   type InsertEvent,
   type Event
 } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
   // Subscribers
@@ -18,6 +18,7 @@ export interface IStorage {
 
   // Bookings
   createBooking(booking: InsertBooking): Promise<Booking>;
+  getBookings(): Promise<Booking[]>;
 
   // Events
   getEvents(region?: string): Promise<Event[]>;
@@ -35,6 +36,10 @@ export class DatabaseStorage implements IStorage {
   async createBooking(booking: InsertBooking): Promise<Booking> {
     const [newBooking] = await db.insert(promotionBookings).values(booking).returning();
     return newBooking;
+  }
+
+  async getBookings(): Promise<Booking[]> {
+    return await db.select().from(promotionBookings).orderBy(desc(promotionBookings.createdAt));
   }
 
   async getEvents(region?: string): Promise<Event[]> {

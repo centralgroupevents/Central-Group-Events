@@ -7,6 +7,7 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useLocation } from "wouter";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,16 +28,27 @@ const newsletterSchema = z.object({
   region: z.string().optional(),
 });
 
-const bookingSchema = z.object({
-  venueName: z.string().min(2, "Venue Name is required").max(100, "Venue name too long"),
-  contactName: z.string().min(2, "Contact Name is required").max(100, "Contact name too long"),
-  phone: z.string().min(10, "Valid phone number required").max(20, "Phone number too long"),
+const standardBookingSchema = z.object({
+  mode: z.string(),
+  eventName: z.string().min(1, "Event Name is required"),
+  venueName: z.string().min(2, "Venue Name is required").max(100),
   email: z.string().email("Invalid email"),
-  eventDate: z.string().min(1, "Date is required"),
+  eventDate: z.string().min(1, "Event Date is required"),
+  eventTime: z.string().min(1, "Event Time is required"),
+  city: z.string().min(1, "City is required"),
   region: z.string().min(1, "Region is required"),
-  eventType: z.string().min(1, "Event type is required"),
-  budgetRange: z.string().min(1, "Budget range is required"),
-  instagramHandle: z.string().max(50, "Instagram handle too long").optional(),
+  eventType: z.string().min(1, "Event Type is required"),
+  eventTypeOther: z.string().optional(),
+  contactName: z.string().optional(),
+  phone: z.string().optional(),
+  budgetRange: z.string().optional(),
+  instagramHandle: z.string().max(50).optional(),
+});
+
+const premiumBookingSchema = standardBookingSchema.extend({
+  contactName: z.string().min(2, "Contact Name is required"),
+  phone: z.string().min(10, "Valid phone number required").max(20),
+  budgetRange: z.string().min(1, "Budget Range is required"),
 });
 
 const fadeIn = {
@@ -88,34 +100,8 @@ export default function Home() {
     });
   };
 
-  // Booking Form
-  const bookingForm = useForm<z.infer<typeof bookingSchema>>({
-    resolver: zodResolver(bookingSchema),
-    defaultValues: {
-      venueName: "", contactName: "", phone: "", email: "", eventDate: "",
-      region: "", eventType: "", budgetRange: "", instagramHandle: ""
-    }
-  });
-  const bookingMutation = useCreateBooking();
-
-  const onBookingSubmit = (data: z.infer<typeof bookingSchema>) => {
-    bookingMutation.mutate(data, {
-      onSuccess: () => {
-        toast({
-          title: "Request Received! 🚀",
-          description: "Our team will be in touch within 24 hours.",
-        });
-        bookingForm.reset();
-      },
-      onError: (err) => {
-        toast({
-          variant: "destructive",
-          title: "Submission failed",
-          description: err.message || "Please try again later.",
-        });
-      }
-    });
-  };
+  // Booking Mode Toggle
+  const [bookingMode, setBookingMode] = useState<"Standard" | "Premium">("Standard");
 
   // Events Calendar
   const [activeRegion, setActiveRegion] = useState("All");
@@ -550,149 +536,51 @@ export default function Home() {
 
       {/* BOOKING FORM SECTION */}
       <section id="book" className="py-24 relative overflow-hidden">
-        {/* nightlife abstract subtle background */}
         <div className="absolute top-0 right-0 w-[50rem] h-[50rem] bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
-        
+
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <motion.div {...fadeIn} className="text-center mb-12">
+          <motion.div {...fadeIn} className="text-center mb-8">
             <h2 className="text-3xl md:text-5xl font-black mb-4">Promote Your Event</h2>
             <p className="text-lg text-muted-foreground">We'll be in touch within 24 hours to get started.</p>
           </motion.div>
 
-          <motion.div 
+          {/* Standard / Premium Toggle */}
+          <motion.div {...fadeIn} className="flex justify-center mb-8">
+            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full p-1">
+              <button
+                type="button"
+                data-testid="toggle-standard"
+                onClick={() => setBookingMode("Standard")}
+                className={`px-6 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                  bookingMode === "Standard"
+                    ? "bg-primary text-white shadow-lg"
+                    : "text-muted-foreground hover:text-white"
+                }`}
+              >
+                Standard
+              </button>
+              <button
+                type="button"
+                data-testid="toggle-premium"
+                onClick={() => setBookingMode("Premium")}
+                className={`px-6 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                  bookingMode === "Premium"
+                    ? "bg-primary text-white shadow-lg"
+                    : "text-muted-foreground hover:text-white"
+                }`}
+              >
+                Premium
+              </button>
+            </div>
+          </motion.div>
+
+          <motion.div
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="glass-panel p-6 md:p-10 rounded-3xl border-white/10 shadow-2xl"
           >
-            <Form {...bookingForm}>
-              <form onSubmit={bookingForm.handleSubmit(onBookingSubmit)} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField control={bookingForm.control} name="venueName" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white/80">Venue Name *</FormLabel>
-                      <FormControl><Input className="bg-black/40 border-white/10 h-12 rounded-xl" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}/>
-                  <FormField control={bookingForm.control} name="contactName" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white/80">Contact Name *</FormLabel>
-                      <FormControl><Input className="bg-black/40 border-white/10 h-12 rounded-xl" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}/>
-                  <FormField control={bookingForm.control} name="phone" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white/80">Phone *</FormLabel>
-                      <FormControl><Input type="tel" className="bg-black/40 border-white/10 h-12 rounded-xl" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}/>
-                  <FormField control={bookingForm.control} name="email" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white/80">Email *</FormLabel>
-                      <FormControl><Input type="email" className="bg-black/40 border-white/10 h-12 rounded-xl" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}/>
-                  <FormField control={bookingForm.control} name="eventDate" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white/80">Event Date *</FormLabel>
-                      <FormControl><Input type="date" className="bg-black/40 border-white/10 h-12 rounded-xl" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}/>
-                  <FormField control={bookingForm.control} name="region" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white/80">Region *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger className="bg-black/40 border-white/10 h-12 rounded-xl"><SelectValue placeholder="Select region" /></SelectTrigger></FormControl>
-                        <SelectContent className="bg-secondary border-white/10 text-white">
-                          <SelectItem value="North NJ">North NJ</SelectItem>
-                          <SelectItem value="Central NJ">Central NJ</SelectItem>
-                          <SelectItem value="South NJ">South NJ</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}/>
-                  <FormField control={bookingForm.control} name="eventType" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white/80">Event Type *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger className="bg-black/40 border-white/10 h-12 rounded-xl"><SelectValue placeholder="Select type" /></SelectTrigger></FormControl>
-                        <SelectContent className="bg-secondary border-white/10 text-white">
-                          <SelectItem value="Brunch">Brunch</SelectItem>
-                          <SelectItem value="Concert">Concert</SelectItem>
-                          <SelectItem value="Dance Class">Dance Class</SelectItem>
-                          <SelectItem value="DJ Set">DJ Set</SelectItem>
-                          <SelectItem value="Festival">Festival</SelectItem>
-                          <SelectItem value="Happy Hour">Happy Hour</SelectItem>
-                          <SelectItem value="Live Music">Live Music</SelectItem>
-                          <SelectItem value="Music">Music</SelectItem>
-                          <SelectItem value="Party">Party</SelectItem>
-                          <SelectItem value="Special Event">Special Event</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}/>
-                  <FormField control={bookingForm.control} name="budgetRange" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-white/80">Budget Range *</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl><SelectTrigger className="bg-black/40 border-white/10 h-12 rounded-xl"><SelectValue placeholder="Select budget" /></SelectTrigger></FormControl>
-                        <SelectContent className="bg-secondary border-white/10 text-white">
-                          <SelectItem value="Under $150">Under $150</SelectItem>
-                          <SelectItem value="$151 - $300">$151 - $300</SelectItem>
-                          <SelectItem value="$300 - $500">$300 - $500</SelectItem>
-                          <SelectItem value="$501+">$501+</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}/>
-                </div>
-
-                <FormField control={bookingForm.control} name="instagramHandle" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-white/80">Instagram Handle (Optional)</FormLabel>
-                    <FormControl><Input placeholder="@yourvenue" className="bg-black/40 border-white/10 h-12 rounded-xl" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}/>
-
-                <FormItem>
-                  <FormLabel className="text-white/80">Upload Event Flyer (Optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="bg-black/40 border-white/10 h-12 rounded-xl text-white/80 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary/20 file:text-primary file:font-medium hover:file:bg-primary/30 cursor-pointer"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          console.log("Flyer selected:", file.name);
-                        }
-                      }}
-                    />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground mt-1">Upload from camera roll or take a photo</p>
-                </FormItem>
-
-                <Button 
-                  type="submit" 
-                  size="lg" 
-                  disabled={bookingMutation.isPending}
-                  className="w-full h-14 text-lg rounded-xl bg-primary hover:bg-primary/90 text-white font-bold mt-4"
-                >
-                  {bookingMutation.isPending ? <Loader2 className="w-6 h-6 animate-spin" /> : "Book Your Event Promotion"}
-                </Button>
-              </form>
-            </Form>
+            <BookingFormPanel key={bookingMode} mode={bookingMode} />
           </motion.div>
         </div>
       </section>
@@ -733,5 +621,274 @@ export default function Home() {
         </div>
       </footer>
     </div>
+  );
+}
+
+function BookingFormPanel({ mode }: { mode: "Standard" | "Premium" }) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const bookingMutation = useCreateBooking();
+
+  const activeSchema = mode === "Standard" ? standardBookingSchema : premiumBookingSchema;
+
+  const bookingForm = useForm<z.infer<typeof premiumBookingSchema>>({
+    resolver: zodResolver(activeSchema),
+    defaultValues: {
+      mode,
+      eventName: "",
+      venueName: "",
+      contactName: "",
+      phone: "",
+      email: "",
+      eventDate: "",
+      eventTime: "",
+      city: "",
+      region: "",
+      eventType: "",
+      eventTypeOther: "",
+      budgetRange: "",
+      instagramHandle: "",
+    },
+  });
+
+  const watchedEventType = bookingForm.watch("eventType");
+
+  const onSubmit = (data: z.infer<typeof premiumBookingSchema>) => {
+    bookingMutation.mutate({ ...data, mode }, {
+      onSuccess: () => {
+        navigate("/booking-confirmation");
+      },
+      onError: (err) => {
+        toast({
+          variant: "destructive",
+          title: "Submission failed",
+          description: err.message || "Please try again later.",
+        });
+      },
+    });
+  };
+
+  const inputClass = "bg-black/40 border-white/10 h-12 rounded-xl";
+  const isPremium = mode === "Premium";
+
+  return (
+    <Form {...bookingForm}>
+      <form onSubmit={bookingForm.handleSubmit(onSubmit)} className="space-y-6">
+
+        {/* Event Name (full width) */}
+        <FormField control={bookingForm.control} name="eventName" render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-white/80">Event Name *</FormLabel>
+            <FormControl><Input data-testid="input-event-name" className={inputClass} placeholder="e.g. Summer Rooftop Bash" {...field} /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+
+        {/* Venue Name + Contact Name */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField control={bookingForm.control} name="venueName" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-white/80">Venue Name *</FormLabel>
+              <FormControl><Input data-testid="input-venue-name" className={inputClass} placeholder="e.g. Club Luxe" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={bookingForm.control} name="contactName" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-white/80">
+                Contact Name {isPremium ? "*" : <span className="text-muted-foreground text-xs ml-1">(Optional)</span>}
+              </FormLabel>
+              <FormControl><Input data-testid="input-contact-name" className={inputClass} placeholder="Your full name" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+
+        {/* Email + Phone */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField control={bookingForm.control} name="email" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-white/80">Email *</FormLabel>
+              <FormControl><Input data-testid="input-email" type="email" className={inputClass} placeholder="you@example.com" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={bookingForm.control} name="phone" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-white/80">
+                Phone {isPremium ? "*" : <span className="text-muted-foreground text-xs ml-1">(Optional)</span>}
+              </FormLabel>
+              <FormControl><Input data-testid="input-phone" type="tel" className={inputClass} placeholder="(201) 555-0100" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+
+        {/* Event Date + Event Time */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField control={bookingForm.control} name="eventDate" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-white/80">Event Date *</FormLabel>
+              <FormControl><Input data-testid="input-event-date" type="date" className={inputClass} {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={bookingForm.control} name="eventTime" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-white/80">Event Time *</FormLabel>
+              <FormControl><Input data-testid="input-event-time" type="time" className={inputClass} {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+
+        {/* City + Region */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField control={bookingForm.control} name="city" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-white/80">City *</FormLabel>
+              <FormControl><Input data-testid="input-city" className={inputClass} placeholder="e.g. Newark" {...field} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={bookingForm.control} name="region" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-white/80">Region *</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-region" className={inputClass}>
+                    <SelectValue placeholder="Select region" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent className="bg-secondary border-white/10 text-white">
+                  <SelectItem value="North NJ">North NJ</SelectItem>
+                  <SelectItem value="Central NJ">Central NJ</SelectItem>
+                  <SelectItem value="South NJ">South NJ</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+
+        {/* Event Type */}
+        <FormField control={bookingForm.control} name="eventType" render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-white/80">Event Type *</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <SelectTrigger data-testid="select-event-type" className={inputClass}>
+                  <SelectValue placeholder="Select event type" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent className="bg-secondary border-white/10 text-white">
+                <SelectItem value="Brunch">Brunch</SelectItem>
+                <SelectItem value="Concert">Concert</SelectItem>
+                <SelectItem value="Dance Class">Dance Class</SelectItem>
+                <SelectItem value="DJ Set">DJ Set</SelectItem>
+                <SelectItem value="Festival">Festival</SelectItem>
+                <SelectItem value="Happy Hour">Happy Hour</SelectItem>
+                <SelectItem value="Live Music">Live Music</SelectItem>
+                <SelectItem value="Music">Music</SelectItem>
+                <SelectItem value="Party">Party</SelectItem>
+                <SelectItem value="Special Event">Special Event</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )} />
+
+        {/* Other Event Type - conditional */}
+        {watchedEventType === "Other" && (
+          <FormField control={bookingForm.control} name="eventTypeOther" render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-white/80">Please describe your event type</FormLabel>
+              <FormControl>
+                <Input
+                  data-testid="input-event-type-other"
+                  className={inputClass}
+                  placeholder="Briefly describe your event type"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        )}
+
+        {/* Budget Range */}
+        <FormField control={bookingForm.control} name="budgetRange" render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-white/80">
+              Budget Range {isPremium ? "*" : <span className="text-muted-foreground text-xs ml-1">(Optional)</span>}
+            </FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <SelectTrigger data-testid="select-budget" className={inputClass}>
+                  <SelectValue placeholder="Select budget" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent className="bg-secondary border-white/10 text-white">
+                <SelectItem value="Under $150">Under $150</SelectItem>
+                <SelectItem value="$151 - $300">$151 - $300</SelectItem>
+                <SelectItem value="$300 - $500">$300 - $500</SelectItem>
+                <SelectItem value="$501+">$501+</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )} />
+
+        {/* Instagram Handle */}
+        <FormField control={bookingForm.control} name="instagramHandle" render={({ field }) => (
+          <FormItem>
+            <FormLabel className="text-white/80">Instagram Handle <span className="text-muted-foreground text-xs ml-1">(Optional)</span></FormLabel>
+            <FormControl>
+              <Input
+                data-testid="input-instagram"
+                placeholder="@yourvenue"
+                className={inputClass}
+                {...field}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+
+        {/* Upload Flyer */}
+        <FormItem>
+          <FormLabel className="text-white/80">Upload Event Flyer <span className="text-muted-foreground text-xs ml-1">(Optional)</span></FormLabel>
+          <FormControl>
+            <Input
+              data-testid="input-flyer"
+              type="file"
+              accept="image/*"
+              className="bg-black/40 border-white/10 h-12 rounded-xl text-white/80 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary/20 file:text-primary file:font-medium hover:file:bg-primary/30 cursor-pointer"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) console.log("Flyer selected:", file.name);
+              }}
+            />
+          </FormControl>
+          <p className="text-xs text-muted-foreground mt-1">Upload from camera roll or take a photo</p>
+        </FormItem>
+
+        <Button
+          type="submit"
+          size="lg"
+          data-testid="button-submit-booking"
+          disabled={bookingMutation.isPending}
+          className="w-full h-14 text-lg rounded-xl bg-primary hover:bg-primary/90 text-white font-bold mt-4"
+        >
+          {bookingMutation.isPending
+            ? <Loader2 className="w-6 h-6 animate-spin" />
+            : mode === "Standard"
+              ? "Submit Standard Listing"
+              : "Submit Premium Inquiry"
+          }
+        </Button>
+      </form>
+    </Form>
   );
 }

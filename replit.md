@@ -25,7 +25,7 @@ Preferred communication style: Simple, everyday language.
 
 - **Framework**: React 18 with TypeScript, bundled via Vite
 - **Routing**: Wouter (lightweight client-side router)
-  - Routes: `/` (Home), `/legal/terms`, `/legal/privacy`, `*` (404)
+  - Routes: `/` (Home), `/booking-confirmation` (post-form redirect), `/legal/terms`, `/legal/privacy`, `/admin` (password-protected dashboard), `*` (404)
 - **UI Components**: shadcn/ui (New York style) built on Radix UI primitives
 - **Styling**: Tailwind CSS with CSS variables for theming; forced dark mode with a purple (`--primary`) and gold (`--accent`) brand palette
 - **Fonts**: Outfit (display) + Plus Jakarta Sans (body), loaded via Google Fonts
@@ -45,7 +45,8 @@ Key pages:
 - **Server entry**: `server/index.ts` — sets up Helmet, CORS (production restricted to `centralgroupevents.com`), JSON body parsing, and registers routes
 - **Routes**: `server/routes.ts`
   - `POST /api/subscribers` — newsletter signup with rate limiting and Nodemailer notification
-  - `POST /api/bookings` — promotion booking request with input validation (`express-validator`), DB insert, and Nodemailer notification
+  - `POST /api/bookings` — promotion booking request with input validation, DB insert, and Nodemailer notification (includes mode, eventName, eventTime, city, eventTypeOther)
+  - `GET /api/bookings` — returns all promotion submissions (for admin dashboard)
   - `GET /api/events` — list events, optionally filtered by region
 - **Rate Limiting**: `express-rate-limit` — 10 requests per 15 minutes on form endpoints
 - **Input Validation**: `express-validator` on booking fields + Zod parsing on both routes (via shared schema)
@@ -55,8 +56,8 @@ Key pages:
 
 - **`shared/schema.ts`**: Drizzle ORM table definitions and Zod insert schemas for:
   - `newsletter_subscribers` (id, name, email, region, createdAt)
-  - `promotion_bookings` (id, venueName, contactName, phone, email, eventDate, region, eventType, budgetRange, instagramHandle, readyToMoveForward, createdAt)
-  - `events` (id, title, description, date, region, imageUrl, ticketLink, createdAt)
+  - `promotion_bookings` (id, mode, eventName, venueName, contactName, phone, email, eventDate, eventTime, city, region, eventType, eventTypeOther, budgetRange, instagramHandle, readyToMoveForward, createdAt) — contactName/phone/budgetRange nullable; mode = "Standard" | "Premium"
+  - `events` (id, title, description, date, region, city, imageUrl, ticketLink, createdAt)
 - **`shared/routes.ts`**: Typed API contract (method, path, input schema, response schemas) consumed by both the backend and frontend hooks — single source of truth
 
 ### Data Storage

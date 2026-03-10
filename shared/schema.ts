@@ -12,14 +12,19 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
 
 export const promotionBookings = pgTable("promotion_bookings", {
   id: serial("id").primaryKey(),
+  mode: text("mode"),
+  eventName: text("event_name"),
   venueName: text("venue_name").notNull(),
-  contactName: text("contact_name").notNull(),
-  phone: text("phone").notNull(),
+  contactName: text("contact_name"),
+  phone: text("phone"),
   email: text("email").notNull(),
   eventDate: text("event_date").notNull(),
+  eventTime: text("event_time"),
+  city: text("city"),
   region: text("region").notNull(),
   eventType: text("event_type").notNull(),
-  budgetRange: text("budget_range").notNull(),
+  eventTypeOther: text("event_type_other"),
+  budgetRange: text("budget_range"),
   instagramHandle: text("instagram_handle"),
   readyToMoveForward: text("ready_to_move_forward"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -42,6 +47,15 @@ export const insertSubscriberSchema = createInsertSchema(newsletterSubscribers).
 });
 export const insertBookingSchema = createInsertSchema(promotionBookings).omit({ id: true, createdAt: true }).extend({
   email: z.string().email(),
+  mode: z.string().optional(),
+  eventName: z.string().optional(),
+  contactName: z.string().optional(),
+  phone: z.string().optional(),
+  eventTime: z.string().optional(),
+  city: z.string().optional(),
+  eventTypeOther: z.string().optional(),
+  budgetRange: z.string().optional(),
+  instagramHandle: z.string().optional(),
   readyToMoveForward: z.string().optional(),
 });
 export const insertEventSchema = createInsertSchema(events).omit({ id: true, createdAt: true });

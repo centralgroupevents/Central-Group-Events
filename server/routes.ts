@@ -23,14 +23,19 @@ const formLimiter = rateLimit({
 
 const bookingValidators = [
   body("email").isEmail().withMessage("Invalid email address").normalizeEmail(),
-  body("phone").matches(/^[\d\s\-\+\(\)]+$/).withMessage("Invalid phone number"),
+  body("phone").optional({ checkFalsy: true }).matches(/^[\d\s\-\+\(\)]+$/).withMessage("Invalid phone number"),
   body("eventDate").notEmpty().withMessage("Event date is required"),
+  body("eventName").optional().trim().escape(),
+  body("eventTime").optional().trim().escape(),
+  body("city").optional().trim().escape(),
+  body("mode").optional().trim().escape(),
   body("venueName").trim().escape(),
-  body("contactName").trim().escape(),
+  body("contactName").optional().trim().escape(),
   body("instagramHandle").optional().trim().escape(),
   body("region").trim().escape(),
   body("eventType").trim().escape(),
-  body("budgetRange").trim().escape(),
+  body("eventTypeOther").optional().trim().escape(),
+  body("budgetRange").optional().trim().escape(),
   body("additionalInfo").optional().trim().escape(),
 ];
 
@@ -99,22 +104,32 @@ export async function registerRoutes(
       await storage.createBooking(input);
       res.status(201).json({ message: "Booking request submitted successfully! We'll be in touch." });
       try {
+        const submissionMode = input.mode || "Standard";
+        const replyName = input.contactName || input.email;
         await transporter.sendMail({
           from: `"CGE Website" <${process.env.GMAIL_USER}>`,
           to: "centralgroupevents@gmail.com",
-          subject: `🎉 New Event Promotion Request — ${input.venueName}`,
+          subject: `🎉 New ${submissionMode} Promotion Request — ${input.venueName}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
-              <h1 style="color: #8B2FC9; margin-bottom: 4px;">New Promotion Request</h1>
+              <h1 style="color: #8B2FC9; margin-bottom: 4px;">New ${submissionMode} Promotion Request</h1>
               <p style="color: #999; margin-bottom: 32px;">Submitted via centralgroupevents.com</p>
               <table style="width: 100%; border-collapse: collapse;">
                 <tr style="border-bottom: 1px solid #222;">
-                  <td style="padding: 12px 0; color: #999; width: 40%;">Venue Name</td>
-                  <td style="padding: 12px 0; color: #fff; font-weight: bold;">${input.venueName}</td>
+                  <td style="padding: 12px 0; color: #999; width: 40%;">Submission Type</td>
+                  <td style="padding: 12px 0; color: #fff; font-weight: bold;">${submissionMode}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Event Name</td>
+                  <td style="padding: 12px 0; color: #fff; font-weight: bold;">${input.eventName || "Not provided"}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Venue Name</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.venueName}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #222;">
                   <td style="padding: 12px 0; color: #999;">Contact Name</td>
-                  <td style="padding: 12px 0; color: #fff;">${input.contactName}</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.contactName || "Not provided"}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #222;">
                   <td style="padding: 12px 0; color: #999;">Email</td>
@@ -122,11 +137,19 @@ export async function registerRoutes(
                 </tr>
                 <tr style="border-bottom: 1px solid #222;">
                   <td style="padding: 12px 0; color: #999;">Phone</td>
-                  <td style="padding: 12px 0; color: #fff;">${input.phone}</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.phone || "Not provided"}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #222;">
                   <td style="padding: 12px 0; color: #999;">Event Date</td>
                   <td style="padding: 12px 0; color: #fff;">${input.eventDate}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">Event Time</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.eventTime || "Not provided"}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #222;">
+                  <td style="padding: 12px 0; color: #999;">City</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.city || "Not provided"}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #222;">
                   <td style="padding: 12px 0; color: #999;">Region</td>
@@ -134,11 +157,11 @@ export async function registerRoutes(
                 </tr>
                 <tr style="border-bottom: 1px solid #222;">
                   <td style="padding: 12px 0; color: #999;">Event Type</td>
-                  <td style="padding: 12px 0; color: #fff;">${input.eventType}</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.eventType}${input.eventTypeOther ? ` — ${input.eventTypeOther}` : ""}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #222;">
                   <td style="padding: 12px 0; color: #999;">Budget Range</td>
-                  <td style="padding: 12px 0; color: #fff;">${input.budgetRange}</td>
+                  <td style="padding: 12px 0; color: #fff;">${input.budgetRange || "Not provided"}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #222;">
                   <td style="padding: 12px 0; color: #999;">Instagram</td>
@@ -147,7 +170,7 @@ export async function registerRoutes(
               </table>
               <div style="margin-top: 32px; padding: 16px; background: #8B2FC9; border-radius: 8px; text-align: center;">
                 <a href="mailto:${input.email}" style="color: white; font-weight: bold; font-size: 16px; text-decoration: none;">
-                  Reply to ${input.contactName} →
+                  Reply to ${replyName} →
                 </a>
               </div>
               <p style="color: #555; font-size: 12px; margin-top: 24px; text-align: center;">
@@ -166,6 +189,15 @@ export async function registerRoutes(
           field: err.errors[0].path.join('.'),
         });
       }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/bookings", async (req: Request, res: Response) => {
+    try {
+      const bookings = await storage.getBookings();
+      res.status(200).json(bookings);
+    } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }
   });
