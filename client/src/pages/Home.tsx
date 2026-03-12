@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { 
   ArrowRight, Calendar, Megaphone, Video, MessageSquare, 
-  Users, CheckCircle2, Ticket, MapPin, Loader2, Instagram
+  Users, CheckCircle2, Ticket, MapPin, Loader2, Instagram, Search, Plus
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -105,9 +105,17 @@ export default function Home() {
 
   // Events Calendar
   const [activeRegion, setActiveRegion] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
   const { data: events, isLoading: eventsLoading } = useEvents(activeRegion);
 
   const upcomingEvents = events || [];
+
+  const filteredEvents = searchQuery.trim()
+    ? upcomingEvents.filter(e =>
+        e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ((e as any).city || "").toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : upcomingEvents;
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-hidden">
@@ -326,72 +334,106 @@ export default function Home() {
 
       {/* EVENT CALENDAR SECTION */}
       <section id="events" className="py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div {...fadeIn} className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
-            <div>
-              <h2 className="text-sm font-bold text-accent tracking-widest uppercase mb-3">Event Calendar</h2>
-              <h3 className="text-3xl md:text-5xl font-black">What's Happening in NJ</h3>
-            </div>
-            <Button variant="outline" className="rounded-full border-white/20 hover:bg-white/10" asChild>
-              <a href="#book">Submit Your Event</a>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Centered header */}
+          <motion.div {...fadeIn} className="text-center mb-10">
+            <h2 className="text-sm font-bold text-accent tracking-widest uppercase mb-3">Event Calendar</h2>
+            <h3 className="text-3xl md:text-5xl font-black mb-4">What's Happening in NJ</h3>
+            <p className="text-muted-foreground mb-6">Discover the hottest events across North, Central, and South NJ.</p>
+            <Button
+              className="rounded-full bg-accent hover:bg-accent/90 text-black font-semibold px-6 gap-2"
+              asChild
+              data-testid="button-submit-event"
+            >
+              <a href="#book">
+                <Plus className="w-4 h-4" /> Submit Your Event
+              </a>
             </Button>
           </motion.div>
 
-          <Tabs defaultValue="All" className="w-full" onValueChange={setActiveRegion}>
-            <TabsList className="bg-white/5 border border-white/10 p-1 rounded-2xl mb-8 flex w-full md:w-fit overflow-x-auto hide-scrollbar">
-              {["All", "North NJ", "Central NJ", "South NJ"].map(region => (
-                <TabsTrigger 
-                  key={region} 
-                  value={region}
-                  className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white px-6 py-2.5"
-                >
-                  {region === "All" ? "All Regions" : region.replace(" NJ", "")}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          {/* Search bar */}
+          <div className="relative mb-8">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search events by name or city…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              data-testid="input-event-search"
+              className="w-full pl-11 pr-5 py-3.5 rounded-full bg-white/5 border border-white/10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/60 transition"
+            />
+          </div>
+
+          {/* Centered region tabs */}
+          <Tabs defaultValue="All" className="w-full" onValueChange={val => { setActiveRegion(val); setSearchQuery(""); }}>
+            <div className="flex justify-center mb-8">
+              <TabsList className="bg-white/5 border border-white/10 p-1 rounded-2xl flex overflow-x-auto hide-scrollbar">
+                {["All", "North NJ", "Central NJ", "South NJ"].map(region => (
+                  <TabsTrigger
+                    key={region}
+                    value={region}
+                    data-testid={`tab-region-${region.replace(/\s/g, "-").toLowerCase()}`}
+                    className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white px-6 py-2.5"
+                  >
+                    {region === "All" ? "All Regions" : region.replace(" NJ", "")}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
 
             <TabsContent value={activeRegion} className="min-h-[400px]">
               {eventsLoading ? (
                 <div className="flex justify-center items-center h-64">
                   <Loader2 className="w-10 h-10 animate-spin text-primary" />
                 </div>
-              ) : upcomingEvents.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {upcomingEvents.map((event) => (
-                    <motion.div key={event.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-                      <Card className="bg-secondary/50 border-white/10 overflow-hidden hover:border-primary/40 transition-all duration-300 group flex flex-col h-full">
-                        <div className="relative h-48 overflow-hidden">
-                          <img 
-                            src={event.imageUrl || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=800&auto=format&fit=crop"} 
-                            alt={event.title}
-                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                            onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=800&auto=format&fit=crop"; }}
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                          <div className="absolute bottom-3 left-3 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold border border-white/20 flex items-center gap-1">
-                            <MapPin className="w-3 h-3" /> {(event as any).city ? `${(event as any).city}, ${event.region.replace(" NJ", "")}` : event.region}
-                          </div>
-                        </div>
-                        <CardHeader className="flex-1 pb-2">
-                          <CardTitle className="text-xl line-clamp-2 leading-tight">{event.title}</CardTitle>
-                          <CardDescription className="text-primary font-medium mt-2">{new Date(event.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-0 mt-auto">
-                          <Button className="w-full rounded-xl bg-white/10 hover:bg-primary text-white border border-white/10 hover:border-primary transition-all duration-300" asChild>
-                            <a href={event.ticketLink || "#"} target="_blank" rel="noopener noreferrer">
-                              Get Tickets
-                            </a>
-                          </Button>
-                        </CardContent>
-                      </Card>
+              ) : filteredEvents.length > 0 ? (
+                <div className="divide-y divide-white/10 rounded-2xl border border-white/10 overflow-hidden">
+                  {filteredEvents.map((event, idx) => (
+                    <motion.div
+                      key={event.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.04 }}
+                      data-testid={`row-event-${event.id}`}
+                      className="flex items-center justify-between gap-4 px-6 py-5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-base leading-snug truncate" data-testid={`text-event-title-${event.id}`}>{event.title}</p>
+                        <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          {(event as any).city ? `${(event as any).city}, ${event.region.replace(" NJ", "")} NJ` : event.region}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-4 shrink-0">
+                        <p className="text-sm text-accent font-medium hidden sm:block">
+                          {new Date(event.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full border-white/20 hover:bg-primary hover:border-primary hover:text-white transition-all duration-200"
+                          asChild
+                          data-testid={`button-tickets-${event.id}`}
+                        >
+                          <a href={event.ticketLink || "#"} target="_blank" rel="noopener noreferrer">
+                            Get Tickets
+                          </a>
+                        </Button>
+                      </div>
                     </motion.div>
                   ))}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-64 text-center glass-panel rounded-3xl border-dashed">
                   <Calendar className="w-12 h-12 text-muted-foreground mb-4" />
-                  <h4 className="text-xl font-bold mb-2">No upcoming events</h4>
-                  <p className="text-muted-foreground max-w-md">No upcoming events in this region. Check back soon or submit your event!</p>
+                  <h4 className="text-xl font-bold mb-2">
+                    {searchQuery ? "No events match your search" : "No upcoming events"}
+                  </h4>
+                  <p className="text-muted-foreground max-w-md">
+                    {searchQuery
+                      ? `Try a different name or city, or clear the search to see all events.`
+                      : "No upcoming events in this region. Check back soon or submit your event!"}
+                  </p>
                 </div>
               )}
             </TabsContent>
