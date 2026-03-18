@@ -314,8 +314,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async restoreVersion(postId: number, versionId: number, savedBy?: number): Promise<Post> {
-    const [version] = await db.select().from(postVersions).where(eq(postVersions.id, versionId));
-    if (!version) throw new Error("Version not found");
+    const [version] = await db
+      .select()
+      .from(postVersions)
+      .where(and(eq(postVersions.id, versionId), eq(postVersions.postId, postId)));
+    if (!version) throw new Error("Version not found or does not belong to this post");
     return this.updatePost(postId, { title: version.title, content: version.content }, savedBy);
   }
 

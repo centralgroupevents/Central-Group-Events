@@ -419,11 +419,30 @@ export async function registerRoutes(
     try {
       const post = await storage.getPostBySlug(req.params.slug as string);
       if (!post) return res.status(404).json({ message: "Post not found" });
+
+      // Draft posts: only verified admins can see
       if (!post.isPublished) {
         const adminToken: string | undefined = req.cookies?.cge_admin_jwt;
         const admin = adminToken ? await verifyAdminToken(adminToken) : null;
         if (!admin) return res.status(404).json({ message: "Post not found" });
       }
+
+      // Gated posts: only subscribers with hasAccess can see full content
+      if (post.isGated) {
+        const adminToken: string | undefined = req.cookies?.cge_admin_jwt;
+        const isAdmin = adminToken ? !!(await verifyAdminToken(adminToken)) : false;
+        if (!isAdmin) {
+          const subEmail: string | undefined = req.signedCookies?.cge_subscriber;
+          const hasAccess = subEmail
+            ? await storage.findSubscriberByEmail(subEmail).then((s) => !!s && s.hasAccess !== false)
+            : false;
+          if (!hasAccess) {
+            const { content: _content, ...meta } = post;
+            return res.status(403).json({ ...meta, gated: true, message: "Subscriber access required" });
+          }
+        }
+      }
+
       storage.recordView(post.id).catch(() => {});
       res.json(post);
     } catch (err) {
@@ -505,7 +524,11 @@ export async function registerRoutes(
       if (isNaN(id) || isNaN(versionId)) return res.status(400).json({ message: "Invalid ids" });
       const post = await storage.restoreVersion(id, versionId, req.adminUser?.id);
       res.json(post);
-    } catch (err) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Internal server error";
+      if (msg.includes("not found") || msg.includes("does not belong")) {
+        return res.status(404).json({ message: msg });
+      }
       res.status(500).json({ message: "Internal server error" });
     }
   });
