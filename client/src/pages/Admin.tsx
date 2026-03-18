@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { RichTextEditor } from "@/components/RichTextEditor";
+import { RichTextEditor, RichTextViewer } from "@/components/RichTextEditor";
 import { useToast } from "@/hooks/use-toast";
 import {
   Calendar,
@@ -22,15 +22,13 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Eye,
   Globe,
   Lock,
   History,
   RotateCcw,
   Send,
-  ChevronDown,
-  ChevronUp,
   X,
+  Eye,
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
@@ -97,12 +95,11 @@ type PostVersion = {
   savedAt: string;
 };
 
-type AnalyticsPost = {
-  postId: number;
-  title: string;
-  slug: string;
-  totalViews: number;
-  totalClicks: number;
+type AnalyticsData = {
+  totalSubscribers: number;
+  postViews: { postId: number; title: string; views: number }[];
+  linkClicks: { url: string; count: number }[];
+  memberSources: { referrer: string; count: number }[];
 };
 
 type AdminMember = {
@@ -110,13 +107,6 @@ type AdminMember = {
   email: string;
   role: string;
   isActive: boolean;
-  createdAt: string;
-};
-
-type Subscriber = {
-  id: number;
-  email: string;
-  referrer: string | null;
   createdAt: string;
 };
 
@@ -134,7 +124,7 @@ const TABS = [
   { id: "bookings", label: "Bookings", icon: ClipboardList },
   { id: "blog", label: "Blog Posts", icon: BookOpen },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
-  { id: "team", label: "Team & Subscribers", icon: Users },
+  { id: "team", label: "Team Members", icon: Users },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -166,7 +156,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: AdminUser) => void }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Invalid credentials");
-      onLogin(data);
+      onLogin(data as AdminUser);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -227,13 +217,14 @@ function LoginScreen({ onLogin }: { onLogin: (user: AdminUser) => void }) {
 /* ─────────────────────────────────────────────────────────── */
 /*  BLOG POSTS TAB                                            */
 /* ─────────────────────────────────────────────────────────── */
-function BlogPostsTab({ role }: { role: string }) {
+function BlogPostsTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [showVersionsFor, setShowVersionsFor] = useState<number | null>(null);
+  const [previewContent, setPreviewContent] = useState<string | null>(null);
 
   const [postForm, setPostForm] = useState({
     title: "",
@@ -265,7 +256,7 @@ function BlogPostsTab({ role }: { role: string }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/posts/admin"] });
       closeEditor();
-      toast({ title: "Post created" });
+      toast({ title: "Post saved as draft" });
     },
     onError: () => toast({ title: "Failed to create post", variant: "destructive" }),
   });
@@ -283,6 +274,49 @@ function BlogPostsTab({ role }: { role: string }) {
     onError: () => toast({ title: "Failed to save post", variant: "destructive" }),
   });
 
+  const saveAndPublish = useMutation({
+    mutationFn: async () => {
+      let postId = editingPost?.id;
+      if (!postId) {
+        const res = await apiRequest("POST", "/api/posts", postForm);
+        const created: Post = await res.json();
+        postId = created.id;
+      } else {
+        await apiRequest("PUT", `/api/posts/${postId}`, postForm);
+      }
+      await apiRequest("PATCH", `/api/posts/${postId}/publish`);
+      return postId;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/posts/admin"] });
+      closeEditor();
+      toast({ title: "Post published!" });
+    },
+    onError: () => toast({ title: "Failed to publish", variant: "destructive" }),
+  });
+
+  const togglePublish = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("PATCH", `/api/posts/${id}/publish`);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/posts/admin"] });
+    },
+    onError: () => toast({ title: "Failed to toggle publish", variant: "destructive" }),
+  });
+
+  const toggleGate = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("PATCH", `/api/posts/${id}/gate`);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/posts/admin"] });
+    },
+    onError: () => toast({ title: "Failed to toggle gate", variant: "destructive" }),
+  });
+
   const deletePost = useMutation({
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/posts/${id}`);
@@ -292,30 +326,6 @@ function BlogPostsTab({ role }: { role: string }) {
       toast({ title: "Post deleted" });
     },
     onError: () => toast({ title: "Failed to delete post", variant: "destructive" }),
-  });
-
-  const publishPost = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await apiRequest("POST", `/api/posts/${id}/publish`);
-      return res.json();
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/posts/admin"] });
-      toast({ title: "Post published" });
-    },
-    onError: () => toast({ title: "Failed to publish", variant: "destructive" }),
-  });
-
-  const unpublishPost = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await apiRequest("POST", `/api/posts/${id}/unpublish`);
-      return res.json();
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/posts/admin"] });
-      toast({ title: "Post unpublished" });
-    },
-    onError: () => toast({ title: "Failed to unpublish", variant: "destructive" }),
   });
 
   const restoreVersion = useMutation({
@@ -355,7 +365,7 @@ function BlogPostsTab({ role }: { role: string }) {
     setEditingPost(null);
   }
 
-  function handlePostSubmit(e: React.FormEvent) {
+  function handleSaveDraft(e: React.FormEvent) {
     e.preventDefault();
     if (!postForm.title.trim()) {
       toast({ title: "Title is required", variant: "destructive" });
@@ -368,7 +378,7 @@ function BlogPostsTab({ role }: { role: string }) {
     }
   }
 
-  const isPending = createPost.isPending || updatePost.isPending;
+  const isSaving = createPost.isPending || updatePost.isPending;
 
   if (showEditor) {
     return (
@@ -377,12 +387,24 @@ function BlogPostsTab({ role }: { role: string }) {
           <h2 className="text-xl font-bold text-white">
             {editingPost ? `Editing: ${editingPost.title}` : "New Post"}
           </h2>
-          <Button variant="outline" size="sm" onClick={closeEditor} className="border-white/20 text-white/70">
-            <X className="w-4 h-4 mr-1" /> Discard
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setPreviewContent(postForm.content)}
+              className="border-white/20 text-white/70 h-8 text-xs"
+              data-testid="button-preview-post"
+            >
+              <Eye className="w-3 h-3 mr-1" /> Preview
+            </Button>
+            <Button variant="outline" size="sm" onClick={closeEditor} className="border-white/20 text-white/70 h-8 text-xs">
+              <X className="w-3 h-3 mr-1" /> Discard
+            </Button>
+          </div>
         </div>
 
-        <form onSubmit={handlePostSubmit} className="space-y-5">
+        <form onSubmit={handleSaveDraft} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label className="text-white/80">Title *</Label>
@@ -446,14 +468,47 @@ function BlogPostsTab({ role }: { role: string }) {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90 font-semibold px-8" data-testid="button-save-post">
-              {isPending ? "Saving…" : editingPost ? "Save Changes" : "Create Post"}
+            <Button
+              type="submit"
+              disabled={isSaving}
+              variant="outline"
+              className="border-white/20 hover:bg-white/10 text-white/80 font-semibold px-6"
+              data-testid="button-save-draft"
+            >
+              {isSaving ? "Saving…" : "Save Draft"}
+            </Button>
+            <Button
+              type="button"
+              disabled={saveAndPublish.isPending}
+              onClick={() => {
+                if (!postForm.title.trim()) {
+                  toast({ title: "Title is required", variant: "destructive" });
+                  return;
+                }
+                saveAndPublish.mutate();
+              }}
+              className="bg-primary hover:bg-primary/90 font-semibold px-8"
+              data-testid="button-publish-post"
+            >
+              {saveAndPublish.isPending ? "Publishing…" : "Publish"}
             </Button>
             <Button type="button" variant="outline" onClick={closeEditor} className="border-white/20 hover:bg-white/10 text-white/70">
               Cancel
             </Button>
           </div>
         </form>
+
+        {/* Preview Modal */}
+        <Dialog open={previewContent !== null} onOpenChange={() => setPreviewContent(null)}>
+          <DialogContent className="bg-secondary border-white/10 text-white max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Preview — {postForm.title || "Untitled"}</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <RichTextViewer content={previewContent ?? ""} />
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -487,9 +542,13 @@ function BlogPostsTab({ role }: { role: string }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="font-semibold text-white truncate">{post.title}</span>
-                    {post.isGated && (
+                    {post.isGated ? (
                       <Badge variant="outline" className="border-yellow-500/40 text-yellow-400 text-xs shrink-0">
                         <Lock className="w-2.5 h-2.5 mr-1" /> Gated
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-white/20 text-white/40 text-xs shrink-0">
+                        Open
                       </Badge>
                     )}
                     {post.isPublished ? (
@@ -508,28 +567,39 @@ function BlogPostsTab({ role }: { role: string }) {
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap shrink-0">
-                  {post.isPublished ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => unpublishPost.mutate(post.id)}
-                      disabled={unpublishPost.isPending}
-                      className="border-white/20 text-white/60 text-xs h-8"
-                    >
-                      Unpublish
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => publishPost.mutate(post.id)}
-                      disabled={publishPost.isPending}
-                      className="border-green-500/30 text-green-400 text-xs h-8 hover:bg-green-500/10"
-                      data-testid={`button-publish-post-${post.id}`}
-                    >
-                      <Globe className="w-3 h-3 mr-1" /> Publish
-                    </Button>
-                  )}
+                  {/* Publish/Unpublish toggle */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => togglePublish.mutate(post.id)}
+                    disabled={togglePublish.isPending}
+                    className={
+                      post.isPublished
+                        ? "border-white/20 text-white/60 text-xs h-8"
+                        : "border-green-500/30 text-green-400 text-xs h-8 hover:bg-green-500/10"
+                    }
+                    data-testid={`button-toggle-publish-${post.id}`}
+                  >
+                    <Globe className="w-3 h-3 mr-1" />
+                    {post.isPublished ? "Unpublish" : "Publish"}
+                  </Button>
+
+                  {/* Gate/Ungate toggle */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => toggleGate.mutate(post.id)}
+                    disabled={toggleGate.isPending}
+                    className={
+                      post.isGated
+                        ? "border-yellow-500/30 text-yellow-400 text-xs h-8 hover:bg-yellow-500/10"
+                        : "border-white/20 text-white/60 text-xs h-8"
+                    }
+                    data-testid={`button-toggle-gate-${post.id}`}
+                  >
+                    <Lock className="w-3 h-3 mr-1" />
+                    {post.isGated ? "Ungate" : "Gate"}
+                  </Button>
 
                   <Button
                     size="sm"
@@ -606,50 +676,55 @@ function BlogPostsTab({ role }: { role: string }) {
 /*  ANALYTICS TAB                                             */
 /* ─────────────────────────────────────────────────────────── */
 function AnalyticsTab() {
-  const { data: analyticsData = [], isLoading } = useQuery<AnalyticsPost[]>({
-    queryKey: ["/api/admin/analytics"],
-  });
-
-  const { data: subscribers = [], isLoading: subsLoading } = useQuery<Subscriber[]>({
-    queryKey: ["/api/admin/subscribers"],
+  const { data, isLoading } = useQuery<AnalyticsData>({
+    queryKey: ["/api/analytics"],
   });
 
   return (
     <div className="space-y-8">
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5">
-          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Total Views</p>
-          <p className="text-3xl font-black text-white">
-            {analyticsData.reduce((s, p) => s + (p.totalViews ?? 0), 0).toLocaleString()}
-          </p>
+      {/* Subscriber stat card */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 sm:col-span-1">
+          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Total Subscribers</p>
+          {isLoading ? (
+            <Skeleton className="h-9 w-20 mt-1" />
+          ) : (
+            <p className="text-3xl font-black text-white">{(data?.totalSubscribers ?? 0).toLocaleString()}</p>
+          )}
         </div>
-        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5">
-          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Total Clicks</p>
-          <p className="text-3xl font-black text-white">
-            {analyticsData.reduce((s, p) => s + (p.totalClicks ?? 0), 0).toLocaleString()}
-          </p>
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 sm:col-span-1">
+          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Total Post Views</p>
+          {isLoading ? (
+            <Skeleton className="h-9 w-20 mt-1" />
+          ) : (
+            <p className="text-3xl font-black text-white">
+              {(data?.postViews?.reduce((s, p) => s + p.views, 0) ?? 0).toLocaleString()}
+            </p>
+          )}
         </div>
-        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 col-span-2 sm:col-span-1">
-          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Subscribers</p>
-          <p className="text-3xl font-black text-white">{subscribers.length.toLocaleString()}</p>
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 sm:col-span-1">
+          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Outbound Clicks</p>
+          {isLoading ? (
+            <Skeleton className="h-9 w-20 mt-1" />
+          ) : (
+            <p className="text-3xl font-black text-white">
+              {(data?.linkClicks?.reduce((s, c) => s + c.count, 0) ?? 0).toLocaleString()}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Per-post analytics */}
+      {/* Post Views table */}
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-white/10">
-          <h3 className="font-bold text-white">Post Performance</h3>
+          <h3 className="font-bold text-white">Post Views</h3>
         </div>
         {isLoading ? (
           <div className="p-6 space-y-3">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
           </div>
-        ) : analyticsData.length === 0 ? (
-          <div className="py-12 text-center text-muted-foreground">
-            <BarChart2 className="w-10 h-10 mx-auto mb-2 opacity-40" />
-            <p>No analytics data yet.</p>
-          </div>
+        ) : !data?.postViews?.length ? (
+          <div className="py-10 text-center text-muted-foreground text-sm">No view data yet.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -657,27 +732,81 @@ function AnalyticsTab() {
                 <tr className="border-b border-white/10 text-muted-foreground text-left">
                   <th className="px-6 py-3 font-medium">Post</th>
                   <th className="px-4 py-3 font-medium text-right">Views</th>
-                  <th className="px-4 py-3 font-medium text-right">Clicks</th>
-                  <th className="px-4 py-3 font-medium text-right">CTR</th>
                 </tr>
               </thead>
               <tbody>
-                {analyticsData.map((p, i) => {
-                  const ctr = p.totalViews > 0 ? ((p.totalClicks / p.totalViews) * 100).toFixed(1) : "0.0";
-                  return (
-                    <tr key={p.postId} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
-                      <td className="px-6 py-4 font-medium text-white max-w-xs">
-                        <span className="truncate block">{p.title}</span>
-                        <span className="text-xs text-muted-foreground">/blog/{p.slug}</span>
-                      </td>
-                      <td className="px-4 py-4 text-right text-white/80">{p.totalViews.toLocaleString()}</td>
-                      <td className="px-4 py-4 text-right text-white/80">{p.totalClicks.toLocaleString()}</td>
-                      <td className="px-4 py-4 text-right">
-                        <span className={`font-medium ${parseFloat(ctr) > 5 ? "text-green-400" : "text-white/60"}`}>{ctr}%</span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {data.postViews.map((p, i) => (
+                  <tr key={p.postId} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                    <td className="px-6 py-4 font-medium text-white">{p.title}</td>
+                    <td className="px-4 py-4 text-right text-white/80">{p.views.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Top Outbound Links table */}
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-white/10">
+          <h3 className="font-bold text-white">Top Outbound Links</h3>
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        ) : !data?.linkClicks?.length ? (
+          <div className="py-10 text-center text-muted-foreground text-sm">No click data yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left">
+                  <th className="px-6 py-3 font-medium">URL</th>
+                  <th className="px-4 py-3 font-medium text-right">Clicks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.linkClicks.map((c, i) => (
+                  <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                    <td className="px-6 py-4 text-primary truncate max-w-xs">{decodeURIComponent(c.url)}</td>
+                    <td className="px-4 py-4 text-right text-white/80">{c.count.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Member Sources table */}
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-white/10">
+          <h3 className="font-bold text-white">Member Sources</h3>
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        ) : !data?.memberSources?.length ? (
+          <div className="py-10 text-center text-muted-foreground text-sm">No source data yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left">
+                  <th className="px-6 py-3 font-medium">Referrer</th>
+                  <th className="px-4 py-3 font-medium text-right">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.memberSources.map((s, i) => (
+                  <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                    <td className="px-6 py-4 text-white/80">{s.referrer}</td>
+                    <td className="px-4 py-4 text-right text-white/80">{s.count.toLocaleString()}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -688,36 +817,30 @@ function AnalyticsTab() {
 }
 
 /* ─────────────────────────────────────────────────────────── */
-/*  TEAM & SUBSCRIBERS TAB                                    */
+/*  TEAM MEMBERS TAB                                          */
 /* ─────────────────────────────────────────────────────────── */
 function TeamTab({ currentRole }: { currentRole: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("editor");
   const [sendOpen, setSendOpen] = useState(false);
   const [sendSubject, setSendSubject] = useState("");
   const [sendBody, setSendBody] = useState("");
 
   const { data: team = [], isLoading: teamLoading } = useQuery<AdminMember[]>({
-    queryKey: ["/api/admin/team"],
-  });
-
-  const { data: subscribers = [], isLoading: subsLoading } = useQuery<Subscriber[]>({
-    queryKey: ["/api/admin/subscribers"],
+    queryKey: ["/api/admin/users"],
   });
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/invite", { email: inviteEmail, role: inviteRole });
+      const res = await apiRequest("POST", "/api/admin/invite", { email: inviteEmail, role: "editor" });
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/team"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setInviteOpen(false);
       setInviteEmail("");
-      setInviteRole("editor");
       toast({ title: "Invite sent!" });
     },
     onError: (err: unknown) => {
@@ -728,26 +851,14 @@ function TeamTab({ currentRole }: { currentRole: string }) {
 
   const deactivateMutation = useMutation({
     mutationFn: async (id: number) => {
-      const res = await apiRequest("POST", `/api/admin/team/${id}/deactivate`);
+      const res = await apiRequest("PATCH", `/api/admin/users/${id}/deactivate`);
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/team"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Account deactivated" });
     },
     onError: () => toast({ title: "Failed to deactivate", variant: "destructive" }),
-  });
-
-  const reactivateMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await apiRequest("POST", `/api/admin/team/${id}/reactivate`);
-      return res.json();
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/team"] });
-      toast({ title: "Account reactivated" });
-    },
-    onError: () => toast({ title: "Failed to reactivate", variant: "destructive" }),
   });
 
   const sendNewsletterMutation = useMutation({
@@ -758,7 +869,7 @@ function TeamTab({ currentRole }: { currentRole: string }) {
       });
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data: { sent?: number }) => {
       toast({ title: `Newsletter sent to ${data.sent ?? "all"} subscribers!` });
       setSendOpen(false);
       setSendSubject("");
@@ -780,7 +891,7 @@ function TeamTab({ currentRole }: { currentRole: string }) {
               className="bg-primary hover:bg-primary/90 font-semibold"
               data-testid="button-invite-admin"
             >
-              <Plus className="w-4 h-4 mr-1" /> Invite Admin
+              <Plus className="w-4 h-4 mr-1" /> Invite Editor
             </Button>
           )}
         </div>
@@ -790,47 +901,51 @@ function TeamTab({ currentRole }: { currentRole: string }) {
             {[1, 2].map((i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
           </div>
         ) : (
-          <div className="space-y-2">
-            {team.map((member) => (
-              <div
-                key={member.id}
-                className="bg-secondary/30 border border-white/10 rounded-xl p-4 flex items-center justify-between gap-3"
-                data-testid={`row-team-${member.id}`}
-              >
-                <div>
-                  <p className="font-medium text-white">{member.email}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{member.role} · Joined {formatDate(member.createdAt)}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!member.isActive && (
-                    <Badge variant="outline" className="border-red-500/30 text-red-400 text-xs">Deactivated</Badge>
-                  )}
-                  {currentRole === "superadmin" && (
-                    member.isActive ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => deactivateMutation.mutate(member.id)}
-                        disabled={deactivateMutation.isPending}
-                        className="border-red-500/30 text-red-400 text-xs h-8 hover:bg-red-500/10"
-                      >
-                        Deactivate
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => reactivateMutation.mutate(member.id)}
-                        disabled={reactivateMutation.isPending}
-                        className="border-green-500/30 text-green-400 text-xs h-8 hover:bg-green-500/10"
-                      >
-                        Reactivate
-                      </Button>
-                    )
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left">
+                  <th className="px-4 py-3 font-medium">Email</th>
+                  <th className="px-4 py-3 font-medium">Role</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  {currentRole === "superadmin" && <th className="px-4 py-3 font-medium text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {team.map((member, i) => (
+                  <tr key={member.id} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`} data-testid={`row-team-${member.id}`}>
+                    <td className="px-4 py-4 font-medium text-white">{member.email}</td>
+                    <td className="px-4 py-4">
+                      <Badge variant="outline" className="border-primary/30 text-primary text-xs capitalize">
+                        {member.role}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-4">
+                      {member.isActive ? (
+                        <Badge variant="outline" className="border-green-500/30 text-green-400 text-xs">Active</Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-red-500/30 text-red-400 text-xs">Inactive</Badge>
+                      )}
+                    </td>
+                    {currentRole === "superadmin" && (
+                      <td className="px-4 py-4 text-right">
+                        {member.isActive && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => deactivateMutation.mutate(member.id)}
+                            disabled={deactivateMutation.isPending}
+                            className="border-red-500/30 text-red-400 text-xs h-8 hover:bg-red-500/10"
+                          >
+                            Deactivate
+                          </Button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -853,47 +968,11 @@ function TeamTab({ currentRole }: { currentRole: string }) {
         </div>
       </div>
 
-      {/* Subscribers */}
-      <div>
-        <h3 className="text-lg font-bold text-white mb-4">
-          Subscribers
-          <span className="ml-2 text-sm font-normal text-muted-foreground">({subscribers.length} total)</span>
-        </h3>
-        {subsLoading ? (
-          <Skeleton className="h-40 w-full rounded-xl" />
-        ) : subscribers.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No subscribers yet.</p>
-        ) : (
-          <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto max-h-80">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-secondary/70 backdrop-blur">
-                  <tr className="border-b border-white/10 text-muted-foreground text-left">
-                    <th className="px-4 py-3 font-medium">Email</th>
-                    <th className="px-4 py-3 font-medium">Source</th>
-                    <th className="px-4 py-3 font-medium">Joined</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {subscribers.map((sub, i) => (
-                    <tr key={sub.id} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
-                      <td className="px-4 py-3 text-white/80">{sub.email}</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{sub.referrer || "—"}</td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(sub.createdAt)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Invite Dialog */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="bg-secondary border-white/10 text-white max-w-sm">
           <DialogHeader>
-            <DialogTitle>Invite Admin</DialogTitle>
+            <DialogTitle>Invite Editor</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -906,19 +985,6 @@ function TeamTab({ currentRole }: { currentRole: string }) {
                 className="bg-black/40 border-white/10 h-11"
                 data-testid="input-invite-email"
               />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-white/80">Role</Label>
-              <Select value={inviteRole} onValueChange={setInviteRole}>
-                <SelectTrigger className="bg-black/40 border-white/10 h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-secondary border-white/10 text-white">
-                  <SelectItem value="editor">Editor</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="superadmin">Superadmin</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
           <DialogFooter>
@@ -989,6 +1055,7 @@ function TeamTab({ currentRole }: { currentRole: string }) {
 /* ─────────────────────────────────────────────────────────── */
 export default function Admin() {
   const [user, setUser] = useState<AdminUser | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("events");
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -997,22 +1064,19 @@ export default function Admin() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  /* On mount, check session */
-  useQuery<AdminUser>({
-    queryKey: ["/api/admin/me"],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/me", { credentials: "include" });
-      if (!res.ok) return null as unknown as AdminUser;
-      return res.json();
-    },
-    retry: false,
-    refetchOnWindowFocus: false,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    select: (data: any) => {
-      if (data && data.email) setUser(data);
-      return data;
-    },
-  });
+  /* On mount: restore session via /api/admin/me */
+  useEffect(() => {
+    fetch("/api/admin/me", { credentials: "include" })
+      .then((res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data: AdminUser | null) => {
+        if (data && data.email) setUser(data);
+      })
+      .catch(() => {})
+      .finally(() => setSessionChecked(true));
+  }, []);
 
   const { data: events = [], isLoading } = useQuery<Event[]>({
     queryKey: ["/api/events"],
@@ -1080,6 +1144,7 @@ export default function Admin() {
   async function handleLogout() {
     await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
     setUser(null);
+    setSessionChecked(true);
   }
 
   function openAdd() {
@@ -1120,6 +1185,9 @@ export default function Admin() {
       createMutation.mutate(form);
     }
   }
+
+  /* Show nothing until session check completes */
+  if (!sessionChecked) return null;
 
   if (!user) {
     return <LoginScreen onLogin={setUser} />;
@@ -1190,28 +1258,16 @@ export default function Admin() {
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2 space-y-1">
                     <Label className="text-white/80">Event Title *</Label>
-                    <Input
-                      value={form.title}
-                      onChange={(e) => setForm({ ...form, title: e.target.value })}
-                      placeholder="e.g. JAZZY FRIDAYS"
-                      className="bg-black/40 border-white/10 h-11"
-                    />
+                    <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. JAZZY FRIDAYS" className="bg-black/40 border-white/10 h-11" />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-white/80">City</Label>
-                    <Input
-                      value={form.city}
-                      onChange={(e) => setForm({ ...form, city: e.target.value })}
-                      placeholder="e.g. Fort Lee"
-                      className="bg-black/40 border-white/10 h-11"
-                    />
+                    <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="e.g. Fort Lee" className="bg-black/40 border-white/10 h-11" />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-white/80">Region *</Label>
                     <Select value={form.region} onValueChange={(v) => setForm({ ...form, region: v })}>
-                      <SelectTrigger className="bg-black/40 border-white/10 h-11">
-                        <SelectValue placeholder="Select region" />
-                      </SelectTrigger>
+                      <SelectTrigger className="bg-black/40 border-white/10 h-11"><SelectValue placeholder="Select region" /></SelectTrigger>
                       <SelectContent className="bg-secondary border-white/10 text-white">
                         <SelectItem value="North NJ">North NJ</SelectItem>
                         <SelectItem value="Central NJ">Central NJ</SelectItem>
@@ -1221,38 +1277,21 @@ export default function Admin() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-white/80">Date *</Label>
-                    <Input
-                      type="date"
-                      value={form.date}
-                      onChange={(e) => setForm({ ...form, date: e.target.value })}
-                      className="bg-black/40 border-white/10 h-11"
-                    />
+                    <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="bg-black/40 border-white/10 h-11" />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-white/80">Ticket Link</Label>
-                    <Input
-                      value={form.ticketLink}
-                      onChange={(e) => setForm({ ...form, ticketLink: e.target.value })}
-                      placeholder="https://..."
-                      className="bg-black/40 border-white/10 h-11"
-                    />
+                    <Input value={form.ticketLink} onChange={(e) => setForm({ ...form, ticketLink: e.target.value })} placeholder="https://..." className="bg-black/40 border-white/10 h-11" />
                   </div>
                   <div className="sm:col-span-2 space-y-1">
                     <Label className="text-white/80">Image URL</Label>
-                    <Input
-                      value={form.imageUrl}
-                      onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-                      placeholder="https://..."
-                      className="bg-black/40 border-white/10 h-11"
-                    />
+                    <Input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://..." className="bg-black/40 border-white/10 h-11" />
                   </div>
                   <div className="sm:col-span-2 flex gap-3 pt-2">
                     <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90 font-semibold px-8">
                       {isPending ? "Saving…" : editingEvent ? "Save Changes" : "Create Event"}
                     </Button>
-                    <Button type="button" variant="outline" onClick={resetForm} className="border-white/20 hover:bg-white/10 text-white/70">
-                      Cancel
-                    </Button>
+                    <Button type="button" variant="outline" onClick={resetForm} className="border-white/20 hover:bg-white/10 text-white/70">Cancel</Button>
                   </div>
                 </form>
               </div>
@@ -1260,9 +1299,7 @@ export default function Admin() {
 
             <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
               <div className="px-6 py-4 border-b border-white/10">
-                <h2 className="font-bold text-white">
-                  All Events <span className="text-muted-foreground font-normal text-sm ml-2">({events.length} total)</span>
-                </h2>
+                <h2 className="font-bold text-white">All Events <span className="text-muted-foreground font-normal text-sm ml-2">({events.length} total)</span></h2>
               </div>
               {isLoading ? (
                 <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
@@ -1286,28 +1323,18 @@ export default function Admin() {
                         <tr key={event.id} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
                           <td className="px-6 py-4 font-medium text-white max-w-xs"><span className="line-clamp-2">{event.title}</span></td>
                           <td className="px-4 py-4 text-muted-foreground">{event.city || "—"}</td>
-                          <td className="px-4 py-4">
-                            <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">
-                              {event.region}
-                            </span>
-                          </td>
+                          <td className="px-4 py-4"><span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{event.region}</span></td>
                           <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{event.date}</td>
                           <td className="px-4 py-4 text-muted-foreground max-w-[160px]">
                             {event.ticketLink && event.ticketLink !== "#" ? (
-                              <a href={event.ticketLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block">
-                                {event.ticketLink}
-                              </a>
+                              <a href={event.ticketLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block">{event.ticketLink}</a>
                             ) : (
                               <span className="text-white/20">—</span>
                             )}
                           </td>
                           <td className="px-4 py-4 text-right whitespace-nowrap">
-                            <Button variant="outline" size="sm" onClick={() => openEdit(event)} className="border-white/20 hover:bg-white/10 text-white/70 mr-2 text-xs">
-                              Edit
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => { if (window.confirm(`Delete "${event.title}"?`)) deleteMutation.mutate(event.id); }} disabled={deleteMutation.isPending} className="border-red-500/30 hover:bg-red-500/10 text-red-400 text-xs">
-                              Delete
-                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => openEdit(event)} className="border-white/20 hover:bg-white/10 text-white/70 mr-2 text-xs">Edit</Button>
+                            <Button variant="outline" size="sm" onClick={() => { if (window.confirm(`Delete "${event.title}"?`)) deleteMutation.mutate(event.id); }} disabled={deleteMutation.isPending} className="border-red-500/30 hover:bg-red-500/10 text-red-400 text-xs">Delete</Button>
                           </td>
                         </tr>
                       ))}
@@ -1323,9 +1350,7 @@ export default function Admin() {
         {activeTab === "bookings" && (
           <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-white/10">
-              <h2 className="font-bold text-white">
-                All Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({bookings.length} total)</span>
-              </h2>
+              <h2 className="font-bold text-white">All Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({bookings.length} total)</span></h2>
             </div>
             {bookingsLoading ? (
               <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
@@ -1358,9 +1383,7 @@ export default function Admin() {
                           <a href={`mailto:${booking.email}`} className="text-primary hover:underline">{booking.email}</a>
                         </td>
                         <td className="px-4 py-4">
-                          <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">
-                            {booking.region}
-                          </span>
+                          <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{booking.region}</span>
                         </td>
                         <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{formatDate(booking.createdAt)}</td>
                       </tr>
@@ -1372,7 +1395,7 @@ export default function Admin() {
           </div>
         )}
 
-        {activeTab === "blog" && <BlogPostsTab role={user.role} />}
+        {activeTab === "blog" && <BlogPostsTab />}
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "team" && <TeamTab currentRole={user.role} />}
       </div>

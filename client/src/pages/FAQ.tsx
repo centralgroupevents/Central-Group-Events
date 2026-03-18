@@ -9,49 +9,27 @@ import { ArrowRight } from "lucide-react";
 
 const FAQ_ITEMS = [
   {
-    question: "What is Central Group Events (CGE)?",
+    question: "How do I get access to newsletter posts?",
     answer:
-      "CGE is a NJ-based event promotion agency focused on nightlife, concerts, and community events across North, Central, and South Jersey. We curate and promote the best events so you never have to scroll endlessly looking for something to do.",
+      "Just enter your email on any gated post. If you're already a subscriber, you're automatically on the list.",
   },
   {
-    question: "What areas of NJ do you cover?",
+    question: "How often is the newsletter published?",
     answer:
-      "We cover all three regions of New Jersey — North NJ (Newark, Jersey City, Fort Lee, Clifton, Garfield), Central NJ (Asbury Park, Edison, Plainfield, Somerville, East Brunswick), and South NJ (Atlantic City, Trenton, Cherry Hill, and more).",
+      "Every week. We cover the best events across North, Central, and South NJ.",
   },
   {
-    question: "How do I get my event listed?",
-    answer:
-      "Visit the Booking section on our homepage or reach out to us directly at centralgroupevents@gmail.com. We'll review your event details and get it added to the calendar if it's a good fit for our audience.",
+    question: "How do I submit my event?",
+    answer: "Use the Submit Your Event form on our homepage.",
   },
   {
-    question: "What's included in the newsletter?",
-    answer:
-      "Subscribers receive a weekly roundup of the hottest upcoming events in NJ, exclusive early-bird announcements, and insider insights into the local nightlife scene. Some posts are subscriber-only — free to join.",
+    question: "Is it free to subscribe?",
+    answer: "Yes, completely free.",
   },
   {
-    question: "How does the subscriber access work for gated posts?",
+    question: "How do I promote my event with CGE?",
     answer:
-      "Certain blog posts are reserved for newsletter subscribers. Just enter your email, and if you're on the list you'll get instant access. If you're not yet subscribed, signing up takes only seconds.",
-  },
-  {
-    question: "What are the pricing tiers for event promotion?",
-    answer:
-      "We offer three tiers: Starter (social posts + basic newsletter), Growth (flyers + featured calendar listing + newsletter spotlight), and Full House (everything in Growth plus social media takeovers and premium placement). Check our Pricing section for exact details.",
-  },
-  {
-    question: "Can I book multiple events at once?",
-    answer:
-      "Absolutely. Many of our recurring event partners book us on a monthly or seasonal basis. Contact us for package deals on multiple events.",
-  },
-  {
-    question: "What's the best way to reach you?",
-    answer:
-      "Email us at centralgroupevents@gmail.com or DM us on Instagram, TikTok, or Facebook @centralgroupevents. We typically respond within 24 hours.",
-  },
-  {
-    question: "Do you work with events outside of NJ?",
-    answer:
-      "Our focus is on New Jersey, but we occasionally promote larger regional events that draw an NJ audience. Reach out and we'll let you know if your event qualifies.",
+      "Fill out the Promote Your Event form and select Standard or Premium. Our team will be in touch within 24 hours.",
   },
 ];
 

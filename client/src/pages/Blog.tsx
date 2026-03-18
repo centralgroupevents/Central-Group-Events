@@ -1,8 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Lock, ArrowRight, BookOpen } from "lucide-react";
+import { Lock, ArrowRight, BookOpen, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Navigation } from "@/components/Navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 type Post = {
   id: number;
@@ -28,6 +34,87 @@ function formatDate(dateStr: string | null) {
 function truncate(str: string | null, max: number) {
   if (!str) return "";
   return str.length > max ? str.slice(0, max).trimEnd() + "…" : str;
+}
+
+function NewsletterSignup() {
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [region, setRegion] = useState("");
+
+  const subscribeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/subscribers", { name, email, region });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "You're subscribed! Welcome to the CGE insider list." });
+      setName("");
+      setEmail("");
+      setRegion("");
+    },
+    onError: () => {
+      toast({ title: "Failed to subscribe. Try again.", variant: "destructive" });
+    },
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) return;
+    subscribeMutation.mutate();
+  }
+
+  return (
+    <div className="mt-20 glass-panel rounded-3xl p-8 box-glow" id="blog-newsletter">
+      <div className="max-w-2xl mx-auto text-center">
+        <h3 className="text-2xl font-black mb-2">Never Miss an Event</h3>
+        <p className="text-muted-foreground mb-8">
+          Get the hottest NJ nightlife roundup every week — straight to your inbox.
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
+          <Input
+            placeholder="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="bg-black/40 border-white/10 h-11 flex-1"
+            data-testid="input-blog-newsletter-name"
+          />
+          <Input
+            type="email"
+            placeholder="your@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="bg-black/40 border-white/10 h-11 flex-1"
+            data-testid="input-blog-newsletter-email"
+          />
+          <Select value={region} onValueChange={setRegion}>
+            <SelectTrigger className="bg-black/40 border-white/10 h-11 w-full sm:w-44">
+              <SelectValue placeholder="Region" />
+            </SelectTrigger>
+            <SelectContent className="bg-secondary border-white/10 text-white">
+              <SelectItem value="North NJ">North NJ</SelectItem>
+              <SelectItem value="Central NJ">Central NJ</SelectItem>
+              <SelectItem value="South NJ">South NJ</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            type="submit"
+            disabled={subscribeMutation.isPending}
+            className="bg-primary hover:bg-primary/90 h-11 px-6 font-semibold whitespace-nowrap"
+            data-testid="button-blog-newsletter-subscribe"
+          >
+            {subscribeMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>Join Free <ArrowRight className="w-4 h-4 ml-1" /></>
+            )}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 export default function Blog() {
@@ -122,19 +209,8 @@ export default function Blog() {
           </div>
         )}
 
-        {/* Newsletter CTA */}
-        <div className="mt-20 glass-panel rounded-3xl p-8 text-center box-glow">
-          <h3 className="text-2xl font-black mb-2">Never Miss an Event</h3>
-          <p className="text-muted-foreground mb-6">
-            Get the hottest NJ nightlife roundup every week — straight to your inbox.
-          </p>
-          <a
-            href="/#newsletter"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition-colors"
-          >
-            Join the Newsletter <ArrowRight className="w-4 h-4" />
-          </a>
-        </div>
+        {/* Inline newsletter signup */}
+        <NewsletterSignup />
       </section>
     </div>
   );

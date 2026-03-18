@@ -27,7 +27,7 @@ function Router() {
       <Route path="/blog/:slug" component={BlogPost} />
       <Route path="/faq" component={FAQ} />
       <Route path="/welcome" component={Welcome} />
-      <Route path="/accept-invite" component={AcceptInvite} />
+      <Route path="/admin/accept-invite" component={AcceptInvite} />
       <Route component={NotFound} />
     </Switch>
   );
