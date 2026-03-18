@@ -43,7 +43,11 @@ const bookingValidators = [
   body("additionalInfo").optional().trim().escape(),
 ];
 
-const JWT_SECRET = () => process.env.SESSION_SECRET || "fallback-secret";
+const JWT_SECRET = () => {
+  const s = process.env.SESSION_SECRET;
+  if (!s) throw new Error("SESSION_SECRET environment variable is not set");
+  return s;
+};
 const COOKIE_OPTS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
@@ -250,7 +254,7 @@ export async function registerRoutes(
 
   app.put("/api/events/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid event id" });
       const event = await storage.updateEvent(id, req.body);
       res.status(200).json(event);
@@ -261,7 +265,7 @@ export async function registerRoutes(
 
   app.delete("/api/events/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid event id" });
       await storage.deleteEvent(id);
       res.status(204).send();
@@ -381,7 +385,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/users/:id/deactivate", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid user id" });
       await storage.deactivateAdmin(id);
       res.json({ message: "User deactivated" });
@@ -413,7 +417,7 @@ export async function registerRoutes(
 
   app.get("/api/posts/:slug", async (req: Request, res: Response) => {
     try {
-      const post = await storage.getPostBySlug(req.params.slug);
+      const post = await storage.getPostBySlug(req.params.slug as string);
       if (!post) return res.status(404).json({ message: "Post not found" });
       // record view asynchronously
       storage.recordView(post.id).catch(() => {});
@@ -436,7 +440,7 @@ export async function registerRoutes(
 
   app.put("/api/posts/:id", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid post id" });
       const { title, excerpt, content, coverImageUrl, isGated } = req.body;
       const post = await storage.updatePost(id, { title, excerpt, content, coverImageUrl, isGated }, req.adminUser?.id);
@@ -448,7 +452,7 @@ export async function registerRoutes(
 
   app.delete("/api/posts/:id", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid post id" });
       await storage.deletePost(id);
       res.status(204).send();
@@ -459,7 +463,7 @@ export async function registerRoutes(
 
   app.patch("/api/posts/:id/publish", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid post id" });
       const post = await storage.togglePublish(id);
       res.json(post);
@@ -470,7 +474,7 @@ export async function registerRoutes(
 
   app.patch("/api/posts/:id/gate", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid post id" });
       const post = await storage.toggleGate(id);
       res.json(post);
@@ -481,7 +485,7 @@ export async function registerRoutes(
 
   app.get("/api/posts/:id/versions", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid post id" });
       const versions = await storage.getVersionsForPost(id);
       res.json(versions);
@@ -492,8 +496,8 @@ export async function registerRoutes(
 
   app.post("/api/posts/:id/restore/:versionId", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
-      const versionId = parseInt(req.params.versionId, 10);
+      const id = parseInt(req.params.id as string, 10);
+      const versionId = parseInt(req.params.versionId as string, 10);
       if (isNaN(id) || isNaN(versionId)) return res.status(400).json({ message: "Invalid ids" });
       const post = await storage.restoreVersion(id, versionId, req.adminUser?.id);
       res.json(post);
@@ -506,7 +510,7 @@ export async function registerRoutes(
 
   app.get("/api/posts/:id/comments", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid post id" });
       const allComments = await storage.getCommentsByPost(id);
       res.json(allComments);
@@ -517,9 +521,9 @@ export async function registerRoutes(
 
   app.post("/api/posts/:id/comments", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid post id" });
-      const emailFromCookie = (req.cookies as any)?.cge_subscriber;
+      const emailFromCookie = req.signedCookies?.cge_subscriber;
       if (!emailFromCookie) {
         return res.status(401).json({ message: "Subscriber access required to comment" });
       }

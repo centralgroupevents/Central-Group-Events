@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, integer, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -8,7 +8,7 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull(),
-  region: text("region").notNull(),
+  region: text("region"),
   referrer: text("referrer"),
   hasAccess: boolean("has_access").default(true),
   createdAt: timestamp("created_at").defaultNow(),
@@ -98,7 +98,7 @@ export const linkClicks = pgTable("link_clicks", {
 export const comments = pgTable("comments", {
   id: serial("id").primaryKey(),
   postId: integer("post_id").references(() => posts.id).notNull(),
-  parentId: integer("parent_id"),
+  parentId: integer("parent_id").references((): AnyPgColumn => comments.id),
   email: text("email").notNull(),
   body: text("body").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -157,7 +157,10 @@ export type PostVersion = typeof postVersions.$inferSelect;
 export type InsertPostVersion = z.infer<typeof insertPostVersionSchema>;
 
 export type PostView = typeof postViews.$inferSelect;
+export type InsertPostView = z.infer<typeof insertPostViewSchema>;
+
 export type LinkClick = typeof linkClicks.$inferSelect;
+export type InsertLinkClick = z.infer<typeof insertLinkClickSchema>;
 
 export type Comment = typeof comments.$inferSelect;
 export type InsertComment = z.infer<typeof insertCommentSchema>;

@@ -22,7 +22,10 @@ export function requireAuth(role?: string) {
       return res.status(401).json({ message: "Authentication required" });
     }
     try {
-      const secret = process.env.SESSION_SECRET || "fallback-secret";
+      const secret = process.env.SESSION_SECRET;
+      if (!secret) {
+        return res.status(500).json({ message: "Server configuration error" });
+      }
       const payload = jwt.verify(token, secret) as AdminJwtPayload;
       if (role && payload.role !== role) {
         return res.status(403).json({ message: "Insufficient permissions" });
