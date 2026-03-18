@@ -121,7 +121,7 @@ export async function registerRoutes(
     if (!errors.isEmpty()) {
       return res.status(400).json({
         message: errors.array()[0].msg,
-        field: (errors.array()[0] as any).path,
+        field: (errors.array()[0] as { msg: string; path?: string }).path,
       });
     }
     try {
@@ -419,7 +419,11 @@ export async function registerRoutes(
     try {
       const post = await storage.getPostBySlug(req.params.slug as string);
       if (!post) return res.status(404).json({ message: "Post not found" });
-      // record view asynchronously
+      // Public requests can only see published posts
+      const adminToken = req.cookies?.cge_admin_jwt;
+      if (!post.isPublished && !adminToken) {
+        return res.status(404).json({ message: "Post not found" });
+      }
       storage.recordView(post.id).catch(() => {});
       res.json(post);
     } catch (err) {
@@ -528,8 +532,8 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Subscriber access required to comment" });
       }
       const sub = await storage.findSubscriberByEmail(emailFromCookie);
-      if (!sub) {
-        return res.status(401).json({ message: "Subscriber not found" });
+      if (!sub || sub.hasAccess === false) {
+        return res.status(401).json({ message: "Subscriber access required to comment" });
       }
       const { body: commentBody, parentId } = req.body;
       if (!commentBody || commentBody.trim().length === 0) {
@@ -593,10 +597,10 @@ export async function registerRoutes(
 
   app.get("/api/subscriber/verify", async (req: Request, res: Response) => {
     try {
-      const email = (req.signedCookies as any)?.cge_subscriber;
+      const email: string | undefined = req.signedCookies?.cge_subscriber;
       if (!email) return res.json({ access: false });
       const sub = await storage.findSubscriberByEmail(email);
-      res.json({ access: !!sub });
+      res.json({ access: !!sub && sub.hasAccess !== false });
     } catch (err) {
       res.json({ access: false });
     }

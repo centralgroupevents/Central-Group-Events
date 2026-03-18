@@ -64,6 +64,7 @@ export interface IStorage {
   // Admin users
   createAdminUser(data: Partial<InsertAdminUser>): Promise<AdminUser>;
   findAdminByEmail(email: string): Promise<AdminUser | null>;
+  findAdminById(id: number): Promise<AdminUser | null>;
   findAdminByToken(token: string): Promise<AdminUser | null>;
   listAdminUsers(): Promise<Omit<AdminUser, "passwordHash">[]>;
   updateAdminUser(id: number, data: Partial<AdminUser>): Promise<AdminUser>;
@@ -177,6 +178,11 @@ export class DatabaseStorage implements IStorage {
 
   async findAdminByEmail(email: string): Promise<AdminUser | null> {
     const [user] = await db.select().from(adminUsers).where(eq(adminUsers.email, email));
+    return user ?? null;
+  }
+
+  async findAdminById(id: number): Promise<AdminUser | null> {
+    const [user] = await db.select().from(adminUsers).where(eq(adminUsers.id, id));
     return user ?? null;
   }
 

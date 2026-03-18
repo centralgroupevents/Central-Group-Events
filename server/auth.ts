@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { storage } from "./storage";
 
 export interface AdminJwtPayload {
   id: number;
@@ -16,7 +17,7 @@ declare global {
 }
 
 export function requireAuth(role?: string) {
-  return (req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     const token = req.cookies?.cge_admin_jwt;
     if (!token) {
       return res.status(401).json({ message: "Authentication required" });
@@ -29,6 +30,10 @@ export function requireAuth(role?: string) {
       const payload = jwt.verify(token, secret) as AdminJwtPayload;
       if (role && payload.role !== role) {
         return res.status(403).json({ message: "Insufficient permissions" });
+      }
+      const admin = await storage.findAdminById(payload.id);
+      if (!admin || !admin.isActive || !admin.inviteAccepted) {
+        return res.status(401).json({ message: "Account deactivated or not set up" });
       }
       req.adminUser = payload;
       next();
