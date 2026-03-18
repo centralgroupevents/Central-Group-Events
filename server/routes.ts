@@ -9,7 +9,7 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { requireAuth } from "./auth";
+import { requireAuth, verifyAdminToken } from "./auth";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -419,10 +419,10 @@ export async function registerRoutes(
     try {
       const post = await storage.getPostBySlug(req.params.slug as string);
       if (!post) return res.status(404).json({ message: "Post not found" });
-      // Public requests can only see published posts
-      const adminToken = req.cookies?.cge_admin_jwt;
-      if (!post.isPublished && !adminToken) {
-        return res.status(404).json({ message: "Post not found" });
+      if (!post.isPublished) {
+        const adminToken: string | undefined = req.cookies?.cge_admin_jwt;
+        const admin = adminToken ? await verifyAdminToken(adminToken) : null;
+        if (!admin) return res.status(404).json({ message: "Post not found" });
       }
       storage.recordView(post.id).catch(() => {});
       res.json(post);

@@ -88,9 +88,11 @@ export interface IStorage {
 
   // Post views
   recordView(postId: number): Promise<void>;
+  getViewsByPost(postId: number): Promise<number>;
 
   // Link clicks
   recordClick(url: string, postId?: number): Promise<void>;
+  getClickStats(): Promise<{ url: string; count: number }[]>;
 
   // Comments
   getCommentsByPost(postId: number): Promise<Comment[]>;
@@ -323,10 +325,24 @@ export class DatabaseStorage implements IStorage {
     await db.insert(postViews).values({ postId });
   }
 
+  async getViewsByPost(postId: number): Promise<number> {
+    const [row] = await db.select({ total: count() }).from(postViews).where(eq(postViews.postId, postId));
+    return Number(row?.total ?? 0);
+  }
+
   // ── Link clicks ───────────────────────────────────────────────────────
 
   async recordClick(url: string, postId?: number): Promise<void> {
     await db.insert(linkClicks).values({ url, postId: postId ?? null });
+  }
+
+  async getClickStats(): Promise<{ url: string; count: number }[]> {
+    const rows = await db
+      .select({ url: linkClicks.url, total: count() })
+      .from(linkClicks)
+      .groupBy(linkClicks.url)
+      .orderBy(desc(count()));
+    return rows.map((r) => ({ url: r.url, count: Number(r.total) }));
   }
 
   // ── Comments ──────────────────────────────────────────────────────────

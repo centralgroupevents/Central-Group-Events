@@ -16,6 +16,19 @@ declare global {
   }
 }
 
+export async function verifyAdminToken(token: string): Promise<AdminJwtPayload | null> {
+  try {
+    const secret = process.env.SESSION_SECRET;
+    if (!secret) return null;
+    const payload = jwt.verify(token, secret) as AdminJwtPayload;
+    const admin = await storage.findAdminById(payload.id);
+    if (!admin || !admin.isActive || !admin.inviteAccepted) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 export function requireAuth(role?: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const token = req.cookies?.cge_admin_jwt;
