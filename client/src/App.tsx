@@ -9,6 +9,11 @@ import Terms from "@/pages/legal/Terms";
 import Privacy from "@/pages/legal/Privacy";
 import Admin from "@/pages/Admin";
 import BookingConfirmation from "@/pages/BookingConfirmation";
+import Blog from "@/pages/Blog";
+import BlogPost from "@/pages/BlogPost";
+import FAQ from "@/pages/FAQ";
+import Welcome from "@/pages/Welcome";
+import AcceptInvite from "@/pages/AcceptInvite";
 
 function Router() {
   return (
@@ -18,6 +23,11 @@ function Router() {
       <Route path="/legal/terms" component={Terms} />
       <Route path="/legal/privacy" component={Privacy} />
       <Route path="/admin" component={Admin} />
+      <Route path="/blog" component={Blog} />
+      <Route path="/blog/:slug" component={BlogPost} />
+      <Route path="/faq" component={FAQ} />
+      <Route path="/welcome" component={Welcome} />
+      <Route path="/accept-invite" component={AcceptInvite} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
+import { Link, useLocation } from "wouter";
 
 function TikTokIcon({ className }: { className?: string }) {
   return (
@@ -15,6 +16,9 @@ function TikTokIcon({ className }: { className?: string }) {
 export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [location] = useLocation();
+
+  const isHomePage = location === "/";
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,10 +28,10 @@ export function Navigation() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const navLinks = [
-    { name: "Services", href: "#services" },
-    { name: "Events", href: "#events" },
-    { name: "Pricing", href: "#pricing" },
+  const anchorLinks = [
+    { name: "Services", href: isHomePage ? "#services" : "/#services" },
+    { name: "Events", href: isHomePage ? "#events" : "/#events" },
+    { name: "Pricing", href: isHomePage ? "#pricing" : "/#pricing" },
   ];
 
   return (
@@ -37,17 +41,17 @@ export function Navigation() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-        <a href="#" className="flex items-center">
+        <Link href="/" className="flex items-center">
           <img
             src={cgeLogo}
             alt="Central Group Events"
             className="h-10 w-auto object-contain"
           />
-        </a>
+        </Link>
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-6">
-          {navLinks.map((link) => (
+          {anchorLinks.map((link) => (
             <a
               key={link.name}
               href={link.href}
@@ -56,6 +60,12 @@ export function Navigation() {
               {link.name}
             </a>
           ))}
+          <Link href="/blog" className="text-sm font-medium text-muted-foreground hover:text-white transition-colors">
+            Blog
+          </Link>
+          <Link href="/faq" className="text-sm font-medium text-muted-foreground hover:text-white transition-colors">
+            FAQ
+          </Link>
           <a
             href="https://calendly.com/centralgroupevents/30min"
             target="_blank"
@@ -86,7 +96,7 @@ export function Navigation() {
             asChild
             className="rounded-full bg-accent text-black hover:bg-accent/90 hover:scale-105 transition-all duration-300 font-semibold"
           >
-            <a href="#book">Book Promotion</a>
+            <a href={isHomePage ? "#book" : "/#book"}>Book Promotion</a>
           </Button>
         </nav>
 
@@ -94,6 +104,7 @@ export function Navigation() {
         <button
           className="md:hidden p-2 text-white"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          data-testid="button-mobile-menu-toggle"
         >
           {mobileMenuOpen ? <X /> : <Menu />}
         </button>
@@ -109,7 +120,7 @@ export function Navigation() {
             className="md:hidden glass-panel border-t border-white/5"
           >
             <div className="px-4 py-6 flex flex-col gap-4">
-              {navLinks.map((link) => (
+              {anchorLinks.map((link) => (
                 <a
                   key={link.name}
                   href={link.href}
@@ -119,6 +130,20 @@ export function Navigation() {
                   {link.name}
                 </a>
               ))}
+              <Link
+                href="/blog"
+                className="text-lg font-medium text-muted-foreground hover:text-white transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Blog
+              </Link>
+              <Link
+                href="/faq"
+                className="text-lg font-medium text-muted-foreground hover:text-white transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                FAQ
+              </Link>
               <a
                 href="https://calendly.com/centralgroupevents/30min"
                 target="_blank"
@@ -153,7 +178,7 @@ export function Navigation() {
                 className="w-full mt-2 rounded-xl bg-accent text-black hover:bg-accent/90"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <a href="#book">Book Promotion</a>
+                <a href={isHomePage ? "#book" : "/#book"}>Book Promotion</a>
               </Button>
             </div>
           </motion.div>

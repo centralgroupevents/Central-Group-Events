@@ -307,16 +307,18 @@ export async function registerRoutes(
 
   app.post("/api/admin/invite", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const { email } = req.body;
+      const { email, role: inviteRole = "editor" } = req.body;
       if (!email) return res.status(400).json({ message: "Email is required" });
+      const validRoles = ["editor", "admin", "superadmin"];
+      const role = validRoles.includes(inviteRole) ? inviteRole : "editor";
       const token = crypto.randomBytes(16).toString("hex");
       const existing = await storage.findAdminByEmail(email);
       if (existing) {
-        await storage.updateAdminUser(existing.id, { inviteToken: token, inviteAccepted: false });
+        await storage.updateAdminUser(existing.id, { inviteToken: token, inviteAccepted: false, role });
       } else {
         await storage.createAdminUser({
           email,
-          role: "editor",
+          role,
           inviteToken: token,
           inviteAccepted: false,
           isActive: true,
@@ -325,7 +327,7 @@ export async function registerRoutes(
       const baseUrl = process.env.NODE_ENV === "production"
         ? "https://centralgroupevents.com"
         : `http://localhost:${process.env.PORT || 5000}`;
-      const link = `${baseUrl}/admin/accept-invite?token=${token}`;
+      const link = `${baseUrl}/accept-invite?token=${token}`;
       try {
         await transporter.sendMail({
           from: `"CGE Website" <${process.env.GMAIL_USER}>`,
@@ -389,6 +391,116 @@ export async function registerRoutes(
       if (isNaN(id)) return res.status(400).json({ message: "Invalid user id" });
       await storage.deactivateAdmin(id);
       res.json({ message: "User deactivated" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── New admin management routes ───────────────────────────────────────
+
+  app.get("/api/admin/me", requireAuth(), (req: Request, res: Response) => {
+    if (!req.adminUser) return res.status(401).json({ message: "Not authenticated" });
+    res.json({ email: req.adminUser.email, role: req.adminUser.role });
+  });
+
+  app.get("/api/admin/team", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const users = await storage.listAdminUsers();
+      res.json(users);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/team/:id/deactivate", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      await storage.deactivateAdmin(id);
+      res.json({ message: "Deactivated" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/team/:id/reactivate", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      await storage.reactivateAdmin(id);
+      res.json({ message: "Reactivated" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/subscribers", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const subs = await storage.listSubscribers();
+      res.json(subs);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/analytics", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const allPosts = await storage.getAllPosts();
+      const result = await Promise.all(
+        allPosts.map(async (post) => {
+          const viewRows = await storage.getViewsByPost(post.id);
+          const clickStats = await storage.getClickStats();
+          const postClicks = clickStats
+            .filter((c) => c.url.includes(`postId=${post.id}`))
+            .reduce((s, c) => s + c.count, 0);
+          return {
+            postId: post.id,
+            title: post.title,
+            slug: post.slug,
+            totalViews: viewRows,
+            totalClicks: postClicks,
+          };
+        })
+      );
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/newsletter/send", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { subject, body } = req.body;
+      if (!subject || !body) return res.status(400).json({ message: "Subject and body are required" });
+      const subscribers = await storage.listSubscribers();
+      let sent = 0;
+      for (const sub of subscribers) {
+        try {
+          await transporter.sendMail({
+            from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+            to: sub.email,
+            subject,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                  <h1 style="color: #8B2FC9; margin: 0;">Central Group Events</h1>
+                  <p style="color: #888; font-size: 12px; margin: 4px 0 0;">NJ Nightlife Newsletter</p>
+                </div>
+                <div style="color: #e0e0e0; line-height: 1.7; white-space: pre-wrap;">${body}</div>
+                <hr style="border-color: #333; margin: 32px 0;" />
+                <p style="color: #555; font-size: 12px; text-align: center;">
+                  You're receiving this because you subscribed at centralgroupevents.com.<br/>
+                  <a href="https://centralgroupevents.com" style="color: #8B2FC9;">Unsubscribe</a>
+                </p>
+              </div>
+            `,
+          });
+          sent++;
+        } catch (e) {
+          console.error(`Failed to send to ${sub.email}:`, e);
+        }
+      }
+      res.json({ message: "Newsletter sent", sent });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }

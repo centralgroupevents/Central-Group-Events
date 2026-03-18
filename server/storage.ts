@@ -69,7 +69,9 @@ export interface IStorage {
   listAdminUsers(): Promise<Omit<AdminUser, "passwordHash">[]>;
   updateAdminUser(id: number, data: Partial<AdminUser>): Promise<AdminUser>;
   deactivateAdmin(id: number): Promise<void>;
+  reactivateAdmin(id: number): Promise<void>;
   countAdminUsers(): Promise<number>;
+  listSubscribers(): Promise<Subscriber[]>;
 
   // Posts
   createPost(data: Partial<InsertPost> & { title: string }): Promise<Post>;
@@ -205,6 +207,14 @@ export class DatabaseStorage implements IStorage {
 
   async deactivateAdmin(id: number): Promise<void> {
     await db.update(adminUsers).set({ isActive: false }).where(eq(adminUsers.id, id));
+  }
+
+  async reactivateAdmin(id: number): Promise<void> {
+    await db.update(adminUsers).set({ isActive: true }).where(eq(adminUsers.id, id));
+  }
+
+  async listSubscribers(): Promise<Subscriber[]> {
+    return await db.select().from(newsletterSubscribers).orderBy(desc(newsletterSubscribers.createdAt));
   }
 
   async countAdminUsers(): Promise<number> {
