@@ -309,7 +309,7 @@ export async function registerRoutes(
     try {
       const { email } = req.body;
       if (!email) return res.status(400).json({ message: "Email is required" });
-      const token = crypto.randomBytes(32).toString("hex");
+      const token = crypto.randomBytes(16).toString("hex");
       const existing = await storage.findAdminByEmail(email);
       if (existing) {
         await storage.updateAdminUser(existing.id, { inviteToken: token, inviteAccepted: false });
