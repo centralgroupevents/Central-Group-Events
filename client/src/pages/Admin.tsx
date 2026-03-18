@@ -235,6 +235,15 @@ function BlogPostsTab() {
     isGated: false,
   });
 
+  function slugify(str: string) {
+    return str
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+  }
+
   const { data: posts = [], isLoading } = useQuery<Post[]>({
     queryKey: ["/api/posts/admin"],
   });
@@ -406,23 +415,32 @@ function BlogPostsTab() {
 
         <form onSubmit={handleSaveDraft} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="space-y-1 sm:col-span-2">
               <Label className="text-white/80">Title *</Label>
               <Input
                 value={postForm.title}
-                onChange={(e) => setPostForm({ ...postForm, title: e.target.value })}
+                onChange={(e) => {
+                  const title = e.target.value;
+                  const autoSlug = slugify(title);
+                  setPostForm({ ...postForm, title, slug: postForm.slug && postForm.slug !== slugify(postForm.title) ? postForm.slug : autoSlug });
+                }}
                 placeholder="Post title"
                 className="bg-black/40 border-white/10 h-11"
                 data-testid="input-post-title"
               />
+              {postForm.title && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Slug preview: <span className="text-primary font-mono">/blog/{postForm.slug || slugify(postForm.title)}</span>
+                </p>
+              )}
             </div>
             <div className="space-y-1">
-              <Label className="text-white/80">Slug (auto-generated if blank)</Label>
+              <Label className="text-white/80">Slug (auto-filled from title)</Label>
               <Input
                 value={postForm.slug}
                 onChange={(e) => setPostForm({ ...postForm, slug: e.target.value })}
                 placeholder="my-post-slug"
-                className="bg-black/40 border-white/10 h-11"
+                className="bg-black/40 border-white/10 h-11 font-mono text-sm"
                 data-testid="input-post-slug"
               />
             </div>
@@ -532,140 +550,159 @@ function BlogPostsTab() {
           <p>No posts yet. Create your first one.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {posts.map((post) => (
-            <div key={post.id}>
-              <div
-                className="bg-secondary/30 border border-white/10 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3"
-                data-testid={`card-admin-post-${post.id}`}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="font-semibold text-white truncate">{post.title}</span>
-                    {post.isGated ? (
-                      <Badge variant="outline" className="border-yellow-500/40 text-yellow-400 text-xs shrink-0">
-                        <Lock className="w-2.5 h-2.5 mr-1" /> Gated
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="border-white/20 text-white/40 text-xs shrink-0">
-                        Open
-                      </Badge>
-                    )}
-                    {post.isPublished ? (
-                      <Badge variant="outline" className="border-green-500/40 text-green-400 text-xs shrink-0">
-                        <Globe className="w-2.5 h-2.5 mr-1" /> Published
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="border-white/20 text-white/40 text-xs shrink-0">
-                        Draft
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    /blog/{post.slug} · Updated {formatDate(post.updatedAt)}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap shrink-0">
-                  {/* Publish/Unpublish toggle */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => togglePublish.mutate(post.id)}
-                    disabled={togglePublish.isPending}
-                    className={
-                      post.isPublished
-                        ? "border-white/20 text-white/60 text-xs h-8"
-                        : "border-green-500/30 text-green-400 text-xs h-8 hover:bg-green-500/10"
-                    }
-                    data-testid={`button-toggle-publish-${post.id}`}
-                  >
-                    <Globe className="w-3 h-3 mr-1" />
-                    {post.isPublished ? "Unpublish" : "Publish"}
-                  </Button>
-
-                  {/* Gate/Ungate toggle */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => toggleGate.mutate(post.id)}
-                    disabled={toggleGate.isPending}
-                    className={
-                      post.isGated
-                        ? "border-yellow-500/30 text-yellow-400 text-xs h-8 hover:bg-yellow-500/10"
-                        : "border-white/20 text-white/60 text-xs h-8"
-                    }
-                    data-testid={`button-toggle-gate-${post.id}`}
-                  >
-                    <Lock className="w-3 h-3 mr-1" />
-                    {post.isGated ? "Ungate" : "Gate"}
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setShowVersionsFor(showVersionsFor === post.id ? null : post.id)}
-                    className="border-white/20 text-white/60 text-xs h-8"
-                    data-testid={`button-versions-${post.id}`}
-                  >
-                    <History className="w-3 h-3 mr-1" /> Versions
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => openEditPost(post)}
-                    className="border-white/20 text-white/60 text-xs h-8"
-                    data-testid={`button-edit-post-${post.id}`}
-                  >
-                    <Pencil className="w-3 h-3 mr-1" /> Edit
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      if (window.confirm(`Delete "${post.title}"?`)) deletePost.mutate(post.id);
-                    }}
-                    disabled={deletePost.isPending}
-                    className="border-red-500/30 text-red-400 text-xs h-8 hover:bg-red-500/10"
-                    data-testid={`button-delete-post-${post.id}`}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Versions panel */}
-              {showVersionsFor === post.id && (
-                <div className="ml-4 mt-2 bg-black/30 border border-white/5 rounded-xl p-4">
-                  <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Saved Versions</p>
-                  {versionsLoading ? (
-                    <Skeleton className="h-10 w-full" />
-                  ) : versions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No versions saved yet.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {versions.map((v) => (
-                        <div key={v.id} className="flex items-center justify-between gap-3">
-                          <span className="text-sm text-white/70">"{v.title}" — {formatDate(v.savedAt)}</span>
+        <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left">
+                  <th className="px-4 py-3 font-medium">Title</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Gated</th>
+                  <th className="px-4 py-3 font-medium">Published Date</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {posts.map((post, i) => (
+                  <>
+                    <tr
+                      key={post.id}
+                      data-testid={`row-admin-post-${post.id}`}
+                      className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}
+                    >
+                      <td className="px-4 py-4">
+                        <div className="font-medium text-white max-w-xs">
+                          <div className="truncate">{post.title}</div>
+                          <div className="text-xs text-muted-foreground font-mono mt-0.5 truncate">/blog/{post.slug}</div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        {post.isPublished ? (
+                          <Badge variant="outline" className="border-green-500/40 text-green-400 text-xs">
+                            <Globe className="w-2.5 h-2.5 mr-1" /> Published
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-white/20 text-white/40 text-xs">
+                            Draft
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-4">
+                        {post.isGated ? (
+                          <Badge variant="outline" className="border-yellow-500/40 text-yellow-400 text-xs">
+                            <Lock className="w-2.5 h-2.5 mr-1" /> Yes
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-white/20 text-white/40 text-xs">No</Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-muted-foreground whitespace-nowrap text-xs">
+                        {formatDate(post.publishedAt)}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-1.5 justify-end flex-wrap">
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => restoreVersion.mutate({ postId: post.id, versionId: v.id })}
-                            disabled={restoreVersion.isPending}
-                            className="border-white/20 text-white/60 text-xs h-7"
+                            onClick={() => togglePublish.mutate(post.id)}
+                            disabled={togglePublish.isPending}
+                            className={
+                              post.isPublished
+                                ? "border-white/20 text-white/60 text-xs h-7"
+                                : "border-green-500/30 text-green-400 text-xs h-7 hover:bg-green-500/10"
+                            }
+                            data-testid={`button-toggle-publish-${post.id}`}
                           >
-                            <RotateCcw className="w-3 h-3 mr-1" /> Restore
+                            <Globe className="w-3 h-3 mr-1" />
+                            {post.isPublished ? "Unpublish" : "Publish"}
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => toggleGate.mutate(post.id)}
+                            disabled={toggleGate.isPending}
+                            className={
+                              post.isGated
+                                ? "border-yellow-500/30 text-yellow-400 text-xs h-7 hover:bg-yellow-500/10"
+                                : "border-white/20 text-white/60 text-xs h-7"
+                            }
+                            data-testid={`button-toggle-gate-${post.id}`}
+                          >
+                            <Lock className="w-3 h-3 mr-1" />
+                            {post.isGated ? "Ungate" : "Gate"}
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setShowVersionsFor(showVersionsFor === post.id ? null : post.id)}
+                            className="border-white/20 text-white/60 text-xs h-7"
+                            data-testid={`button-versions-${post.id}`}
+                          >
+                            <History className="w-3 h-3 mr-1" /> Versions
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEditPost(post)}
+                            className="border-white/20 text-white/60 text-xs h-7"
+                            data-testid={`button-edit-post-${post.id}`}
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (window.confirm(`Delete "${post.title}"?`)) deletePost.mutate(post.id);
+                            }}
+                            disabled={deletePost.isPending}
+                            className="border-red-500/30 text-red-400 text-xs h-7 hover:bg-red-500/10"
+                            data-testid={`button-delete-post-${post.id}`}
+                          >
+                            <Trash2 className="w-3 h-3" />
                           </Button>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                      </td>
+                    </tr>
+                    {/* Versions panel inline row */}
+                    {showVersionsFor === post.id && (
+                      <tr key={`versions-${post.id}`} className="border-b border-white/5 bg-black/20">
+                        <td colSpan={5} className="px-6 py-4">
+                          <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wider">Saved Versions</p>
+                          {versionsLoading ? (
+                            <Skeleton className="h-10 w-full" />
+                          ) : versions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No versions saved yet.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {versions.map((v) => (
+                                <div key={v.id} className="flex items-center justify-between gap-3">
+                                  <span className="text-sm text-white/70">"{v.title}" — {formatDate(v.savedAt)}</span>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => restoreVersion.mutate({ postId: post.id, versionId: v.id })}
+                                    disabled={restoreVersion.isPending}
+                                    className="border-white/20 text-white/60 text-xs h-7"
+                                  >
+                                    <RotateCcw className="w-3 h-3 mr-1" /> Restore
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

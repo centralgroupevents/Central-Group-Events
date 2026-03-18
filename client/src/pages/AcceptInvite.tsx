@@ -61,8 +61,8 @@ export default function AcceptInvite() {
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
           <img src={cgeLogo} alt="Central Group Events" className="h-16 w-auto object-contain mx-auto mb-6" />
-          <h1 className="text-2xl font-black text-white mb-2">Activate Your Admin Account</h1>
-          <p className="text-sm text-muted-foreground">Set your password to get started.</p>
+          <h1 className="text-2xl font-black text-white mb-2">Set your password to activate your CGE admin account</h1>
+          <p className="text-sm text-muted-foreground">Choose a secure password to get started.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="glass-panel rounded-2xl p-6 space-y-4">

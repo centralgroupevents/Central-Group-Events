@@ -139,7 +139,9 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
   });
 
   const hasAccess = !!subVerify?.access;
-  const isGated = post?.gated === true;
+  // Backend returns `gated: true` (without content) for unauthorized gated posts
+  // We treat the post as requiring a gate if isGated is true AND we don't have access
+  const isGated = !!(post?.isGated || post?.gated);
 
   const { data: comments = [], isLoading: commentsLoading } = useQuery<Comment[]>({
     queryKey: ["/api/posts", post?.id, "comments"],
@@ -265,9 +267,11 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
         {/* Content or Gate */}
         {isGated && !hasAccess ? (
           <div className="relative">
-            {/* Teaser */}
+            {/* Teaser — use excerpt if content was omitted by backend's gated response */}
             <div className="text-white/80 leading-relaxed text-base line-clamp-6">
-              {getTeaser(post.content)}
+              {post.content
+                ? getTeaser(post.content)
+                : post.excerpt ?? "Subscribe to read this post."}
             </div>
 
             {/* Gate overlay */}
