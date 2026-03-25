@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { 
-  ArrowRight, Calendar, Megaphone, Video, MessageSquare, 
-  Users, CheckCircle2, Ticket, MapPin, Loader2, Instagram, Search, Plus
+  ArrowRight, Calendar, Megaphone, Video, MessageSquare,
+  Users, CheckCircle2, Ticket, MapPin, Loader2, Instagram, Search, Plus, X
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -451,117 +451,158 @@ export default function Home() {
             <h3 className="text-3xl md:text-5xl font-black">Pick Your Package</h3>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
-            {/* Starter */}
-            <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
-              <Card className="bg-secondary/50 border-white/10 p-6 rounded-3xl">
-                <h4 className="text-2xl font-bold mb-2">Starter</h4>
-                <p className="text-muted-foreground mb-6 h-12">Perfect for testing the waters.</p>
-                <div className="text-4xl font-black mb-6">$70<span className="text-lg text-muted-foreground font-normal"> / event</span></div>
-                <ul className="space-y-4 mb-8 text-sm text-gray-300">
-                  {[
-                    'Social Media page post (Instagram, TikTok, Facebook)',
-                    'Instagram/FB Story post',
-                    'Email blast',
-                    'Regular newsletter placement',
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <a
-                  href="https://cash.app/$centralgroupevents"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full rounded-xl px-4 py-2.5 font-semibold text-sm text-black"
-                  style={{ backgroundColor: "#00D632" }}
-                  data-testid="button-cashapp-starter"
-                >
-                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="currentColor">
-                    <path d="M17.15 13.578c-.107.498-.46.914-.9 1.128-.22.106-.459.16-.698.16-.154 0-.308-.02-.457-.063l-2.496-.7v1.69c0 .434-.351.785-.784.785H9.815c-.433 0-.784-.351-.784-.785v-1.69l-2.496.7c-.15.043-.303.063-.457.063-.24 0-.478-.054-.699-.16-.44-.214-.792-.63-.9-1.128l-.26-1.21c-.158-.74.237-1.49.94-1.77l1.987-.78-1.987-.78c-.703-.28-1.098-1.03-.94-1.77l.26-1.21c.108-.498.46-.914.9-1.128.44-.214.947-.224 1.397-.026l2.255.994V4.688c0-.433.351-.784.784-.784h2.0c.433 0 .784.351.784.784v2.21l2.255-.994c.45-.198.957-.188 1.397.026.44.214.792.63.9 1.128l.26 1.21c.158.74-.237 1.49-.94 1.77l-1.987.78 1.987.78c.703.28 1.098 1.03.94 1.77l-.26 1.21z" />
-                  </svg>
-                  Pay with CashApp $centralgroupevents
-                </a>
-                <p className="text-xs text-muted-foreground text-center mt-2">💳 Stripe payments coming soon</p>
-              </Card>
-            </motion.div>
+          {/* Comparison table */}
+          <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
+            <div className="bg-secondary/40 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px]">
+                  {/* Column headers */}
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left px-6 py-6 w-[40%]">
+                        <span className="text-muted-foreground text-sm font-medium uppercase tracking-wider">Feature</span>
+                      </th>
+                      {/* Starter */}
+                      <th className="px-4 py-6 text-center">
+                        <div className="text-white font-black text-lg">Starter</div>
+                        <div className="text-3xl font-black text-white mt-1">$70<span className="text-sm text-muted-foreground font-normal"> / event</span></div>
+                      </th>
+                      {/* Growth */}
+                      <th className="px-4 py-6 text-center bg-primary/10 border-x border-primary/20">
+                        <div className="inline-block bg-primary text-white text-[10px] font-bold tracking-widest uppercase px-3 py-0.5 rounded-full mb-2">Most Popular</div>
+                        <div className="text-primary font-black text-lg">Growth</div>
+                        <div className="text-3xl font-black text-white mt-1">$150<span className="text-sm text-white/50 font-normal"> / event</span></div>
+                      </th>
+                      {/* Custom */}
+                      <th className="px-4 py-6 text-center">
+                        <div className="text-white font-black text-lg">Custom</div>
+                        <div className="text-3xl font-black text-white mt-1">$300+<span className="text-sm text-muted-foreground font-normal"> / event</span></div>
+                      </th>
+                    </tr>
+                  </thead>
 
-            {/* Growth (Popular) */}
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: 0.1 }}>
-              <Card className="bg-gradient-to-b from-primary/20 to-secondary/80 border-primary/50 p-8 rounded-3xl relative transform md:-translate-y-4 shadow-2xl shadow-primary/20">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-accent text-black px-4 py-1 rounded-full text-xs font-bold tracking-widest uppercase">
-                  Most Popular
+                  <tbody>
+                    {/* Social Media Page Post */}
+                    <tr className="border-b border-white/5">
+                      <td className="px-6 py-4 text-sm text-white/80">Social Media Page Post <span className="text-muted-foreground text-xs">(IG / TT / FB)</span></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                    </tr>
+
+                    {/* Story Post */}
+                    <tr className="border-b border-white/5 bg-white/[0.02]">
+                      <td className="px-6 py-4 text-sm text-white/80">Instagram &amp; FB Story Post</td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                    </tr>
+
+                    {/* Email Blast */}
+                    <tr className="border-b border-white/5">
+                      <td className="px-6 py-4 text-sm text-white/80">Email Blast</td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                    </tr>
+
+                    {/* Newsletter Placement */}
+                    <tr className="border-b border-white/5 bg-white/[0.02]">
+                      <td className="px-6 py-4 text-sm text-white/80">Newsletter Placement</td>
+                      <td className="px-4 py-4 text-center"><span className="text-xs text-muted-foreground font-medium">Regular</span></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><span className="text-xs text-amber-400 font-semibold">Premium</span></td>
+                      <td className="px-4 py-4 text-center"><span className="text-xs text-amber-400 font-semibold">Premium</span></td>
+                    </tr>
+
+                    {/* Event Calendar */}
+                    <tr className="border-b border-white/5">
+                      <td className="px-6 py-4 text-sm text-white/80">Event Calendar Feature</td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                    </tr>
+
+                    {/* Ad Credit */}
+                    <tr className="border-b border-white/5 bg-white/[0.02]">
+                      <td className="px-6 py-4 text-sm text-white/80">Ad Credit</td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><span className="text-sm font-bold text-white">$50</span></td>
+                      <td className="px-4 py-4 text-center"><span className="text-sm font-bold text-white">$100</span></td>
+                    </tr>
+
+                    {/* Influencer Reach */}
+                    <tr className="border-b border-white/5">
+                      <td className="px-6 py-4 text-sm text-white/80">Influencer Reach</td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                    </tr>
+
+                    {/* SMS Blast */}
+                    <tr>
+                      <td className="px-6 py-4 text-sm text-white/80">SMS Blast</td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Payment buttons row */}
+              <div className="border-t border-white/10 grid grid-cols-3 min-w-[600px]">
+                {/* Starter button */}
+                <div className="px-4 py-5 flex flex-col items-center gap-2">
+                  <a
+                    href="https://cash.app/$centralgroupevents"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full rounded-xl px-3 py-2.5 font-semibold text-xs text-black"
+                    style={{ backgroundColor: "#00D632" }}
+                    data-testid="button-cashapp-starter"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+                      <path d="M17.15 13.578c-.107.498-.46.914-.9 1.128-.22.106-.459.16-.698.16-.154 0-.308-.02-.457-.063l-2.496-.7v1.69c0 .434-.351.785-.784.785H9.815c-.433 0-.784-.351-.784-.785v-1.69l-2.496.7c-.15.043-.303.063-.457.063-.24 0-.478-.054-.699-.16-.44-.214-.792-.63-.9-1.128l-.26-1.21c-.158-.74.237-1.49.94-1.77l1.987-.78-1.987-.78c-.703-.28-1.098-1.03-.94-1.77l.26-1.21c.108-.498.46-.914.9-1.128.44-.214.947-.224 1.397-.026l2.255.994V4.688c0-.433.351-.784.784-.784h2.0c.433 0 .784.351.784.784v2.21l2.255-.994c.45-.198.957-.188 1.397.026.44.214.792.63.9 1.128l.26 1.21c.158.74-.237 1.49-.94 1.77l-1.987.78 1.987.78c.703.28 1.098 1.03.94 1.77l-.26 1.21z" />
+                    </svg>
+                    Pay with CashApp
+                  </a>
                 </div>
-                <h4 className="text-2xl font-bold mb-2 text-white">Growth</h4>
-                <p className="text-white/70 mb-6 h-12">For venues serious about selling out.</p>
-                <div className="text-5xl font-black mb-6 text-white">$150<span className="text-lg text-white/50 font-normal"> / event</span></div>
-                <ul className="space-y-4 mb-8 text-sm text-white/90">
-                  {[
-                    'Social Media page post (Instagram, TikTok, Facebook)',
-                    'Instagram/FB Story post',
-                    'Email blast',
-                    'Premium newsletter feature',
-                    'Event Calendar feature',
-                    '$50 ad credit',
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-white shrink-0 mt-0.5" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <a
-                  href="https://cash.app/$centralgroupevents"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full rounded-xl px-4 py-2.5 font-bold text-sm text-black"
-                  style={{ backgroundColor: "#00D632" }}
-                  data-testid="button-cashapp-growth"
-                >
-                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="currentColor">
-                    <path d="M17.15 13.578c-.107.498-.46.914-.9 1.128-.22.106-.459.16-.698.16-.154 0-.308-.02-.457-.063l-2.496-.7v1.69c0 .434-.351.785-.784.785H9.815c-.433 0-.784-.351-.784-.785v-1.69l-2.496.7c-.15.043-.303.063-.457.063-.24 0-.478-.054-.699-.16-.44-.214-.792-.63-.9-1.128l-.26-1.21c-.158-.74.237-1.49.94-1.77l1.987-.78-1.987-.78c-.703-.28-1.098-1.03-.94-1.77l.26-1.21c.108-.498.46-.914.9-1.128.44-.214.947-.224 1.397-.026l2.255.994V4.688c0-.433.351-.784.784-.784h2.0c.433 0 .784.351.784.784v2.21l2.255-.994c.45-.198.957-.188 1.397.026.44.214.792.63.9 1.128l.26 1.21c.158.74-.237 1.49-.94 1.77l-1.987.78 1.987.78c.703.28 1.098 1.03.94 1.77l-.26 1.21z" />
-                  </svg>
-                  Pay with CashApp $centralgroupevents
-                </a>
-                <p className="text-xs text-muted-foreground text-center mt-2">💳 Stripe payments coming soon</p>
-              </Card>
-            </motion.div>
 
-            {/* Custom */}
-            <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }}>
-              <Card className="bg-secondary/50 border-white/10 p-6 rounded-3xl">
-                <h4 className="text-2xl font-bold mb-2">Custom</h4>
-                <p className="text-muted-foreground mb-6 h-12">Maximum reach. Built around your event.</p>
-                <div className="text-4xl font-black mb-6">$300+<span className="text-lg text-muted-foreground font-normal"> / event</span></div>
-                <ul className="space-y-4 mb-8 text-sm text-gray-300">
-                  {[
-                    'Social Media page post (Instagram, TikTok, Facebook)',
-                    'Instagram/FB Story post',
-                    'Email blast',
-                    'Influencer reach',
-                    'Premium newsletter feature',
-                    'Event Calendar feature',
-                    'SMS blast',
-                    '$100 ad credit',
-                  ].map((item, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  className="w-full rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold"
-                  onClick={() => document.getElementById("book")?.scrollIntoView({ behavior: "smooth" })}
-                  data-testid="button-get-quote-custom"
-                >
-                  Get a Quote
-                </Button>
-              </Card>
-            </motion.div>
-          </div>
+                {/* Growth button */}
+                <div className="px-4 py-5 flex flex-col items-center gap-2 bg-primary/5 border-x border-primary/20">
+                  <a
+                    href="https://cash.app/$centralgroupevents"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full rounded-xl px-3 py-2.5 font-bold text-xs text-black"
+                    style={{ backgroundColor: "#00D632" }}
+                    data-testid="button-cashapp-growth"
+                  >
+                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="currentColor">
+                      <path d="M17.15 13.578c-.107.498-.46.914-.9 1.128-.22.106-.459.16-.698.16-.154 0-.308-.02-.457-.063l-2.496-.7v1.69c0 .434-.351.785-.784.785H9.815c-.433 0-.784-.351-.784-.785v-1.69l-2.496.7c-.15.043-.303.063-.457.063-.24 0-.478-.054-.699-.16-.44-.214-.792-.63-.9-1.128l-.26-1.21c-.158-.74.237-1.49.94-1.77l1.987-.78-1.987-.78c-.703-.28-1.098-1.03-.94-1.77l.26-1.21c.108-.498.46-.914.9-1.128.44-.214.947-.224 1.397-.026l2.255.994V4.688c0-.433.351-.784.784-.784h2.0c.433 0 .784.351.784.784v2.21l2.255-.994c.45-.198.957-.188 1.397.026.44.214.792.63.9 1.128l.26 1.21c.158.74-.237 1.49-.94 1.77l-1.987.78 1.987.78c.703.28 1.098 1.03.94 1.77l-.26 1.21z" />
+                    </svg>
+                    Pay with CashApp
+                  </a>
+                </div>
+
+                {/* Custom button */}
+                <div className="px-4 py-5 flex flex-col items-center gap-2">
+                  <Button
+                    className="w-full rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs h-9"
+                    onClick={() => document.getElementById("book")?.scrollIntoView({ behavior: "smooth" })}
+                    data-testid="button-get-quote-custom"
+                  >
+                    Get a Quote
+                  </Button>
+                </div>
+              </div>
+
+              {/* Stripe coming soon */}
+              <div className="py-4 text-center border-t border-white/5">
+                <p className="text-xs text-muted-foreground">💳 Stripe payments coming soon</p>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
