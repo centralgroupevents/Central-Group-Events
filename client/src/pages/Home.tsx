@@ -457,11 +457,16 @@ export default function Home() {
               <Card className="bg-secondary/50 border-white/10 p-6 rounded-3xl">
                 <h4 className="text-2xl font-bold mb-2">Starter</h4>
                 <p className="text-muted-foreground mb-6 h-12">Perfect for testing the waters.</p>
-                <div className="text-4xl font-black mb-6">$125<span className="text-lg text-muted-foreground font-normal"> / event</span></div>
+                <div className="text-4xl font-black mb-6">$70<span className="text-lg text-muted-foreground font-normal"> / event</span></div>
                 <ul className="space-y-4 mb-8 text-sm text-gray-300">
-                  {['1 Instagram Reel', '1 Custom Event Flyer', 'Basic Meta Ad Campaign ($50 spend)', 'SMS Blast to 500 contacts', '1-Week Promotion Timeline'].map((item, i) => (
+                  {[
+                    'Social Media page post (Instagram, TikTok, Facebook)',
+                    'Instagram/FB Story post',
+                    'Email blast',
+                    'Regular newsletter placement',
+                  ].map((item, i) => (
                     <li key={i} className="flex items-start gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                      <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                       <span>{item}</span>
                     </li>
                   ))}
@@ -491,11 +496,18 @@ export default function Home() {
                 </div>
                 <h4 className="text-2xl font-bold mb-2 text-white">Growth</h4>
                 <p className="text-white/70 mb-6 h-12">For venues serious about selling out.</p>
-                <div className="text-5xl font-black mb-6 text-white">$250<span className="text-lg text-white/50 font-normal"> / event</span></div>
+                <div className="text-5xl font-black mb-6 text-white">$150<span className="text-lg text-white/50 font-normal"> / event</span></div>
                 <ul className="space-y-4 mb-8 text-sm text-white/90">
-                  {['2 Instagram Reels', '2 Custom Flyer Variations', 'Targeted Meta Ad Campaign ($100 spend)', 'Featured in Weekly Newsletter', 'Featured on Event Calendar', 'Influencer Story Reposts (3-5)', 'SMS Blast to 1,000 contacts', '2-Week Strategic Rollout'].map((item, i) => (
+                  {[
+                    'Social Media page post (Instagram, TikTok, Facebook)',
+                    'Instagram/FB Story post',
+                    'Email blast',
+                    'Premium newsletter feature',
+                    'Event Calendar feature',
+                    '$50 ad credit',
+                  ].map((item, i) => (
                     <li key={i} className="flex items-start gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-white shrink-0" />
+                      <CheckCircle2 className="w-5 h-5 text-white shrink-0 mt-0.5" />
                       <span>{item}</span>
                     </li>
                   ))}
@@ -517,42 +529,36 @@ export default function Home() {
               </Card>
             </motion.div>
 
-            {/* Full House */}
+            {/* Custom */}
             <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }}>
               <Card className="bg-secondary/50 border-white/10 p-6 rounded-3xl">
-                <h4 className="text-2xl font-bold mb-2">Full House</h4>
-                <p className="text-muted-foreground mb-6 h-12">Maximum distribution. Maximum turnout.</p>
-                <div className="text-4xl font-black mb-6">$550<span className="text-lg text-muted-foreground font-normal"> / event</span></div>
+                <h4 className="text-2xl font-bold mb-2">Custom</h4>
+                <p className="text-muted-foreground mb-6 h-12">Maximum reach. Built around your event.</p>
+                <div className="text-4xl font-black mb-6">$300+<span className="text-lg text-muted-foreground font-normal"> / event</span></div>
                 <ul className="space-y-4 mb-8 text-sm text-gray-300">
-                  {['3 IG Reels + BTS Content', '3 Custom Flyer Variations', 'Full Meta Ad Campaign ($200 spend)', 'Premium Featured Newsletter Placement', 'Homepage Featured on Calendar', 'Influencer Reach (8-12 influencers)', 'SMS Blast to 2,500 contacts', '3-Week Strategic Rollout', 'Event Day Social Coverage'].map((item, i) => (
+                  {[
+                    'Social Media page post (Instagram, TikTok, Facebook)',
+                    'Instagram/FB Story post',
+                    'Email blast',
+                    'Influencer reach',
+                    'Premium newsletter feature',
+                    'Event Calendar feature',
+                    'SMS blast',
+                    '$100 ad credit',
+                  ].map((item, i) => (
                     <li key={i} className="flex items-start gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+                      <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                       <span>{item}</span>
                     </li>
                   ))}
                 </ul>
-                <a
-                  href="https://cash.app/$centralgroupevents"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full rounded-xl px-4 py-2.5 font-semibold text-sm text-black"
-                  style={{ backgroundColor: "#00D632" }}
-                  data-testid="button-cashapp-fullhouse"
-                >
-                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="currentColor">
-                    <path d="M17.15 13.578c-.107.498-.46.914-.9 1.128-.22.106-.459.16-.698.16-.154 0-.308-.02-.457-.063l-2.496-.7v1.69c0 .434-.351.785-.784.785H9.815c-.433 0-.784-.351-.784-.785v-1.69l-2.496.7c-.15.043-.303.063-.457.063-.24 0-.478-.054-.699-.16-.44-.214-.792-.63-.9-1.128l-.26-1.21c-.158-.74.237-1.49.94-1.77l1.987-.78-1.987-.78c-.703-.28-1.098-1.03-.94-1.77l.26-1.21c.108-.498.46-.914.9-1.128.44-.214.947-.224 1.397-.026l2.255.994V4.688c0-.433.351-.784.784-.784h2.0c.433 0 .784.351.784.784v2.21l2.255-.994c.45-.198.957-.188 1.397.026.44.214.792.63.9 1.128l.26 1.21c.158.74-.237 1.49-.94 1.77l-1.987.78 1.987.78c.703.28 1.098 1.03.94 1.77l-.26 1.21z" />
-                  </svg>
-                  Pay with CashApp $centralgroupevents
-                </a>
                 <Button
-                  variant="outline"
-                  className="w-full rounded-xl border-white/20 hover:bg-white/10 text-white mt-3"
+                  className="w-full rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold"
                   onClick={() => document.getElementById("book")?.scrollIntoView({ behavior: "smooth" })}
-                  data-testid="button-get-quote-fullhouse"
+                  data-testid="button-get-quote-custom"
                 >
                   Get a Quote
                 </Button>
-                <p className="text-xs text-muted-foreground text-center mt-2">💳 Stripe payments coming soon</p>
               </Card>
             </motion.div>
           </div>
