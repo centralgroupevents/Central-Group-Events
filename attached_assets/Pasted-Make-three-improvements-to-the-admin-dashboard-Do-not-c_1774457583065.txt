@@ -1,0 +1,69 @@
+Make three improvements to the admin dashboard. Do not change any other part of the site.
+
+---
+
+1. IMAGE UPLOADS VIA CLOUDINARY (affects Blog Post editor and Event editor):
+
+Install the cloudinary npm package on the backend.
+
+Add a backend route:
+- POST /api/upload — accepts a multipart/form-data file upload
+- Uses the Cloudinary SDK to upload the image to Cloudinary
+- Returns the secure_url of the uploaded image
+- Store Cloudinary credentials as environment variables:
+  CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+- Use multer for handling the multipart upload before passing to Cloudinary
+- Max file size: 5MB
+- Accepted types: image/jpeg, image/png, image/webp, image/gif
+
+In the Blog Post editor (New Post / Edit Post form):
+- Replace the "Cover Image URL" text input with a dual option:
+  - A file upload button: "Upload Image" that opens a file browser
+  - Below it, keep a text input labeled "Or paste image URL" as a fallback
+- When a file is selected, show a loading spinner, call POST /api/upload, then display a preview of the uploaded image below the input
+- On success, populate the coverImageUrl field with the returned Cloudinary URL
+- Show an error message if the upload fails
+
+In the Event editor in the admin Events tab:
+- Apply the same dual upload/URL input pattern to the event image field
+
+---
+
+2. SUBSCRIBER LIST TAB:
+
+Add a new "Subscribers" tab to the admin dashboard (between Bookings and Blog Posts).
+
+The tab should show:
+- A summary card at the top: Total Subscribers count
+- A searchable table of all subscribers with columns:
+  - Email
+  - Region (if provided)
+  - Source/Referrer (where they signed up from)
+  - Date Joined
+- A search input at the top to filter by email in real time
+- An "Export CSV" button that downloads all subscriber emails and regions as a .csv file named "cge-subscribers.csv"
+- No delete functionality for now
+
+---
+
+3. BOOKING STATUS MANAGEMENT:
+
+In the Bookings tab, add a Status column to the submissions table with these possible values:
+- New (default for all existing and new bookings)
+- Contacted
+- Paid
+- Completed
+- Cancelled
+
+Each booking row should have a status dropdown that lets the admin change the status inline. The change should save immediately to the database on selection (no save button needed).
+
+Add a color-coded badge per status:
+- New: gray
+- Contacted: blue
+- Paid: green
+- Completed: purple
+- Cancelled: red
+
+Add a filter at the top of the Bookings tab to filter submissions by status.
+
+Add a "Status" column to the database bookings table (text, default "New") if it doesn't already exist.
