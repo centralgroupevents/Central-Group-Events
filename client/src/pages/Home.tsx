@@ -466,9 +466,20 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
-                <Button className="w-full rounded-xl bg-white/10 hover:bg-white/20 text-white" asChild>
-                  <a href="https://buy.stripe.com/test_28EfZhdbD6Dvfm93l75ZC00" target="_blank" rel="noopener noreferrer">Get Started</a>
-                </Button>
+                <a
+                  href="https://cash.app/$centralgroupevents"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full rounded-xl px-4 py-2.5 font-semibold text-sm text-black"
+                  style={{ backgroundColor: "#00D632" }}
+                  data-testid="button-cashapp-starter"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="currentColor">
+                    <path d="M17.15 13.578c-.107.498-.46.914-.9 1.128-.22.106-.459.16-.698.16-.154 0-.308-.02-.457-.063l-2.496-.7v1.69c0 .434-.351.785-.784.785H9.815c-.433 0-.784-.351-.784-.785v-1.69l-2.496.7c-.15.043-.303.063-.457.063-.24 0-.478-.054-.699-.16-.44-.214-.792-.63-.9-1.128l-.26-1.21c-.158-.74.237-1.49.94-1.77l1.987-.78-1.987-.78c-.703-.28-1.098-1.03-.94-1.77l.26-1.21c.108-.498.46-.914.9-1.128.44-.214.947-.224 1.397-.026l2.255.994V4.688c0-.433.351-.784.784-.784h2.0c.433 0 .784.351.784.784v2.21l2.255-.994c.45-.198.957-.188 1.397.026.44.214.792.63.9 1.128l.26 1.21c.158.74-.237 1.49-.94 1.77l-1.987.78 1.987.78c.703.28 1.098 1.03.94 1.77l-.26 1.21z" />
+                  </svg>
+                  Pay with CashApp $centralgroupevents
+                </a>
+                <p className="text-xs text-muted-foreground text-center mt-2">💳 Stripe payments coming soon</p>
               </Card>
             </motion.div>
 
@@ -489,9 +500,20 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
-                <Button className="w-full rounded-xl bg-white text-primary hover:bg-white/90 font-bold text-lg h-12" asChild>
-                  <a href="https://buy.stripe.com/test_aFaaEX5Jbfa1fm98Fr5ZC01" target="_blank" rel="noopener noreferrer">Get Started</a>
-                </Button>
+                <a
+                  href="https://cash.app/$centralgroupevents"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full rounded-xl px-4 py-2.5 font-bold text-sm text-black"
+                  style={{ backgroundColor: "#00D632" }}
+                  data-testid="button-cashapp-growth"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="currentColor">
+                    <path d="M17.15 13.578c-.107.498-.46.914-.9 1.128-.22.106-.459.16-.698.16-.154 0-.308-.02-.457-.063l-2.496-.7v1.69c0 .434-.351.785-.784.785H9.815c-.433 0-.784-.351-.784-.785v-1.69l-2.496.7c-.15.043-.303.063-.457.063-.24 0-.478-.054-.699-.16-.44-.214-.792-.63-.9-1.128l-.26-1.21c-.158-.74.237-1.49.94-1.77l1.987-.78-1.987-.78c-.703-.28-1.098-1.03-.94-1.77l.26-1.21c.108-.498.46-.914.9-1.128.44-.214.947-.224 1.397-.026l2.255.994V4.688c0-.433.351-.784.784-.784h2.0c.433 0 .784.351.784.784v2.21l2.255-.994c.45-.198.957-.188 1.397.026.44.214.792.63.9 1.128l.26 1.21c.158.74-.237 1.49-.94 1.77l-1.987.78 1.987.78c.703.28 1.098 1.03.94 1.77l-.26 1.21z" />
+                  </svg>
+                  Pay with CashApp $centralgroupevents
+                </a>
+                <p className="text-xs text-muted-foreground text-center mt-2">💳 Stripe payments coming soon</p>
               </Card>
             </motion.div>
 
@@ -509,9 +531,28 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
-                <Button className="w-full rounded-xl bg-white/10 hover:bg-white/20 text-white" asChild>
-                  <a href="https://buy.stripe.com/test_3cI3cvb3vd1T1vjg7T5ZC02" target="_blank" rel="noopener noreferrer">Get Started</a>
+                <a
+                  href="https://cash.app/$centralgroupevents"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full rounded-xl px-4 py-2.5 font-semibold text-sm text-black"
+                  style={{ backgroundColor: "#00D632" }}
+                  data-testid="button-cashapp-fullhouse"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" fill="currentColor">
+                    <path d="M17.15 13.578c-.107.498-.46.914-.9 1.128-.22.106-.459.16-.698.16-.154 0-.308-.02-.457-.063l-2.496-.7v1.69c0 .434-.351.785-.784.785H9.815c-.433 0-.784-.351-.784-.785v-1.69l-2.496.7c-.15.043-.303.063-.457.063-.24 0-.478-.054-.699-.16-.44-.214-.792-.63-.9-1.128l-.26-1.21c-.158-.74.237-1.49.94-1.77l1.987-.78-1.987-.78c-.703-.28-1.098-1.03-.94-1.77l.26-1.21c.108-.498.46-.914.9-1.128.44-.214.947-.224 1.397-.026l2.255.994V4.688c0-.433.351-.784.784-.784h2.0c.433 0 .784.351.784.784v2.21l2.255-.994c.45-.198.957-.188 1.397.026.44.214.792.63.9 1.128l.26 1.21c.158.74-.237 1.49-.94 1.77l-1.987.78 1.987.78c.703.28 1.098 1.03.94 1.77l-.26 1.21z" />
+                  </svg>
+                  Pay with CashApp $centralgroupevents
+                </a>
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl border-white/20 hover:bg-white/10 text-white mt-3"
+                  onClick={() => document.getElementById("book")?.scrollIntoView({ behavior: "smooth" })}
+                  data-testid="button-get-quote-fullhouse"
+                >
+                  Get a Quote
                 </Button>
+                <p className="text-xs text-muted-foreground text-center mt-2">💳 Stripe payments coming soon</p>
               </Card>
             </motion.div>
           </div>
