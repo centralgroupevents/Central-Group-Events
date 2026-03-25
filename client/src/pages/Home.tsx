@@ -546,69 +546,61 @@ export default function Home() {
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
                   </tbody>
+
+                  {/* Button row — lives inside the table so column widths match exactly */}
+                  <tfoot>
+                    <tr className="border-t border-white/10">
+                      {/* Empty feature-label cell */}
+                      <td className="px-6 py-5" />
+
+                      {/* Starter */}
+                      <td className="px-4 py-5 text-center">
+                        <a
+                          href="https://cash.app/$centralgroupevents"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-2 w-full h-10 rounded-xl px-3 font-semibold text-sm text-black"
+                          style={{ backgroundColor: "#00D632" }}
+                          data-testid="button-cashapp-starter"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 43 43" fill="black" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+                            <path d="M25.956 16.878c-1.006-.378-2.07-.567-3.142-.558h-.112c-2.352 0-3.864.966-3.864 2.562v.056c0 1.68 1.848 2.268 3.906 2.898l.588.182c3.024.924 6.524 2.198 6.524 6.202v.056c0 4.368-3.444 7.014-8.232 7.224L21 38l-1.526-2.618-.162.006c-2.156 0-4.27-.532-6.146-1.554l-.322-.182 1.708-4.074c1.428.896 3.066 1.414 4.76 1.512h.168c2.604 0 4.2-1.008 4.2-2.772v-.056c0-1.68-1.736-2.324-3.948-3.01l-.63-.196c-2.94-.882-6.3-2.184-6.3-6.048v-.056c0-4.06 3.22-6.72 7.882-6.972L21 10l1.54 2.632.154-.006c1.848 0 3.682.434 5.348 1.26l.308.154-1.394 3.836z" />
+                          </svg>
+                          Pay with CashApp
+                        </a>
+                      </td>
+
+                      {/* Growth */}
+                      <td className="px-4 py-5 text-center bg-primary/5 border-x border-primary/20">
+                        <a
+                          href="https://cash.app/$centralgroupevents"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-2 w-full h-10 rounded-xl px-3 font-bold text-sm text-black"
+                          style={{ backgroundColor: "#00D632" }}
+                          data-testid="button-cashapp-growth"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 43 43" fill="black" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+                            <path d="M25.956 16.878c-1.006-.378-2.07-.567-3.142-.558h-.112c-2.352 0-3.864.966-3.864 2.562v.056c0 1.68 1.848 2.268 3.906 2.898l.588.182c3.024.924 6.524 2.198 6.524 6.202v.056c0 4.368-3.444 7.014-8.232 7.224L21 38l-1.526-2.618-.162.006c-2.156 0-4.27-.532-6.146-1.554l-.322-.182 1.708-4.074c1.428.896 3.066 1.414 4.76 1.512h.168c2.604 0 4.2-1.008 4.2-2.772v-.056c0-1.68-1.736-2.324-3.948-3.01l-.63-.196c-2.94-.882-6.3-2.184-6.3-6.048v-.056c0-4.06 3.22-6.72 7.882-6.972L21 10l1.54 2.632.154-.006c1.848 0 3.682.434 5.348 1.26l.308.154-1.394 3.836z" />
+                          </svg>
+                          Pay with CashApp
+                        </a>
+                      </td>
+
+                      {/* Custom — Get a Quote only */}
+                      <td className="px-4 py-5 text-center">
+                        <Button
+                          variant="outline"
+                          className="w-full h-10 rounded-xl border-white/20 hover:bg-white/10 text-white text-sm"
+                          onClick={() => document.getElementById("book")?.scrollIntoView({ behavior: "smooth" })}
+                          data-testid="button-get-quote-custom"
+                        >
+                          Get a Quote
+                        </Button>
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
-              </div>
-
-              {/* Payment buttons row */}
-              <div className="border-t border-white/10 grid grid-cols-3 min-w-[600px]">
-                {/* Starter button */}
-                <div className="px-4 py-5 flex flex-col items-center gap-2">
-                  <a
-                    href="https://cash.app/$centralgroupevents"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 w-full rounded-xl px-3 py-2.5 font-semibold text-xs text-black"
-                    style={{ backgroundColor: "#00D632" }}
-                    data-testid="button-cashapp-starter"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 43 43" fill="black" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-                      <path d="M25.956 16.878c-1.006-.378-2.07-.567-3.142-.558h-.112c-2.352 0-3.864.966-3.864 2.562v.056c0 1.68 1.848 2.268 3.906 2.898l.588.182c3.024.924 6.524 2.198 6.524 6.202v.056c0 4.368-3.444 7.014-8.232 7.224L21 38l-1.526-2.618-.162.006c-2.156 0-4.27-.532-6.146-1.554l-.322-.182 1.708-4.074c1.428.896 3.066 1.414 4.76 1.512h.168c2.604 0 4.2-1.008 4.2-2.772v-.056c0-1.68-1.736-2.324-3.948-3.01l-.63-.196c-2.94-.882-6.3-2.184-6.3-6.048v-.056c0-4.06 3.22-6.72 7.882-6.972L21 10l1.54 2.632.154-.006c1.848 0 3.682.434 5.348 1.26l.308.154-1.394 3.836z" />
-                    </svg>
-                    Pay with CashApp
-                  </a>
-                </div>
-
-                {/* Growth button */}
-                <div className="px-4 py-5 flex flex-col items-center gap-2 bg-primary/5 border-x border-primary/20">
-                  <a
-                    href="https://cash.app/$centralgroupevents"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 w-full rounded-xl px-3 py-2.5 font-bold text-xs text-black"
-                    style={{ backgroundColor: "#00D632" }}
-                    data-testid="button-cashapp-growth"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 43 43" fill="black" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-                      <path d="M25.956 16.878c-1.006-.378-2.07-.567-3.142-.558h-.112c-2.352 0-3.864.966-3.864 2.562v.056c0 1.68 1.848 2.268 3.906 2.898l.588.182c3.024.924 6.524 2.198 6.524 6.202v.056c0 4.368-3.444 7.014-8.232 7.224L21 38l-1.526-2.618-.162.006c-2.156 0-4.27-.532-6.146-1.554l-.322-.182 1.708-4.074c1.428.896 3.066 1.414 4.76 1.512h.168c2.604 0 4.2-1.008 4.2-2.772v-.056c0-1.68-1.736-2.324-3.948-3.01l-.63-.196c-2.94-.882-6.3-2.184-6.3-6.048v-.056c0-4.06 3.22-6.72 7.882-6.972L21 10l1.54 2.632.154-.006c1.848 0 3.682.434 5.348 1.26l.308.154-1.394 3.836z" />
-                    </svg>
-                    Pay with CashApp
-                  </a>
-                </div>
-
-                {/* Custom button */}
-                <div className="px-4 py-5 flex flex-col items-center gap-2">
-                  <a
-                    href="https://cash.app/$centralgroupevents"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 w-full rounded-xl px-3 py-2.5 font-semibold text-xs text-black"
-                    style={{ backgroundColor: "#00D632" }}
-                    data-testid="button-cashapp-custom"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 43 43" fill="black" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-                      <path d="M25.956 16.878c-1.006-.378-2.07-.567-3.142-.558h-.112c-2.352 0-3.864.966-3.864 2.562v.056c0 1.68 1.848 2.268 3.906 2.898l.588.182c3.024.924 6.524 2.198 6.524 6.202v.056c0 4.368-3.444 7.014-8.232 7.224L21 38l-1.526-2.618-.162.006c-2.156 0-4.27-.532-6.146-1.554l-.322-.182 1.708-4.074c1.428.896 3.066 1.414 4.76 1.512h.168c2.604 0 4.2-1.008 4.2-2.772v-.056c0-1.68-1.736-2.324-3.948-3.01l-.63-.196c-2.94-.882-6.3-2.184-6.3-6.048v-.056c0-4.06 3.22-6.72 7.882-6.972L21 10l1.54 2.632.154-.006c1.848 0 3.682.434 5.348 1.26l.308.154-1.394 3.836z" />
-                    </svg>
-                    Pay with CashApp
-                  </a>
-                  <Button
-                    variant="outline"
-                    className="w-full rounded-xl border-white/20 hover:bg-white/10 text-white text-xs h-8"
-                    onClick={() => document.getElementById("book")?.scrollIntoView({ behavior: "smooth" })}
-                    data-testid="button-get-quote-custom"
-                  >
-                    Get a Quote
-                  </Button>
-                </div>
               </div>
 
               {/* Stripe coming soon */}
