@@ -75,20 +75,17 @@ export default function Home() {
   const { toast } = useToast();
   
   // Newsletter Form
+  const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const newsletterForm = useForm<z.infer<typeof newsletterSchema>>({
     resolver: zodResolver(newsletterSchema),
     defaultValues: { name: "", email: "", region: "" },
   });
   const subscribeMutation = useSubscribeNewsletter();
-  
+
   const onNewsletterSubmit = (data: z.infer<typeof newsletterSchema>) => {
     subscribeMutation.mutate(data, {
       onSuccess: () => {
-        toast({
-          title: "You're plugged in! 🔌",
-          description: "Check your inbox this Thursday for the weekend lineup.",
-        });
-        newsletterForm.reset();
+        setNewsletterSubscribed(true);
       },
       onError: (err) => {
         toast({
@@ -269,65 +266,90 @@ export default function Home() {
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
               Get the hottest events across North, Central, and South NJ delivered to your inbox every week. No spam. Just the best events.
             </p>
-            
-            <Form {...newsletterForm}>
-              <form onSubmit={newsletterForm.handleSubmit(onNewsletterSubmit)} className="flex flex-col md:flex-row gap-4">
-                <FormField
-                  control={newsletterForm.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormControl>
-                        <Input placeholder="Your Name *" className="h-12 bg-black/50 border-white/10 focus-visible:ring-primary text-base rounded-xl" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={newsletterForm.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormControl>
-                        <Input placeholder="Email Address *" type="email" className="h-12 bg-black/50 border-white/10 focus-visible:ring-primary text-base rounded-xl" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={newsletterForm.control}
-                  name="region"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+
+            {newsletterSubscribed ? (
+              <div className="flex flex-col items-center gap-4 py-4" data-testid="newsletter-success">
+                <CheckCircle2 className="w-12 h-12 text-green-500" />
+                <h3 className="text-2xl font-black text-white">You're subscribed! 🎉</h3>
+                <p className="text-muted-foreground text-base max-w-sm">
+                  Check your inbox (and spam folder) for a welcome email from us.
+                </p>
+              </div>
+            ) : (
+              <Form {...newsletterForm}>
+                <form onSubmit={newsletterForm.handleSubmit(onNewsletterSubmit)} className="flex flex-col md:flex-row gap-4">
+                  <FormField
+                    control={newsletterForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
                         <FormControl>
-                          <SelectTrigger className="h-12 bg-black/50 border-white/10 focus:ring-primary text-base rounded-xl">
-                            <SelectValue placeholder="Select Region *" />
-                          </SelectTrigger>
+                          <Input
+                            placeholder="Your Name *"
+                            className="h-12 bg-black/50 border-white/10 focus-visible:ring-primary text-base rounded-xl"
+                            data-testid="input-newsletter-name"
+                            {...field}
+                          />
                         </FormControl>
-                        <SelectContent className="bg-secondary border-white/10 text-white">
-                          <SelectItem value="North NJ">North NJ</SelectItem>
-                          <SelectItem value="Central NJ">Central NJ</SelectItem>
-                          <SelectItem value="South NJ">South NJ</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button
-                  size="lg"
-                  className="h-12 px-8 rounded-xl bg-primary text-white hover:bg-primary/90 font-semibold md:w-auto w-full"
-                  asChild
-                >
-                  <a href="https://www.centralgroupevents.com/" target="_blank" rel="noopener noreferrer">
-                    Subscribe
-                  </a>
-                </Button>
-              </form>
-            </Form>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={newsletterForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormControl>
+                          <Input
+                            placeholder="Email Address *"
+                            type="email"
+                            className="h-12 bg-black/50 border-white/10 focus-visible:ring-primary text-base rounded-xl"
+                            data-testid="input-newsletter-email"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={newsletterForm.control}
+                    name="region"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="h-12 bg-black/50 border-white/10 focus:ring-primary text-base rounded-xl" data-testid="select-newsletter-region">
+                              <SelectValue placeholder="Region (optional)" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="bg-secondary border-white/10 text-white">
+                            <SelectItem value="North NJ">North NJ</SelectItem>
+                            <SelectItem value="Central NJ">Central NJ</SelectItem>
+                            <SelectItem value="South NJ">South NJ</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={subscribeMutation.isPending}
+                    className="h-12 px-8 rounded-xl bg-primary text-white hover:bg-primary/90 font-semibold md:w-auto w-full"
+                    data-testid="button-newsletter-subscribe"
+                  >
+                    {subscribeMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Subscribe"
+                    )}
+                  </Button>
+                </form>
+              </Form>
+            )}
           </motion.div>
         </div>
       </section>

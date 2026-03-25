@@ -104,6 +104,43 @@ export async function registerRoutes(
       } catch (emailError) {
         console.error("Email notification failed:", emailError);
       }
+
+      // Welcome email to the subscriber
+      try {
+        await transporter.sendMail({
+          from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+          to: input.email,
+          subject: "Welcome to the CGE Newsletter 🎉",
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 40px 32px; border-radius: 12px; border: 1px solid #1e1e1e;">
+              <div style="text-align: center; margin-bottom: 32px;">
+                <h1 style="color: #8B2FC9; font-size: 28px; margin: 0 0 4px;">CGE</h1>
+                <p style="color: #666; font-size: 12px; margin: 0; letter-spacing: 2px; text-transform: uppercase;">Central Group Events</p>
+              </div>
+
+              <h2 style="font-size: 24px; font-weight: 900; color: #ffffff; text-align: center; margin-bottom: 16px;">You're on the list!</h2>
+
+              <p style="color: #cccccc; font-size: 16px; line-height: 1.6; text-align: center; margin-bottom: 32px;">
+                Thanks for subscribing to the CGE Newsletter. Every week we send the hottest events across North, Central, and South NJ straight to your inbox. No spam. Just the best events.
+              </p>
+
+              <div style="text-align: center; margin-bottom: 40px;">
+                <a href="https://centralgroupevents.com/blog" style="display: inline-block; background: #8B2FC9; color: #ffffff; text-decoration: none; font-weight: bold; font-size: 15px; padding: 14px 32px; border-radius: 10px;">
+                  View This Week's Events
+                </a>
+              </div>
+
+              <hr style="border: none; border-top: 1px solid #1e1e1e; margin-bottom: 24px;" />
+
+              <p style="color: #555555; font-size: 12px; text-align: center; margin: 0;">
+                You're receiving this because you subscribed at centralgroupevents.com
+              </p>
+            </div>
+          `,
+        });
+      } catch (welcomeEmailError) {
+        console.error("Welcome email to subscriber failed:", welcomeEmailError);
+      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({
