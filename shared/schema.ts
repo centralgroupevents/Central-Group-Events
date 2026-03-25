@@ -31,6 +31,7 @@ export const promotionBookings = pgTable("promotion_bookings", {
   budgetRange: text("budget_range"),
   instagramHandle: text("instagram_handle"),
   readyToMoveForward: text("ready_to_move_forward"),
+  status: text("status").default("New"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

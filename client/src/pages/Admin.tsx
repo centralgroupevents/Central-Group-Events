@@ -29,6 +29,10 @@ import {
   Send,
   X,
   Eye,
+  Loader2,
+  Download,
+  Mail,
+  ImagePlus,
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
@@ -61,6 +65,16 @@ type Booking = {
   eventTypeOther: string | null;
   budgetRange: string | null;
   instagramHandle: string | null;
+  status: string | null;
+  createdAt: string | null;
+};
+
+type Subscriber = {
+  id: number;
+  name: string;
+  email: string;
+  region: string | null;
+  referrer: string | null;
   createdAt: string | null;
 };
 
@@ -122,6 +136,7 @@ const emptyEventForm: EventForm = {
 const TABS = [
   { id: "events", label: "Events", icon: Calendar },
   { id: "bookings", label: "Bookings", icon: ClipboardList },
+  { id: "subscribers", label: "Subscribers", icon: Mail },
   { id: "blog", label: "Blog Posts", icon: BookOpen },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "team", label: "Team Members", icon: Users },
@@ -209,6 +224,195 @@ function LoginScreen({ onLogin }: { onLogin: (user: AdminUser) => void }) {
             {loading ? "Signing in…" : "Sign In"}
           </Button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/*  IMAGE UPLOAD COMPONENT                                    */
+/* ─────────────────────────────────────────────────────────── */
+function ImageUpload({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Upload failed");
+      onChange(data.url);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <label className="cursor-pointer">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={handleFileChange}
+            disabled={uploading}
+            data-testid="input-image-file"
+          />
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+              uploading
+                ? "border-white/10 text-white/30 cursor-not-allowed"
+                : "border-white/20 text-white/70 hover:bg-white/10 cursor-pointer"
+            }`}
+          >
+            {uploading ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</>
+            ) : (
+              <><ImagePlus className="w-3.5 h-3.5" /> Upload Image</>
+            )}
+          </span>
+        </label>
+        {value && (
+          <img
+            src={value}
+            alt="Preview"
+            className="h-9 w-16 object-cover rounded border border-white/10"
+          />
+        )}
+      </div>
+      {uploadError && <p className="text-red-400 text-xs">{uploadError}</p>}
+      <Input
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setUploadError(""); }}
+        placeholder="Or paste image URL…"
+        className="bg-black/40 border-white/10 h-11 text-sm"
+        data-testid="input-image-url"
+      />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/*  SUBSCRIBERS TAB                                           */
+/* ─────────────────────────────────────────────────────────── */
+function SubscribersTab() {
+  const [search, setSearch] = useState("");
+  const { data: subscribers = [], isLoading } = useQuery<Subscriber[]>({
+    queryKey: ["/api/admin/subscribers"],
+  });
+
+  const filtered = subscribers.filter((s) =>
+    s.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function exportCsv() {
+    const rows = [
+      ["Email", "Name", "Region", "Referrer", "Date Joined"],
+      ...subscribers.map((s) => [
+        s.email,
+        s.name,
+        s.region ?? "",
+        s.referrer ?? "",
+        s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-US") : "",
+      ]),
+    ];
+    const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "cge-subscribers.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5">
+          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Total Subscribers</p>
+          {isLoading ? (
+            <Skeleton className="h-9 w-20 mt-1" />
+          ) : (
+            <p className="text-3xl font-black text-white">{subscribers.length.toLocaleString()}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by email…"
+          className="bg-black/40 border-white/10 h-10 max-w-sm"
+          data-testid="input-subscriber-search"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={exportCsv}
+          disabled={subscribers.length === 0}
+          className="border-white/20 text-white/70 hover:bg-white/10"
+          data-testid="button-export-subscribers"
+        >
+          <Download className="w-3.5 h-3.5 mr-1.5" /> Export CSV
+        </Button>
+      </div>
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-16 text-center text-muted-foreground">
+            <Mail className="w-12 h-12 mx-auto mb-3 opacity-40" />
+            <p>{search ? "No subscribers match your search." : "No subscribers yet."}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left">
+                  <th className="px-4 py-3 font-medium">Email</th>
+                  <th className="px-4 py-3 font-medium">Region</th>
+                  <th className="px-4 py-3 font-medium">Source</th>
+                  <th className="px-4 py-3 font-medium">Date Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((sub, i) => (
+                  <tr
+                    key={sub.id}
+                    data-testid={`row-subscriber-${sub.id}`}
+                    className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}
+                  >
+                    <td className="px-4 py-3 font-medium text-white">
+                      <a href={`mailto:${sub.email}`} className="hover:text-primary transition-colors">{sub.email}</a>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{sub.region || "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{sub.referrer || "direct"}</td>
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(sub.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -445,12 +649,10 @@ function BlogPostsTab() {
               />
             </div>
             <div className="sm:col-span-2 space-y-1">
-              <Label className="text-white/80">Cover Image URL</Label>
-              <Input
+              <Label className="text-white/80">Cover Image</Label>
+              <ImageUpload
                 value={postForm.coverImageUrl}
-                onChange={(e) => setPostForm({ ...postForm, coverImageUrl: e.target.value })}
-                placeholder="https://..."
-                className="bg-black/40 border-white/10 h-11"
+                onChange={(url) => setPostForm({ ...postForm, coverImageUrl: url })}
               />
             </div>
             <div className="sm:col-span-2 space-y-1">
@@ -1120,9 +1322,22 @@ export default function Admin() {
     enabled: !!user,
   });
 
+  const [bookingStatusFilter, setBookingStatusFilter] = useState<string>("All");
+
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery<Booking[]>({
     queryKey: ["/api/bookings"],
     enabled: !!user && activeTab === "bookings",
+  });
+
+  const updateBookingStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/bookings/${id}/status`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/bookings"] });
+    },
+    onError: () => toast({ title: "Failed to update status", variant: "destructive" }),
   });
 
   const createMutation = useMutation({
@@ -1321,8 +1536,11 @@ export default function Admin() {
                     <Input value={form.ticketLink} onChange={(e) => setForm({ ...form, ticketLink: e.target.value })} placeholder="https://..." className="bg-black/40 border-white/10 h-11" />
                   </div>
                   <div className="sm:col-span-2 space-y-1">
-                    <Label className="text-white/80">Image URL</Label>
-                    <Input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://..." className="bg-black/40 border-white/10 h-11" />
+                    <Label className="text-white/80">Event Image</Label>
+                    <ImageUpload
+                      value={form.imageUrl}
+                      onChange={(url) => setForm({ ...form, imageUrl: url })}
+                    />
                   </div>
                   <div className="sm:col-span-2 flex gap-3 pt-2">
                     <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90 font-semibold px-8">
@@ -1384,54 +1602,124 @@ export default function Admin() {
         )}
 
         {/* BOOKINGS TAB */}
-        {activeTab === "bookings" && (
-          <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-white/10">
-              <h2 className="font-bold text-white">All Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({bookings.length} total)</span></h2>
-            </div>
-            {bookingsLoading ? (
-              <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
-            ) : bookings.length === 0 ? (
-              <div className="flex justify-center items-center h-40 text-muted-foreground">No submissions yet.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-white/10 text-muted-foreground text-left">
-                      <th className="px-4 py-3 font-medium">Mode</th>
-                      <th className="px-4 py-3 font-medium">Event Name</th>
-                      <th className="px-4 py-3 font-medium">Venue</th>
-                      <th className="px-4 py-3 font-medium">Email</th>
-                      <th className="px-4 py-3 font-medium">Region</th>
-                      <th className="px-4 py-3 font-medium">Submitted</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bookings.map((booking, i) => (
-                      <tr key={booking.id} data-testid={`row-booking-${booking.id}`} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
-                        <td className="px-4 py-4">
-                          <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-semibold border ${booking.mode === "Premium" ? "bg-primary/15 border-primary/40 text-primary" : "bg-white/5 border-white/20 text-white/60"}`}>
-                            {booking.mode || "Standard"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 font-medium text-white max-w-[180px]"><span className="line-clamp-1">{booking.eventName || "—"}</span></td>
-                        <td className="px-4 py-4 text-muted-foreground max-w-[160px]"><span className="line-clamp-1">{booking.venueName}</span></td>
-                        <td className="px-4 py-4 text-muted-foreground">
-                          <a href={`mailto:${booking.email}`} className="text-primary hover:underline">{booking.email}</a>
-                        </td>
-                        <td className="px-4 py-4">
-                          <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{booking.region}</span>
-                        </td>
-                        <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{formatDate(booking.createdAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+        {activeTab === "bookings" && (() => {
+          const BOOKING_STATUSES = ["All", "New", "Contacted", "Paid", "Completed", "Cancelled"];
+          const statusBadge: Record<string, string> = {
+            New: "border-white/20 text-white/50 bg-white/5",
+            Contacted: "border-blue-500/40 text-blue-400 bg-blue-500/10",
+            Paid: "border-green-500/40 text-green-400 bg-green-500/10",
+            Completed: "border-purple-500/40 text-purple-400 bg-purple-500/10",
+            Cancelled: "border-red-500/40 text-red-400 bg-red-500/10",
+          };
+          const filteredBookings = bookingStatusFilter === "All"
+            ? bookings
+            : bookings.filter((b) => (b.status || "New") === bookingStatusFilter);
 
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm text-muted-foreground font-medium">Filter by status:</span>
+                <div className="flex gap-1.5 flex-wrap">
+                  {BOOKING_STATUSES.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setBookingStatusFilter(s)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                        bookingStatusFilter === s
+                          ? s === "All"
+                            ? "bg-primary border-primary text-white"
+                            : statusBadge[s] + " opacity-100 border-opacity-100"
+                          : "border-white/10 text-white/40 hover:text-white/60"
+                      }`}
+                      data-testid={`filter-booking-status-${s}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-white/10">
+                  <h2 className="font-bold text-white">
+                    All Submissions
+                    <span className="text-muted-foreground font-normal text-sm ml-2">
+                      ({filteredBookings.length}{bookingStatusFilter !== "All" ? ` ${bookingStatusFilter}` : ""} of {bookings.length} total)
+                    </span>
+                  </h2>
+                </div>
+                {bookingsLoading ? (
+                  <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
+                ) : filteredBookings.length === 0 ? (
+                  <div className="flex justify-center items-center h-40 text-muted-foreground">
+                    {bookings.length === 0 ? "No submissions yet." : `No ${bookingStatusFilter} submissions.`}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-white/10 text-muted-foreground text-left">
+                          <th className="px-4 py-3 font-medium">Status</th>
+                          <th className="px-4 py-3 font-medium">Mode</th>
+                          <th className="px-4 py-3 font-medium">Event Name</th>
+                          <th className="px-4 py-3 font-medium">Venue</th>
+                          <th className="px-4 py-3 font-medium">Email</th>
+                          <th className="px-4 py-3 font-medium">Region</th>
+                          <th className="px-4 py-3 font-medium">Submitted</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredBookings.map((booking, i) => {
+                          const currentStatus = booking.status || "New";
+                          return (
+                            <tr key={booking.id} data-testid={`row-booking-${booking.id}`} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                              <td className="px-4 py-4">
+                                <Select
+                                  value={currentStatus}
+                                  onValueChange={(val) => updateBookingStatusMutation.mutate({ id: booking.id, status: val })}
+                                >
+                                  <SelectTrigger
+                                    className={`h-7 text-xs border rounded-full px-2.5 w-[110px] ${statusBadge[currentStatus] ?? statusBadge["New"]}`}
+                                    data-testid={`select-booking-status-${booking.id}`}
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-secondary border-white/10 text-white">
+                                    <SelectItem value="New">New</SelectItem>
+                                    <SelectItem value="Contacted">Contacted</SelectItem>
+                                    <SelectItem value="Paid">Paid</SelectItem>
+                                    <SelectItem value="Completed">Completed</SelectItem>
+                                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="px-4 py-4">
+                                <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-semibold border ${booking.mode === "Premium" ? "bg-primary/15 border-primary/40 text-primary" : "bg-white/5 border-white/20 text-white/60"}`}>
+                                  {booking.mode || "Standard"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 font-medium text-white max-w-[180px]"><span className="line-clamp-1">{booking.eventName || "—"}</span></td>
+                              <td className="px-4 py-4 text-muted-foreground max-w-[160px]"><span className="line-clamp-1">{booking.venueName}</span></td>
+                              <td className="px-4 py-4 text-muted-foreground">
+                                <a href={`mailto:${booking.email}`} className="text-primary hover:underline">{booking.email}</a>
+                              </td>
+                              <td className="px-4 py-4">
+                                <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{booking.region}</span>
+                              </td>
+                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{formatDate(booking.createdAt)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {activeTab === "subscribers" && <SubscribersTab />}
         {activeTab === "blog" && <BlogPostsTab />}
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "team" && <TeamTab currentRole={user.role} />}

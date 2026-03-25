@@ -54,6 +54,7 @@ export interface IStorage {
   // Bookings
   createBooking(booking: InsertBooking): Promise<Booking>;
   getBookings(): Promise<Booking[]>;
+  updateBookingStatus(id: number, status: string): Promise<Booking>;
 
   // Events
   getEvents(region?: string): Promise<Event[]>;
@@ -148,6 +149,15 @@ export class DatabaseStorage implements IStorage {
 
   async getBookings(): Promise<Booking[]> {
     return await db.select().from(promotionBookings).orderBy(desc(promotionBookings.createdAt));
+  }
+
+  async updateBookingStatus(id: number, status: string): Promise<Booking> {
+    const [updated] = await db
+      .update(promotionBookings)
+      .set({ status })
+      .where(eq(promotionBookings.id, id))
+      .returning();
+    return updated;
   }
 
   // ── Events ────────────────────────────────────────────────────────────

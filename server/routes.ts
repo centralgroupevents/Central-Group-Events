@@ -9,7 +9,22 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 import { requireAuth, verifyAdminToken } from "./auth";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only JPEG, PNG, WebP, and GIF images are allowed"));
+    }
+  },
+});
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -261,6 +276,47 @@ export async function registerRoutes(
       res.status(200).json(bookings);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/bookings/:id/status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid booking id" });
+      const { status } = req.body;
+      const validStatuses = ["New", "Contacted", "Paid", "Completed", "Cancelled"];
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      const booking = await storage.updateBookingStatus(id, status);
+      res.json(booking);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/upload", requireAuth(), upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No file provided" });
+      cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+      });
+      const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "cge", resource_type: "image" },
+          (error, result) => {
+            if (error || !result) reject(error ?? new Error("Upload failed"));
+            else resolve(result as { secure_url: string });
+          }
+        );
+        stream.end(req.file!.buffer);
+      });
+      res.json({ url: result.secure_url });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      res.status(500).json({ message: msg });
     }
   });
 
