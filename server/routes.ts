@@ -26,6 +26,16 @@ const upload = multer({
   },
 });
 
+// Validate Cloudinary env vars at startup
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
+if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+  console.warn("[cloudinary] WARNING: CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET not set. Image uploads will fail.");
+} else {
+  console.log("[cloudinary] Cloudinary credentials loaded.");
+}
+
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -289,6 +299,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid status" });
       }
       const booking = await storage.updateBookingStatus(id, status);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
       res.json(booking);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
