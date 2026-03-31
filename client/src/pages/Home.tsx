@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 
 import { useEvents, useSubscribeNewsletter, useCreateBooking } from "@/hooks/use-landing";
@@ -43,6 +45,9 @@ const standardBookingSchema = z.object({
   phone: z.string().optional(),
   budgetRange: z.string().optional(),
   instagramHandle: z.string().max(50).optional(),
+  agreedToTerms: z.boolean().refine((val) => val === true, {
+    message: "You must agree to the Terms & Conditions to proceed",
+  }),
 });
 
 const premiumBookingSchema = standardBookingSchema.extend({
@@ -813,8 +818,11 @@ function BookingFormPanel() {
       eventTypeOther: "",
       budgetRange: undefined,
       instagramHandle: "",
+      agreedToTerms: false,
     },
   });
+
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
 
   const watchedEventType = bookingForm.watch("eventType");
 
@@ -836,6 +844,7 @@ function BookingFormPanel() {
   const inputClass = "bg-black/40 border-white/10 h-12 rounded-xl";
 
   return (
+    <>
     <Form {...bookingForm}>
       <form onSubmit={bookingForm.handleSubmit(onSubmit)} className="space-y-6">
 
@@ -1015,6 +1024,39 @@ function BookingFormPanel() {
           <p className="text-xs text-muted-foreground mt-1">Accepted formats: JPG, PNG, GIF, WEBP (max 5MB)</p>
         </FormItem>
 
+        {/* Terms & Conditions checkbox */}
+        <FormField
+          control={bookingForm.control}
+          name="agreedToTerms"
+          render={({ field }) => (
+            <FormItem>
+              <div className="flex items-start gap-3">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    data-testid="checkbox-terms"
+                    className="mt-0.5 border-white/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                  />
+                </FormControl>
+                <FormLabel className="text-white/80 text-sm font-normal leading-relaxed cursor-pointer" onClick={() => bookingForm.setValue("agreedToTerms", !field.value)}>
+                  I have read and agree to the{" "}
+                  <button
+                    type="button"
+                    data-testid="link-terms"
+                    onClick={(e) => { e.stopPropagation(); setTermsModalOpen(true); }}
+                    className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+                  >
+                    Terms &amp; Conditions
+                  </button>
+                  {" "}before submitting.
+                </FormLabel>
+              </div>
+              <FormMessage className="ml-7" />
+            </FormItem>
+          )}
+        />
+
         <Button
           type="submit"
           size="lg"
@@ -1029,5 +1071,74 @@ function BookingFormPanel() {
         </Button>
       </form>
     </Form>
+
+    {/* Terms & Conditions Modal */}
+    <Dialog open={termsModalOpen} onOpenChange={setTermsModalOpen}>
+      <DialogContent className="bg-secondary border border-white/10 text-white max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl p-0">
+        <DialogHeader className="sticky top-0 bg-secondary border-b border-white/10 px-8 py-5 z-10">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <DialogTitle className="text-2xl font-black text-white">Terms &amp; Conditions</DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">Central Group Events — Event Submission Agreement</p>
+            </div>
+            <button
+              onClick={() => setTermsModalOpen(false)}
+              data-testid="button-close-terms"
+              className="shrink-0 p-1.5 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </DialogHeader>
+
+        <div className="px-8 py-6 space-y-7 text-sm">
+          {[
+            {
+              heading: "Please Read Before Proceeding",
+              body: "Thank you for submitting your event to be featured on Central Group Events. By completing this form, you acknowledge that you have read, understood, and agree to the terms outlined below. Central Group Events reserves the right to accept or decline any submission at its sole discretion.",
+            },
+            {
+              heading: "Submission Deadlines",
+              body: "All event promotion submissions are subject to a minimum 7-day lead time prior to the event date. Central Group Events operates on a weekly posting schedule, and available slots fill quickly. Submissions are accepted on a first-come, first-served basis. If your event coincides with a special occasion, holiday, or time-sensitive date, we strongly recommend submitting at least 2 weeks in advance and noting the time-sensitive nature in your submission. Late submissions may not be accommodated, and Central Group Events is not responsible for events that cannot be featured due to timing.",
+            },
+            {
+              heading: "Inclusion Policy",
+              body: "Central Group Events is a curated platform. A limited number of events may be featured in any given week, and submission does not guarantee inclusion. Factors that may affect inclusion include, but are not limited to: paid promotion slots being filled for the requested week, incomplete or missing submission information, unclear event concepts, insufficient contact details, or content determined by our staff to be unsafe, inappropriate, or inconsistent with our community standards.",
+            },
+            {
+              heading: "Paid Promotions",
+              body: "By selecting a paid promotion package, you agree to be contacted by Central Group Events via the email address provided to confirm your promotion details, schedule a posting date, and receive an invoice for payment. Promotion content will be created and scheduled following confirmation and payment. Central Group Events may, at its discretion, arrange to personally experience your event or service prior to promotion. All paid promotions are subject to availability.",
+            },
+            {
+              heading: "Brand Partnerships",
+              body: "This submission form is intended for individual promoters and community-level organizations. Large brands or organizations seeking broader partnership opportunities are encouraged to reach out directly via email at centralgroupevents@gmail.com for custom pricing and partnership inquiries. Submissions from large brands through this form may not be processed.",
+            },
+            {
+              heading: "Contact",
+              body: "For questions regarding your submission or these terms, please contact us at centralgroupevents@gmail.com.",
+            },
+          ].map(({ heading, body }) => (
+            <div key={heading}>
+              <h4 className="font-bold text-white mb-2">{heading}</h4>
+              <p className="text-white/60 leading-relaxed">{body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="sticky bottom-0 bg-secondary border-t border-white/10 px-8 py-4">
+          <Button
+            onClick={() => {
+              bookingForm.setValue("agreedToTerms", true, { shouldValidate: true });
+              setTermsModalOpen(false);
+            }}
+            data-testid="button-i-understand"
+            className="w-full bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl h-11"
+          >
+            I Understand
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

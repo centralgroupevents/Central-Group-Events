@@ -1,0 +1,40 @@
+Make two changes to the "Promote Your Event" booking form section only. Do not touch any other component.
+
+---
+
+1. ADD TERMS & CONDITIONS CHECKBOX:
+- Add a required checkbox at the bottom of the booking form, above the submit button
+- Label text: "I have read and agree to the " + a clickable link "Terms & Conditions" + " before submitting."
+- The "Terms & Conditions" text should be styled in primary purple color with underline and open a modal when clicked (not a new page)
+- The checkbox must be checked before the form can be submitted — show an inline validation error "You must agree to the Terms & Conditions to proceed" if unchecked on submit
+- Use the existing zod schema to add this validation
+
+---
+
+2. TERMS & CONDITIONS MODAL:
+- Build a scrollable modal that opens when "Terms & Conditions" is clicked
+- Dark themed, matching the site (bg-secondary, rounded-2xl, max-w-2xl, max-h-[80vh] overflow-y-auto)
+- A close button (X) in the top right corner
+- Title: "Terms & Conditions" in large bold white text
+- Subtitle: "Central Group Events — Event Submission Agreement"
+- Modal body with the following sections, each with a bold heading and paragraph text in muted white:
+
+SECTION 1 — heading: "Please Read Before Proceeding"
+Body: "Thank you for submitting your event to be featured on Central Group Events. By completing this form, you acknowledge that you have read, understood, and agree to the terms outlined below. Central Group Events reserves the right to accept or decline any submission at its sole discretion."
+
+SECTION 2 — heading: "Submission Deadlines"
+Body: "All event promotion submissions are subject to a minimum 7-day lead time prior to the event date. Central Group Events operates on a weekly posting schedule, and available slots fill quickly. Submissions are accepted on a first-come, first-served basis. If your event coincides with a special occasion, holiday, or time-sensitive date, we strongly recommend submitting at least 2 weeks in advance and noting the time-sensitive nature in your submission. Late submissions may not be accommodated."
+
+SECTION 3 — heading: "Inclusion Policy"
+Body: "Central Group Events is a curated platform. A limited number of events may be featured in any given week, and submission does not guarantee inclusion. Factors that may affect inclusion include, but are not limited to: paid promotion slots being filled for the requested week, incomplete or missing submission information, unclear event concepts, insufficient contact details, or content determined by our staff to be unsafe, inappropriate, or inconsistent with our community standards. All decisions regarding inclusion are made at the sole discretion of Central Group Events."
+
+SECTION 4 — heading: "Paid Promotions"
+Body: "By selecting a paid promotion package, you agree to be contacted by Central Group Events via the email address provided to confirm your promotion details, schedule a posting date, and receive an invoice for payment. Promotion content will be created and scheduled following confirmation and payment. Central Group Events may, at its discretion, arrange to personally experience your event or service prior to promotion. All paid promotions are subject to availability."
+
+SECTION 5 — heading: "Brand Partnerships"
+Body: "This submission form is intended for individual promoters and community-level organizations. Large brands or organizations seeking broader partnership opportunities are encouraged to reach out directly via email at centralgroupevents@gmail.com for custom pricing and partnership inquiries. Submissions from large brands through this form may not be processed."
+
+SECTION 6 — heading: "Contact"
+Body: "For questions regarding your submission or these terms, please contact us at centralgroupevents@gmail.com."
+
+- At the bottom of the modal, a purple "I Understand" button that closes the modal and checks the checkbox automatically
