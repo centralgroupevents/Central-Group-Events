@@ -1012,7 +1012,7 @@ function BookingFormPanel() {
               }}
             />
           </FormControl>
-          <p className="text-xs text-muted-foreground mt-1">Upload from camera roll or take a photo</p>
+          <p className="text-xs text-muted-foreground mt-1">Accepted formats: JPG, PNG, GIF, WEBP (max 5MB)</p>
         </FormItem>
 
         <Button

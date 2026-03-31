@@ -96,7 +96,7 @@ export function Navigation() {
             asChild
             className="rounded-full bg-accent text-black hover:bg-accent/90 hover:scale-105 transition-all duration-300 font-semibold"
           >
-            <a href={isHomePage ? "#book" : "/#book"}>Book Promotion</a>
+            <a href={isHomePage ? "#pricing" : "/#pricing"}>Book Promotion</a>
           </Button>
         </nav>
 
@@ -178,7 +178,7 @@ export function Navigation() {
                 className="w-full mt-2 rounded-xl bg-accent text-black hover:bg-accent/90"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <a href={isHomePage ? "#book" : "/#book"}>Book Promotion</a>
+                <a href={isHomePage ? "#pricing" : "/#pricing"}>Book Promotion</a>
               </Button>
             </div>
           </motion.div>
