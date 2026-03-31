@@ -811,7 +811,7 @@ function BookingFormPanel() {
       region: "",
       eventType: "",
       eventTypeOther: "",
-      budgetRange: "",
+      budgetRange: undefined,
       instagramHandle: "",
     },
   });
@@ -980,29 +980,6 @@ function BookingFormPanel() {
             </FormItem>
           )} />
         )}
-
-        {/* Budget Range */}
-        <FormField control={bookingForm.control} name="budgetRange" render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-white/80">
-              Budget Range <span className="text-muted-foreground text-xs ml-1">(Optional)</span>
-            </FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl>
-                <SelectTrigger data-testid="select-budget" className={inputClass}>
-                  <SelectValue placeholder="Select budget" />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent className="bg-secondary border-white/10 text-white">
-                <SelectItem value="Under $150">Under $150</SelectItem>
-                <SelectItem value="$151 - $300">$151 - $300</SelectItem>
-                <SelectItem value="$300 - $500">$300 - $500</SelectItem>
-                <SelectItem value="$501+">$501+</SelectItem>
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )} />
 
         {/* Instagram Handle */}
         <FormField control={bookingForm.control} name="instagramHandle" render={({ field }) => (
