@@ -162,7 +162,7 @@ export default function Home() {
             transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
             className="mt-6 text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto font-light"
           >
-            We've promoted 85+ events across NJ every week. Newsletter. Reels. Paid Ads. SMS Blasts. Influencers. All in one package.
+            We've promoted 100+ events across NJ every week. Newsletter. Reels. Paid Ads. SMS Blasts. Influencers. All in one package.
           </motion.p>
           
           <motion.div 
@@ -203,7 +203,7 @@ export default function Home() {
             className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-white/10"
           >
             {[
-              { num: "85+", label: "Events Promoted Weekly" },
+              { num: "100+", label: "Events Promoted Weekly" },
               { num: "15+", label: "Events Curated In-House" },
               { num: "3x", label: "Average Attendance Increase" }
             ].map((stat, i) => (
