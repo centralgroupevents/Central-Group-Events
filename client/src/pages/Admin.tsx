@@ -31,6 +31,7 @@ import {
   Eye,
   Loader2,
   Download,
+  Upload,
   Mail,
   ImagePlus,
 } from "lucide-react";
@@ -310,7 +311,16 @@ function ImageUpload({ value, onChange }: { value: string; onChange: (url: strin
 /*  SUBSCRIBERS TAB                                           */
 /* ─────────────────────────────────────────────────────────── */
 function SubscribersTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importTab, setImportTab] = useState<"csv" | "paste">("csv");
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [pasteText, setPasteText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+
   const { data: subscribers = [], isLoading } = useQuery<Subscriber[]>({
     queryKey: ["/api/admin/subscribers"],
   });
@@ -324,13 +334,13 @@ function SubscribersTab() {
       ["Email", "Name", "Region", "Referrer", "Date Joined"],
       ...subscribers.map((s) => [
         s.email,
-        s.name,
+        s.name ?? "",
         s.region ?? "",
         s.referrer ?? "",
         s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-US") : "",
       ]),
     ];
-    const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -338,6 +348,56 @@ function SubscribersTab() {
     a.download = "cge-subscribers.csv";
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleImport() {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      let rows: Array<{ email: string }> = [];
+      if (importTab === "csv" && csvFile) {
+        const text = await csvFile.text();
+        const lines = text.split(/\r?\n/).filter(Boolean);
+        const header = lines[0].toLowerCase().split(",").map((h) => h.trim().replace(/"/g, ""));
+        const emailIdx = header.findIndex((h) => h === "email");
+        if (emailIdx === -1) {
+          toast({ title: "CSV Error", description: "No 'email' column found.", variant: "destructive" });
+          setImporting(false);
+          return;
+        }
+        rows = lines.slice(1).map((line) => {
+          const cols = line.split(",").map((c) => c.trim().replace(/"/g, ""));
+          return { email: cols[emailIdx] };
+        }).filter((r) => r.email);
+      } else if (importTab === "paste") {
+        rows = pasteText
+          .split(/[\r\n,;]+/)
+          .map((e) => e.trim())
+          .filter((e) => e.includes("@"))
+          .map((email) => ({ email }));
+      }
+      if (rows.length === 0) {
+        toast({ title: "No emails found", description: "Please provide at least one valid email.", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+      const res = await apiRequest("POST", "/api/subscribers/import", rows);
+      const result = await res.json();
+      setImportResult(result);
+      qc.invalidateQueries({ queryKey: ["/api/admin/subscribers"] });
+    } catch {
+      toast({ title: "Import failed", description: "An error occurred during import.", variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function resetImportModal() {
+    setImportTab("csv");
+    setCsvFile(null);
+    setPasteText("");
+    setImportResult(null);
+    setImporting(false);
   }
 
   return (
@@ -353,7 +413,7 @@ function SubscribersTab() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -370,6 +430,15 @@ function SubscribersTab() {
           data-testid="button-export-subscribers"
         >
           <Download className="w-3.5 h-3.5 mr-1.5" /> Export CSV
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => { resetImportModal(); setImportOpen(true); }}
+          className="border-white/20 text-white/70 hover:bg-white/10"
+          data-testid="button-import-subscribers"
+        >
+          <Upload className="w-3.5 h-3.5 mr-1.5" /> Import Subscribers
         </Button>
       </div>
 
@@ -414,6 +483,78 @@ function SubscribersTab() {
           </div>
         )}
       </div>
+
+      {/* Import Modal */}
+      <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) resetImportModal(); }}>
+        <DialogContent className="bg-[#0d0d0d] border border-white/10 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white">Import Subscribers</DialogTitle>
+          </DialogHeader>
+
+          {/* Tab switcher */}
+          <div className="flex gap-1 bg-white/5 rounded-lg p-1 mb-4">
+            {(["csv", "paste"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setImportTab(t)}
+                data-testid={`tab-import-${t}`}
+                className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-all ${importTab === t ? "bg-primary text-white" : "text-white/50 hover:text-white/80"}`}
+              >
+                {t === "csv" ? "Upload CSV" : "Paste Emails"}
+              </button>
+            ))}
+          </div>
+
+          {importTab === "csv" ? (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Upload a CSV file with an <code className="text-primary">email</code> column. Other columns are ignored.</p>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                data-testid="input-csv-file"
+                onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm text-white/70 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary/20 file:text-primary hover:file:bg-primary/30 cursor-pointer"
+              />
+              {csvFile && <p className="text-xs text-white/50">{csvFile.name}</p>}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Paste emails separated by newlines, commas, or semicolons.</p>
+              <Textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                placeholder="user@example.com&#10;another@email.com"
+                rows={6}
+                data-testid="textarea-paste-emails"
+                className="bg-black/40 border-white/10 text-white text-sm resize-none"
+              />
+            </div>
+          )}
+
+          {importResult && (
+            <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 text-sm">
+              <p className="text-green-400 font-semibold">✓ {importResult.imported} imported</p>
+              {importResult.skipped > 0 && <p className="text-white/50 mt-0.5">{importResult.skipped} skipped (duplicates or invalid)</p>}
+            </div>
+          )}
+
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" className="border-white/20 text-white/70" onClick={() => setImportOpen(false)} data-testid="button-cancel-import">
+              {importResult ? "Close" : "Cancel"}
+            </Button>
+            {!importResult && (
+              <Button
+                onClick={handleImport}
+                disabled={importing || (importTab === "csv" ? !csvFile : !pasteText.trim())}
+                className="bg-primary hover:bg-primary/80"
+                data-testid="button-confirm-import"
+              >
+                {importing ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing…</> : "Import"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1659,18 +1800,27 @@ export default function Admin() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-white/10 text-muted-foreground text-left">
-                          <th className="px-4 py-3 font-medium">Status</th>
-                          <th className="px-4 py-3 font-medium">Mode</th>
-                          <th className="px-4 py-3 font-medium">Event Name</th>
-                          <th className="px-4 py-3 font-medium">Venue</th>
-                          <th className="px-4 py-3 font-medium">Email</th>
-                          <th className="px-4 py-3 font-medium">Region</th>
-                          <th className="px-4 py-3 font-medium">Submitted</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Mode</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Event Name</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Venue</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Contact</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Phone</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Email</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">City</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Region</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Event Date</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Time</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Event Type</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Budget</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Instagram</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Submitted</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredBookings.map((booking, i) => {
                           const currentStatus = booking.status || "New";
+                          const eventType = (booking as any).eventTypeOther || (booking as any).eventType || "—";
                           return (
                             <tr key={booking.id} data-testid={`row-booking-${booking.id}`} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
                               <td className="px-4 py-4">
@@ -1699,12 +1849,28 @@ export default function Admin() {
                                 </span>
                               </td>
                               <td className="px-4 py-4 font-medium text-white max-w-[180px]"><span className="line-clamp-1">{booking.eventName || "—"}</span></td>
-                              <td className="px-4 py-4 text-muted-foreground max-w-[160px]"><span className="line-clamp-1">{booking.venueName}</span></td>
+                              <td className="px-4 py-4 text-muted-foreground max-w-[160px]"><span className="line-clamp-1">{booking.venueName || "—"}</span></td>
+                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).contactName || "—"}</td>
+                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).phone || "—"}</td>
                               <td className="px-4 py-4 text-muted-foreground">
-                                <a href={`mailto:${booking.email}`} className="text-primary hover:underline">{booking.email}</a>
+                                <a href={`mailto:${booking.email}`} className="text-primary hover:underline whitespace-nowrap">{booking.email}</a>
                               </td>
+                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).city || "—"}</td>
                               <td className="px-4 py-4">
                                 <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{booking.region}</span>
+                              </td>
+                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">
+                                {(booking as any).eventDate
+                                  ? new Date((booking as any).eventDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                  : "—"}
+                              </td>
+                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).eventTime || "—"}</td>
+                              <td className="px-4 py-4 text-muted-foreground max-w-[140px]"><span className="line-clamp-1">{eventType}</span></td>
+                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).budgetRange || "—"}</td>
+                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">
+                                {(booking as any).instagramHandle
+                                  ? <a href={`https://instagram.com/${(booking as any).instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{(booking as any).instagramHandle.replace("@","")}</a>
+                                  : "—"}
                               </td>
                               <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{formatDate(booking.createdAt)}</td>
                             </tr>

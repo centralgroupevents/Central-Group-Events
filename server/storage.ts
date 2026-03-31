@@ -51,6 +51,8 @@ export interface IStorage {
   findSubscriberByEmail(email: string): Promise<Subscriber | null>;
   upsertSubscriber(email: string, referrer?: string): Promise<{ subscriber: Subscriber; isNew: boolean }>;
 
+  importSubscribers(rows: Array<{ email: string; region?: string }>): Promise<{ imported: number; skipped: number }>;
+
   // Bookings
   createBooking(booking: InsertBooking): Promise<Booking>;
   getBookings(): Promise<Booking[]>;
@@ -123,6 +125,28 @@ export class DatabaseStorage implements IStorage {
   async findSubscriberByEmail(email: string): Promise<Subscriber | null> {
     const [sub] = await db.select().from(newsletterSubscribers).where(eq(newsletterSubscribers.email, email));
     return sub ?? null;
+  }
+
+  async importSubscribers(rows: Array<{ email: string; region?: string }>): Promise<{ imported: number; skipped: number }> {
+    let imported = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      try {
+        const result = await db
+          .insert(newsletterSubscribers)
+          .values({ email: row.email, region: row.region || "All" })
+          .onConflictDoNothing()
+          .returning();
+        if (result.length > 0) {
+          imported++;
+        } else {
+          skipped++;
+        }
+      } catch {
+        skipped++;
+      }
+    }
+    return { imported, skipped };
   }
 
   async upsertSubscriber(email: string, referrer?: string): Promise<{ subscriber: Subscriber; isNew: boolean }> {

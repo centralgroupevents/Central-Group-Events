@@ -547,6 +547,19 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/subscribers/import", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const rows = req.body;
+      if (!Array.isArray(rows)) return res.status(400).json({ message: "Expected an array of { email, region? } objects" });
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const valid = rows.filter((r: any) => r && typeof r.email === "string" && emailRegex.test(r.email.trim()));
+      const result = await storage.importSubscribers(valid.map((r: any) => ({ email: r.email.trim().toLowerCase(), region: r.region || undefined })));
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/admin/analytics", requireAuth(), async (req: Request, res: Response) => {
     try {
       const allPosts = await storage.getAllPosts();

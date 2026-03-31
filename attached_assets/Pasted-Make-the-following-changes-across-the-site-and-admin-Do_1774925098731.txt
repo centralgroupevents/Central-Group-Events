@@ -1,0 +1,60 @@
+Make the following changes across the site and admin. Do not change anything outside of what is specified.
+
+---
+
+1. "STRIPE PAYMENTS COMING SOON" — PRICING SECTION:
+- Remove the centered "💳 Stripe payments coming soon" text from below the buttons
+- Add it left-aligned directly below the "* Premium Placement" footnote at the bottom of the pricing table
+- Style: text-xs, text-muted-foreground, left-aligned, same area as the footnote
+
+---
+
+2. "PROMOTE YOUR EVENT" BOOKING FORM SECTION:
+- Remove the Standard/Premium toggle entirely
+- Remove the Premium mode and all Premium-specific validation logic
+- Keep only the Standard form fields
+- Replace the section subtitle (currently "We'll be in touch within 24 hours to get started.") with this copy:
+  "This form is only for our event calendar listing. Please refer to our <a href='#pricing'>packages</a> for premium promotion."
+- The word "packages" should be a hyperlink that scrolls to the #pricing section
+- Style the hyperlink in the primary purple color with underline
+- Submit button text should just say "Submit Listing"
+
+---
+
+3. ADMIN — SUBSCRIBERS TAB — IMPORT BUTTON:
+- Add an "Import Subscribers" button next to the existing "Export CSV" button at the top of the Subscribers tab
+- When clicked, open a modal with two tabs: "Upload CSV" and "Paste Emails"
+
+Upload CSV tab:
+- A file input that accepts .csv files only
+- Expected CSV format: one column "email", optional second column "region"
+- On upload, parse the CSV on the frontend, then POST the array of { email, region } objects to a new backend route POST /api/subscribers/import
+- Backend should insert each email, skipping duplicates (use INSERT ... ON CONFLICT DO NOTHING)
+- Show a success message: "X subscribers imported, Y duplicates skipped"
+
+Paste Emails tab:
+- A textarea with placeholder: "Paste one email per line, or comma-separated"
+- Parse the input into individual email addresses on submit
+- Send to the same POST /api/subscribers/import endpoint
+- Show same success/skip count message
+- Validate each entry is a properly formatted email before sending, skip invalid ones and show count of skipped invalid emails
+
+---
+
+4. ADMIN — BOOKINGS TAB:
+- Expand the bookings table to show ALL fields submitted from the booking form as columns:
+  Mode, Event Name, Venue Name, Contact Name, Phone, Email, Event Date, Event Time, City, Region, Event Type, Budget Range, Instagram Handle, Status, Submitted Date
+- Since the table will be wide, make it horizontally scrollable
+- Each row should still have the status dropdown for inline status updates
+- If any field is empty/null for older submissions, show a dash (—)
+
+---
+
+5. EVENT CALENDAR — "SEE FULL LIST" BUTTON:
+- Only show the first 10 events per region tab (All, North, Central, South) instead of all events
+- Below the event list, if there are more than 10 events, show a button: "See Full List"
+- When clicked, the button should navigate to the most recently published blog post
+  - Fetch the most recently published post from GET /api/posts (already exists, sorted by publishedAt desc) and get the first result's slug
+  - Navigate to /blog/[slug]
+  - If that post is gated (isGated: true), the existing gate logic will handle prompting the user to enter their email for access — no additional changes needed here
+  - If no published posts exist, the button should fall back to navigating to /blog

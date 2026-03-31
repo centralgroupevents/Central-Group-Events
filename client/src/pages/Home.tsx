@@ -72,6 +72,7 @@ const staggerItem = {
 };
 
 export default function Home() {
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   
   // Newsletter Form
@@ -96,9 +97,6 @@ export default function Home() {
       }
     });
   };
-
-  // Booking Mode Toggle
-  const [bookingMode, setBookingMode] = useState<"Standard" | "Premium">("Standard");
 
   // Events Calendar
   const [activeRegion, setActiveRegion] = useState("All");
@@ -409,8 +407,9 @@ export default function Home() {
                   <Loader2 className="w-10 h-10 animate-spin text-primary" />
                 </div>
               ) : filteredEvents.length > 0 ? (
+                <>
                 <div className="divide-y divide-white/10 rounded-2xl border border-white/10 overflow-hidden">
-                  {filteredEvents.map((event, idx) => (
+                  {filteredEvents.slice(0, 10).map((event, idx) => (
                     <motion.div
                       key={event.id}
                       initial={{ opacity: 0, y: 8 }}
@@ -445,6 +444,31 @@ export default function Home() {
                     </motion.div>
                   ))}
                 </div>
+                {filteredEvents.length > 10 && (
+                  <div className="flex justify-center mt-6">
+                    <Button
+                      variant="outline"
+                      className="rounded-full border-white/20 hover:bg-primary hover:border-primary hover:text-white transition-all duration-200 px-8"
+                      data-testid="button-see-full-list"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/posts?limit=1");
+                          const posts = await res.json();
+                          if (posts && posts.length > 0 && posts[0].slug) {
+                            navigate(`/blog/${posts[0].slug}`);
+                          } else {
+                            navigate("/blog");
+                          }
+                        } catch {
+                          navigate("/blog");
+                        }
+                      }}
+                    >
+                      See Full List
+                    </Button>
+                  </div>
+                )}
+                </>
               ) : (
                 <div className="flex flex-col items-center justify-center h-64 text-center glass-panel rounded-3xl border-dashed">
                   <Calendar className="w-12 h-12 text-muted-foreground mb-4" />
@@ -633,13 +657,9 @@ export default function Home() {
                 </table>
               </div>
 
-              {/* Footnote */}
-              <div className="px-6 pt-3 pb-1 text-left">
+              {/* Footnote + Stripe */}
+              <div className="px-6 pt-3 pb-4 text-left space-y-1 border-t border-white/5">
                 <p className="text-xs text-muted-foreground">* Premium Placement</p>
-              </div>
-
-              {/* Stripe coming soon */}
-              <div className="py-4 text-center border-t border-white/5">
                 <p className="text-xs text-muted-foreground">💳 Stripe payments coming soon</p>
               </div>
             </div>
@@ -712,37 +732,13 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <motion.div {...fadeIn} className="text-center mb-8">
             <h2 className="text-3xl md:text-5xl font-black mb-4">Promote Your Event</h2>
-            <p className="text-lg text-muted-foreground">We'll be in touch within 24 hours to get started.</p>
-          </motion.div>
-
-          {/* Standard / Premium Toggle */}
-          <motion.div {...fadeIn} className="flex justify-center mb-8">
-            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full p-1">
-              <button
-                type="button"
-                data-testid="toggle-standard"
-                onClick={() => setBookingMode("Standard")}
-                className={`px-6 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
-                  bookingMode === "Standard"
-                    ? "bg-primary text-white shadow-lg"
-                    : "text-muted-foreground hover:text-white"
-                }`}
-              >
-                Standard
-              </button>
-              <button
-                type="button"
-                data-testid="toggle-premium"
-                onClick={() => setBookingMode("Premium")}
-                className={`px-6 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
-                  bookingMode === "Premium"
-                    ? "bg-primary text-white shadow-lg"
-                    : "text-muted-foreground hover:text-white"
-                }`}
-              >
-                Premium
-              </button>
-            </div>
+            <p className="text-lg text-muted-foreground">
+              This form is only for our event calendar listing. Please refer to our{" "}
+              <a href="#pricing" className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors">
+                packages
+              </a>{" "}
+              for premium promotion.
+            </p>
           </motion.div>
 
           <motion.div
@@ -751,7 +747,7 @@ export default function Home() {
             viewport={{ once: true }}
             className="glass-panel p-6 md:p-10 rounded-3xl border-white/10 shadow-2xl"
           >
-            <BookingFormPanel key={bookingMode} mode={bookingMode} />
+            <BookingFormPanel />
           </motion.div>
         </div>
       </section>
@@ -795,17 +791,15 @@ export default function Home() {
   );
 }
 
-function BookingFormPanel({ mode }: { mode: "Standard" | "Premium" }) {
+function BookingFormPanel() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const bookingMutation = useCreateBooking();
 
-  const activeSchema = mode === "Standard" ? standardBookingSchema : premiumBookingSchema;
-
-  const bookingForm = useForm<z.infer<typeof premiumBookingSchema>>({
-    resolver: zodResolver(activeSchema),
+  const bookingForm = useForm<z.infer<typeof standardBookingSchema>>({
+    resolver: zodResolver(standardBookingSchema),
     defaultValues: {
-      mode,
+      mode: "Standard",
       eventName: "",
       venueName: "",
       contactName: "",
@@ -824,8 +818,8 @@ function BookingFormPanel({ mode }: { mode: "Standard" | "Premium" }) {
 
   const watchedEventType = bookingForm.watch("eventType");
 
-  const onSubmit = (data: z.infer<typeof premiumBookingSchema>) => {
-    bookingMutation.mutate({ ...data, mode }, {
+  const onSubmit = (data: z.infer<typeof standardBookingSchema>) => {
+    bookingMutation.mutate({ ...data, mode: "Standard" }, {
       onSuccess: () => {
         navigate("/booking-confirmation");
       },
@@ -840,7 +834,6 @@ function BookingFormPanel({ mode }: { mode: "Standard" | "Premium" }) {
   };
 
   const inputClass = "bg-black/40 border-white/10 h-12 rounded-xl";
-  const isPremium = mode === "Premium";
 
   return (
     <Form {...bookingForm}>
@@ -867,7 +860,7 @@ function BookingFormPanel({ mode }: { mode: "Standard" | "Premium" }) {
           <FormField control={bookingForm.control} name="contactName" render={({ field }) => (
             <FormItem>
               <FormLabel className="text-white/80">
-                Contact Name {isPremium ? "*" : <span className="text-muted-foreground text-xs ml-1">(Optional)</span>}
+                Contact Name <span className="text-muted-foreground text-xs ml-1">(Optional)</span>
               </FormLabel>
               <FormControl><Input data-testid="input-contact-name" className={inputClass} placeholder="Your full name" {...field} /></FormControl>
               <FormMessage />
@@ -887,7 +880,7 @@ function BookingFormPanel({ mode }: { mode: "Standard" | "Premium" }) {
           <FormField control={bookingForm.control} name="phone" render={({ field }) => (
             <FormItem>
               <FormLabel className="text-white/80">
-                Phone {isPremium ? "*" : <span className="text-muted-foreground text-xs ml-1">(Optional)</span>}
+                Phone <span className="text-muted-foreground text-xs ml-1">(Optional)</span>
               </FormLabel>
               <FormControl><Input data-testid="input-phone" type="tel" className={inputClass} placeholder="(201) 555-0100" {...field} /></FormControl>
               <FormMessage />
@@ -992,7 +985,7 @@ function BookingFormPanel({ mode }: { mode: "Standard" | "Premium" }) {
         <FormField control={bookingForm.control} name="budgetRange" render={({ field }) => (
           <FormItem>
             <FormLabel className="text-white/80">
-              Budget Range {isPremium ? "*" : <span className="text-muted-foreground text-xs ml-1">(Optional)</span>}
+              Budget Range <span className="text-muted-foreground text-xs ml-1">(Optional)</span>
             </FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
@@ -1054,9 +1047,7 @@ function BookingFormPanel({ mode }: { mode: "Standard" | "Premium" }) {
         >
           {bookingMutation.isPending
             ? <Loader2 className="w-6 h-6 animate-spin" />
-            : mode === "Standard"
-              ? "Submit Standard Listing"
-              : "Submit Premium Inquiry"
+            : "Submit Listing"
           }
         </Button>
       </form>
