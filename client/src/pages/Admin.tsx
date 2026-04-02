@@ -39,6 +39,7 @@ import {
   FileText,
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
+import { SEO } from "@/components/SEO";
 
 type AdminUser = { email: string; role: string };
 
@@ -1715,6 +1716,7 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <SEO title="Admin Dashboard" description="" canonical="https://www.centralgroupevents.com/admin" noindex />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 
         {/* Header */}

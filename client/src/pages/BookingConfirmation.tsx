@@ -1,10 +1,12 @@
 import { CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { SEO } from "@/components/SEO";
 
 export default function BookingConfirmation() {
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
+      <SEO title="Booking Confirmed" description="" canonical="https://www.centralgroupevents.com/booking-confirmation" noindex />
       <div className="text-center max-w-md mx-auto">
         <div className="flex justify-center mb-6">
           <div className="w-20 h-20 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">

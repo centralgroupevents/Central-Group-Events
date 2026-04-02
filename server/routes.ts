@@ -1022,6 +1022,52 @@ export async function registerRoutes(
 
   // ── Seed data ────────────────────────────────────────────────────────
   await seedDatabase();
+  // ── Sitemap & Robots ─────────────────────────────────────────────────
+  app.get("/sitemap.xml", async (_req: Request, res: Response) => {
+    try {
+      const publishedPosts = await storage.getPublishedPosts();
+      const postEntries = publishedPosts.map((p) => `
+  <url>
+    <loc>https://www.centralgroupevents.com/blog/${p.slug}</loc>
+    <lastmod>${p.publishedAt ? new Date(p.publishedAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`).join("");
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.centralgroupevents.com</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.centralgroupevents.com/blog</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.centralgroupevents.com/faq</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>${postEntries}
+</urlset>`;
+      res.setHeader("Content-Type", "application/xml");
+      res.send(xml);
+    } catch {
+      res.status(500).send("Error generating sitemap");
+    }
+  });
+
+  app.get("/robots.txt", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/plain");
+    res.send(`User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /booking-confirmation
+Disallow: /welcome
+Sitemap: https://www.centralgroupevents.com/sitemap.xml`);
+  });
+
   await seedRealEvents();
   await seedSuperadmin();
 

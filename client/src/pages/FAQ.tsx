@@ -1,4 +1,5 @@
 import { Navigation } from "@/components/Navigation";
+import { SEO } from "@/components/SEO";
 import {
   Accordion,
   AccordionContent,
@@ -36,6 +37,12 @@ const FAQ_ITEMS = [
 export default function FAQ() {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <SEO
+        title="FAQ — Central Group Events"
+        description="Frequently asked questions about Central Group Events. Learn how to submit your event, get promoted, and join the NJ event community."
+        keywords="CGE FAQ, how to submit event NJ, event promotion New Jersey, Central Group Events"
+        canonical="https://www.centralgroupevents.com/faq"
+      />
       <Navigation />
 
       {/* Header */}

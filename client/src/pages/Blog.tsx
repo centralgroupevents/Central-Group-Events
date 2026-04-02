@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { Lock, ArrowRight, BookOpen, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Navigation } from "@/components/Navigation";
+import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -124,6 +125,19 @@ export default function Blog() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <SEO
+        title="NJ Event Blog & Weekly Newsletter — Central Group Events"
+        description="Get the weekly NJ event roundup from Central Group Events. Discover the hottest events across North, Central, and South New Jersey every week."
+        keywords="NJ events blog, New Jersey weekend events, NJ nightlife guide, weekly events New Jersey, things to do NJ this weekend"
+        canonical="https://www.centralgroupevents.com/blog"
+      />
+      <script type="application/ld+json">{JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Blog",
+        "name": "Central Group Events Blog",
+        "url": "https://www.centralgroupevents.com/blog",
+        "description": "Weekly NJ event roundups and nightlife guides"
+      })}</script>
       <Navigation />
 
       {/* Header */}

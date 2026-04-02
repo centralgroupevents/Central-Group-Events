@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 
 import { useEvents, useSubscribeNewsletter, useCreateBooking } from "@/hooks/use-landing";
 import { Navigation } from "@/components/Navigation";
+import { SEO } from "@/components/SEO";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
 // Re-defining schemas here for the form resolvers to match the API contract
@@ -119,6 +120,26 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-hidden">
+      <SEO
+        title="Central Group Events — NJ's #1 Event Hub"
+        description="Discover the best events in New Jersey every week. North, Central, and South NJ nightlife, brunch spots, live music, R&B nights, and more. Submit or promote your event with CGE."
+        keywords="events in NJ, things to do in New Jersey, NJ nightlife, New Jersey events this weekend, events near me NJ, Newark events, Jersey City events, North NJ events, Central NJ events, South NJ events, NJ brunch, NJ live music, NJ R&B night, event promotion New Jersey"
+        canonical="https://www.centralgroupevents.com"
+      />
+      <script type="application/ld+json">{JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Central Group Events",
+        "url": "https://www.centralgroupevents.com",
+        "logo": "https://www.centralgroupevents.com/favicon.png",
+        "description": "New Jersey's #1 event discovery and promotion platform covering North, Central, and South NJ.",
+        "email": "centralgroupevents@gmail.com",
+        "sameAs": [
+          "https://www.instagram.com/centralgroupevents/",
+          "https://www.tiktok.com/@centralgroupevents",
+          "https://www.facebook.com/p/Central-Group-Events-61551661541206/"
+        ]
+      })}</script>
       <Navigation />
 
       {/* HERO SECTION */}

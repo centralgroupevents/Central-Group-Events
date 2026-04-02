@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { SEO } from "@/components/SEO";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
 export default function Welcome() {
   const [, setLocation] = useLocation();
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -16,6 +18,7 @@ export default function Welcome() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
+      <SEO title="Welcome" description="" canonical="https://www.centralgroupevents.com/welcome" noindex />
       <div className="text-center max-w-lg">
         <img
           src={cgeLogo}

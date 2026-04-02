@@ -1,0 +1,139 @@
+Add comprehensive SEO to every page of the CGE site. Do not change any visual design or functionality. Here are the full requirements:
+
+---
+
+1. INSTALL DEPENDENCIES:
+Install the "react-helmet-async" package for managing meta tags per page.
+Wrap the app root in HelmetProvider from react-helmet-async in the main entry file.
+
+---
+
+2. CREATE A REUSABLE SEO COMPONENT:
+Create a new component at client/src/components/SEO.tsx that accepts these props:
+- title (string)
+- description (string)
+- canonical (string — full URL)
+- image (string — full URL to OG image, optional)
+- type (string — "website" or "article", default "website")
+- keywords (string)
+
+The component should render inside a Helmet tag:
+- <title>{title} | Central Group Events</title>
+- <meta name="description" content={description} />
+- <meta name="keywords" content={keywords} />
+- <link rel="canonical" href={canonical} />
+- <meta property="og:title" content={title} />
+- <meta property="og:description" content={description} />
+- <meta property="og:image" content={image or default CGE logo URL} />
+- <meta property="og:url" content={canonical} />
+- <meta property="og:type" content={type} />
+- <meta property="og:site_name" content="Central Group Events" />
+- <meta name="twitter:card" content="summary_large_image" />
+- <meta name="twitter:title" content={title} />
+- <meta name="twitter:description" content={description} />
+- <meta name="twitter:image" content={image or default CGE logo URL} />
+- <meta name="robots" content="index, follow" />
+
+---
+
+3. ADD SEO TO EVERY PAGE:
+
+Homepage:
+- title: "Central Group Events — NJ's #1 Event Hub"
+- description: "Discover the best events in New Jersey every week. North, Central, and South NJ nightlife, brunch spots, live music, R&B nights, and more. Submit or promote your event with CGE."
+- keywords: "events in NJ, things to do in New Jersey, NJ nightlife, New Jersey events this weekend, events near me NJ, Newark events, Jersey City events, North NJ events, Central NJ events, South NJ events, NJ brunch, NJ live music, NJ R&B night, event promotion New Jersey"
+- canonical: "https://www.centralgroupevents.com"
+
+/blog page:
+- title: "NJ Event Blog & Weekly Newsletter — Central Group Events"
+- description: "Get the weekly NJ event roundup from Central Group Events. Discover the hottest events across North, Central, and South New Jersey every week."
+- keywords: "NJ events blog, New Jersey weekend events, NJ nightlife guide, weekly events New Jersey, things to do NJ this weekend"
+- canonical: "https://www.centralgroupevents.com/blog"
+
+/blog/:slug (individual post pages):
+- title: use the post's title
+- description: use the post's excerpt
+- keywords: "NJ events, New Jersey nightlife, Central Group Events, " + post title
+- canonical: "https://www.centralgroupevents.com/blog/" + slug
+- image: use the post's coverImageUrl if available
+- type: "article"
+- Add additional article meta tags:
+  <meta property="article:published_time" content={publishedAt} />
+  <meta property="article:author" content="Central Group Events" />
+
+/faq page:
+- title: "FAQ — Central Group Events"
+- description: "Frequently asked questions about Central Group Events. Learn how to submit your event, get promoted, and join the NJ event community."
+- keywords: "CGE FAQ, how to submit event NJ, event promotion New Jersey, Central Group Events"
+- canonical: "https://www.centralgroupevents.com/faq"
+
+/admin (no SEO needed — add noindex):
+- <meta name="robots" content="noindex, nofollow" />
+
+/booking-confirmation:
+- <meta name="robots" content="noindex, nofollow" />
+
+/welcome:
+- <meta name="robots" content="noindex, nofollow" />
+
+---
+
+4. STRUCTURED DATA (JSON-LD):
+
+On the homepage, add a JSON-LD script tag for Organization schema:
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Central Group Events",
+  "url": "https://www.centralgroupevents.com",
+  "logo": "[CGE logo URL]",
+  "description": "New Jersey's #1 event discovery and promotion platform covering North, Central, and South NJ.",
+  "email": "centralgroupevents@gmail.com",
+  "sameAs": [
+    "https://www.instagram.com/centralgroupevents/",
+    "https://www.tiktok.com/@centralgroupevents",
+    "https://www.facebook.com/p/Central-Group-Events-61551661541206/"
+  ]
+}
+
+On the /blog page, add a JSON-LD script tag for Blog schema:
+{
+  "@context": "https://schema.org",
+  "@type": "Blog",
+  "name": "Central Group Events Blog",
+  "url": "https://www.centralgroupevents.com/blog",
+  "description": "Weekly NJ event roundups and nightlife guides"
+}
+
+On each /blog/:slug page, add a JSON-LD script tag for Article schema:
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": post.title,
+  "description": post.excerpt,
+  "image": post.coverImageUrl,
+  "datePublished": post.publishedAt,
+  "author": { "@type": "Organization", "name": "Central Group Events" },
+  "publisher": { "@type": "Organization", "name": "Central Group Events", "url": "https://www.centralgroupevents.com" }
+}
+
+---
+
+5. SITEMAP:
+Create a backend route GET /sitemap.xml that dynamically generates an XML sitemap including:
+- https://www.centralgroupevents.com (priority 1.0, daily)
+- https://www.centralgroupevents.com/blog (priority 0.9, daily)
+- https://www.centralgroupevents.com/faq (priority 0.7, weekly)
+- One entry per published blog post: https://www.centralgroupevents.com/blog/{slug} (priority 0.8, weekly, lastmod = publishedAt)
+Set Content-Type header to application/xml.
+
+---
+
+6. ROBOTS.TXT:
+Create a backend route GET /robots.txt that returns:
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /booking-confirmation
+Disallow: /welcome
+Sitemap: https://www.centralgroupevents.com/sitemap.xml

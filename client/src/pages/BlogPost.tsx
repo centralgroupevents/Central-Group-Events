@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextViewer } from "@/components/RichTextEditor";
 import { Navigation } from "@/components/Navigation";
+import { SEO } from "@/components/SEO";
 import { useToast } from "@/hooks/use-toast";
 
 type Post = {
@@ -237,6 +238,29 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {post && !postLoading && (
+        <>
+          <SEO
+            title={post.title}
+            description={post.excerpt || `${post.title} — Central Group Events`}
+            keywords={`NJ events, New Jersey nightlife, Central Group Events, ${post.title}`}
+            canonical={`https://www.centralgroupevents.com/blog/${slug}`}
+            image={post.coverImageUrl || undefined}
+            type="article"
+            publishedAt={post.publishedAt}
+          />
+          <script type="application/ld+json">{JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Article",
+            "headline": post.title,
+            "description": post.excerpt,
+            "image": post.coverImageUrl,
+            "datePublished": post.publishedAt,
+            "author": { "@type": "Organization", "name": "Central Group Events" },
+            "publisher": { "@type": "Organization", "name": "Central Group Events", "url": "https://www.centralgroupevents.com" }
+          })}</script>
+        </>
+      )}
       <Navigation />
       <div className="max-w-3xl mx-auto px-4 pt-28 pb-24">
         {/* Back link */}
