@@ -477,6 +477,43 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/events/bulk-import", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { insertEventSchema } = await import("@shared/schema");
+      const rawRows = req.body as Record<string, string>[];
+      if (!Array.isArray(rawRows)) return res.status(400).json({ message: "Expected an array of event rows" });
+      const validRows: any[] = [];
+      let skipped = rawRows.length;
+      for (const row of rawRows) {
+        try {
+          const parsed = insertEventSchema.parse({
+            title: row.name || row.title || "",
+            date: row.date || "",
+            region: row.region || "Central NJ",
+            eventTime: row.time || row.eventTime || null,
+            venue: row.venue || null,
+            city: row.city || null,
+            organizer: row.organizer || null,
+            influencer: row.influencer || null,
+            genre: row.genre || null,
+            instagramHandle: row.instagramHandle || null,
+            ticketLink: row.ticketLink || null,
+            description: "",
+            imageUrl: "",
+          });
+          validRows.push(parsed);
+        } catch (_) {
+          // keep skipped count
+        }
+      }
+      skipped = rawRows.length - validRows.length;
+      const result = await storage.bulkImportEvents(validRows);
+      res.json({ imported: result.imported, skipped: result.skipped + skipped });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── Admin auth routes ────────────────────────────────────────────────
 
   app.post("/api/admin/login", async (req: Request, res: Response) => {

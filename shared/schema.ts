@@ -44,6 +44,12 @@ export const events = pgTable("events", {
   city: text("city"),
   imageUrl: text("image_url").notNull(),
   ticketLink: text("ticket_link"),
+  eventTime: text("event_time"),
+  venue: text("venue"),
+  organizer: text("organizer"),
+  influencer: text("influencer"),
+  genre: text("genre"),
+  instagramHandle: text("instagram_handle"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -125,7 +131,18 @@ export const insertBookingSchema = createInsertSchema(promotionBookings).omit({ 
   instagramHandle: z.string().optional(),
   readyToMoveForward: z.string().optional(),
 });
-export const insertEventSchema = createInsertSchema(events).omit({ id: true, createdAt: true });
+export const insertEventSchema = createInsertSchema(events).omit({ id: true, createdAt: true }).extend({
+  description: z.string().optional().default(""),
+  imageUrl: z.string().optional().default(""),
+  eventTime: z.string().optional().nullable(),
+  venue: z.string().optional().nullable(),
+  organizer: z.string().optional().nullable(),
+  influencer: z.string().optional().nullable(),
+  genre: z.string().optional().nullable(),
+  instagramHandle: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  ticketLink: z.string().optional().nullable(),
+});
 
 export const insertAdminUserSchema = createInsertSchema(adminUsers).omit({ id: true, createdAt: true });
 export const insertPostSchema = createInsertSchema(posts).omit({ id: true, createdAt: true, updatedAt: true });

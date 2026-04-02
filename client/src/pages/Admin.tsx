@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import Papa from "papaparse";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,8 @@ import {
   Upload,
   Mail,
   ImagePlus,
+  CheckCircle2,
+  FileText,
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
@@ -48,6 +51,12 @@ type Event = {
   imageUrl: string;
   ticketLink: string | null;
   description: string;
+  eventTime: string | null;
+  venue: string | null;
+  organizer: string | null;
+  influencer: string | null;
+  genre: string | null;
+  instagramHandle: string | null;
 };
 
 type Booking = {
@@ -81,9 +90,15 @@ type Subscriber = {
 
 type EventForm = {
   title: string;
+  date: string;
+  eventTime: string;
+  venue: string;
   city: string;
   region: string;
-  date: string;
+  instagramHandle: string;
+  organizer: string;
+  influencer: string;
+  genre: string;
   ticketLink: string;
   imageUrl: string;
 };
@@ -127,9 +142,15 @@ type AdminMember = {
 
 const emptyEventForm: EventForm = {
   title: "",
+  date: "",
+  eventTime: "",
+  venue: "",
   city: "",
   region: "",
-  date: "",
+  instagramHandle: "",
+  organizer: "",
+  influencer: "",
+  genre: "",
   ticketLink: "",
   imageUrl: "",
 };
@@ -1438,8 +1459,17 @@ export default function Admin() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("events");
   const [showForm, setShowForm] = useState(false);
+  const [showEventModal, setShowEventModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [form, setForm] = useState<EventForm>(emptyEventForm);
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof EventForm, string>>>({});
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+  const [csvErrors, setCsvErrors] = useState<string[]>([]);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [inlineEdit, setInlineEdit] = useState<{ id: number; field: string; value: string } | null>(null);
+  const [inlineSaved, setInlineSaved] = useState<{ id: number; field: string } | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1485,10 +1515,16 @@ export default function Admin() {
     mutationFn: async (data: EventForm) => {
       const res = await apiRequest("POST", "/api/events", {
         title: data.title,
-        city: data.city || null,
-        region: data.region,
         date: data.date,
-        ticketLink: data.ticketLink || "#",
+        region: data.region,
+        eventTime: data.eventTime || null,
+        venue: data.venue || null,
+        city: data.city || null,
+        instagramHandle: data.instagramHandle || null,
+        organizer: data.organizer || null,
+        influencer: data.influencer || null,
+        genre: data.genre || null,
+        ticketLink: data.ticketLink || null,
         imageUrl: data.imageUrl || "",
         description: data.city ? `Live event in ${data.city}, NJ` : "CGE Event",
       });
@@ -1496,28 +1532,38 @@ export default function Admin() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/events"] });
-      resetForm();
+      setShowEventModal(false);
+      setEditingEvent(null);
+      setForm(emptyEventForm);
       toast({ title: "Event created" });
     },
     onError: () => toast({ title: "Failed to create event", variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: EventForm }) => {
+    mutationFn: async ({ id, data }: { id: number; data: Partial<EventForm> }) => {
       const res = await apiRequest("PUT", `/api/events/${id}`, {
         title: data.title,
-        city: data.city || null,
-        region: data.region,
         date: data.date,
-        ticketLink: data.ticketLink || "#",
-        imageUrl: data.imageUrl || "",
+        region: data.region,
+        eventTime: data.eventTime ?? null,
+        venue: data.venue ?? null,
+        city: data.city ?? null,
+        instagramHandle: data.instagramHandle ?? null,
+        organizer: data.organizer ?? null,
+        influencer: data.influencer ?? null,
+        genre: data.genre ?? null,
+        ticketLink: data.ticketLink ?? null,
+        imageUrl: data.imageUrl ?? "",
         description: data.city ? `Live event in ${data.city}, NJ` : "CGE Event",
       });
       return res.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/events"] });
-      resetForm();
+      setShowEventModal(false);
+      setEditingEvent(null);
+      setForm(emptyEventForm);
       toast({ title: "Event updated" });
     },
     onError: () => toast({ title: "Failed to update event", variant: "destructive" }),
@@ -1543,40 +1589,119 @@ export default function Admin() {
   function openAdd() {
     setEditingEvent(null);
     setForm(emptyEventForm);
-    setShowForm(true);
+    setFormErrors({});
+    setShowEventModal(true);
   }
 
   function openEdit(event: Event) {
     setEditingEvent(event);
     setForm({
       title: event.title,
+      date: event.date,
+      eventTime: event.eventTime || "",
+      venue: event.venue || "",
       city: event.city || "",
       region: event.region,
-      date: event.date,
+      instagramHandle: event.instagramHandle || "",
+      organizer: event.organizer || "",
+      influencer: event.influencer || "",
+      genre: event.genre || "",
       ticketLink: event.ticketLink || "",
       imageUrl: event.imageUrl || "",
     });
-    setShowForm(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setFormErrors({});
+    setShowEventModal(true);
   }
 
   function resetForm() {
     setShowForm(false);
+    setShowEventModal(false);
     setEditingEvent(null);
     setForm(emptyEventForm);
+    setFormErrors({});
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.title || !form.region || !form.date) {
-      toast({ title: "Title, Region, and Date are required", variant: "destructive" });
+    const errors: Partial<Record<keyof EventForm, string>> = {};
+    if (!form.title.trim()) errors.title = "Event name is required";
+    if (!form.region) errors.region = "Region is required";
+    if (!form.date) errors.date = "Date is required";
+    if (!form.eventTime) errors.eventTime = "Time is required";
+    if (!form.venue.trim()) errors.venue = "Venue is required";
+    if (!form.city.trim()) errors.city = "City is required";
+    if (!form.instagramHandle.trim()) errors.instagramHandle = "Instagram handle is required";
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       return;
     }
+    setFormErrors({});
     if (editingEvent) {
       updateMutation.mutate({ id: editingEvent.id, data: form });
     } else {
       createMutation.mutate(form);
     }
+  }
+
+  async function saveInlineEdit() {
+    if (!inlineEdit) return;
+    try {
+      await apiRequest("PUT", `/api/events/${inlineEdit.id}`, {
+        [inlineEdit.field]: inlineEdit.value || null,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/events"] });
+      setInlineSaved({ id: inlineEdit.id, field: inlineEdit.field });
+      setTimeout(() => setInlineSaved(null), 2000);
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    }
+    setInlineEdit(null);
+  }
+
+  function handleCsvFile(file: File) {
+    setCsvErrors([]);
+    setImportResult(null);
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const errs: string[] = [];
+        const valid: Record<string, string>[] = [];
+        results.data.forEach((row, i) => {
+          const name = row.name || row.title || "";
+          const date = row.date || "";
+          if (!name) { errs.push(`Row ${i + 1}: missing name`); return; }
+          if (!date) { errs.push(`Row ${i + 1}: missing date`); return; }
+          valid.push(row);
+        });
+        setCsvRows(valid);
+        setCsvErrors(errs);
+      },
+      error: (err: Error) => setCsvErrors([err.message]),
+    });
+  }
+
+  async function submitBulkImport() {
+    try {
+      const res = await apiRequest("POST", "/api/events/bulk-import", csvRows);
+      const data = await res.json();
+      setImportResult(data);
+      setCsvRows([]);
+      qc.invalidateQueries({ queryKey: ["/api/events"] });
+    } catch {
+      toast({ title: "Import failed", variant: "destructive" });
+    }
+  }
+
+  function downloadCsvTemplate() {
+    const headers = "name,date,time,venue,city,region,organizer,influencer,genre,instagramHandle,ticketLink";
+    const blob = new Blob([headers + "\n"], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "events-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   /* Show nothing until session check completes */
@@ -1634,31 +1759,135 @@ export default function Admin() {
         {/* EVENTS TAB */}
         {activeTab === "events" && (
           <>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">Events</h2>
-              {!showForm && (
-                <Button onClick={openAdd} className="bg-primary hover:bg-primary/90 font-semibold" data-testid="button-add-event">
-                  <Plus className="w-4 h-4 mr-1" /> Add Event
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+              <h2 className="text-xl font-bold text-white">Events <span className="text-muted-foreground font-normal text-sm ml-1">({events.length} total)</span></h2>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => { setShowImportModal(true); setCsvRows([]); setCsvErrors([]); setImportResult(null); }} className="border-white/20 hover:bg-white/10 text-white/70" data-testid="button-import-csv">
+                  <Upload className="w-4 h-4 mr-1.5" /> Import CSV
                 </Button>
+                <Button onClick={openAdd} className="bg-primary hover:bg-primary/90 font-semibold" data-testid="button-add-event">
+                  <Plus className="w-4 h-4 mr-1" /> Add New Event
+                </Button>
+              </div>
+            </div>
+
+            {/* Scrollable table */}
+            <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+              {isLoading ? (
+                <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
+              ) : events.length === 0 ? (
+                <div className="flex justify-center items-center h-40 text-muted-foreground">No events yet. Add one above.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="text-sm" style={{ minWidth: "1100px", width: "100%" }}>
+                    <thead>
+                      <tr className="border-b border-white/10 text-muted-foreground text-left bg-secondary/60">
+                        <th className="px-4 py-3 font-medium whitespace-nowrap sticky left-0 z-10 bg-[#1a1a2e] min-w-[200px]">Name of Event</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[110px]">Day of Event</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[100px]">Time</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[140px]">Venue</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[120px]">City</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[110px]">Region</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[130px]">Organizer</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[130px]">Influencer</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[110px]">Genre</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[140px]">Instagram</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap text-right min-w-[100px]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {events.map((event, i) => {
+                        const rowBg = i % 2 !== 0 ? "bg-white/[0.02]" : "";
+                        const stickyBg = i % 2 !== 0 ? "bg-[#161624]" : "bg-[#111120]";
+
+                        function InlineCell({ field, value, placeholder }: { field: string; value: string | null; placeholder?: string }) {
+                          const isEditing = inlineEdit?.id === event.id && inlineEdit?.field === field;
+                          const isSaved = inlineSaved?.id === event.id && inlineSaved?.field === field;
+                          if (isEditing) {
+                            return (
+                              <Input
+                                autoFocus
+                                value={inlineEdit.value}
+                                onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                                onBlur={saveInlineEdit}
+                                onKeyDown={(e) => { if (e.key === "Enter") saveInlineEdit(); if (e.key === "Escape") setInlineEdit(null); }}
+                                className="bg-black/60 border-primary/50 h-7 text-xs px-2 w-full min-w-[100px]"
+                              />
+                            );
+                          }
+                          return (
+                            <span
+                              className="cursor-pointer hover:bg-white/10 rounded px-1 py-0.5 transition-colors flex items-center gap-1 group"
+                              onClick={() => setInlineEdit({ id: event.id, field, value: value || "" })}
+                              title="Click to edit"
+                            >
+                              {isSaved && <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />}
+                              <span className={value ? "text-white" : "text-white/20 italic"}>{value || (placeholder || "—")}</span>
+                              <Pencil className="w-2.5 h-2.5 text-white/20 group-hover:text-white/50 ml-auto flex-shrink-0" />
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <tr key={event.id} className={`border-b border-white/5 hover:bg-white/5 ${rowBg}`}>
+                            <td className={`px-4 py-3 font-medium sticky left-0 z-10 ${stickyBg}`}>
+                              <InlineCell field="title" value={event.title} />
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{event.date}</td>
+                            <td className="px-4 py-3">
+                              <InlineCell field="eventTime" value={event.eventTime} placeholder="add time" />
+                            </td>
+                            <td className="px-4 py-3">
+                              <InlineCell field="venue" value={event.venue} placeholder="add venue" />
+                            </td>
+                            <td className="px-4 py-3">
+                              <InlineCell field="city" value={event.city} placeholder="add city" />
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10 whitespace-nowrap">{event.region}</span>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs">{event.organizer || <span className="text-white/20">—</span>}</td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs">{event.influencer || <span className="text-white/20">—</span>}</td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs">{event.genre || <span className="text-white/20">—</span>}</td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs">{event.instagramHandle || <span className="text-white/20">—</span>}</td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                              <button onClick={() => openEdit(event)} className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors mr-1" title="Edit" data-testid={`button-edit-event-${event.id}`}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => { if (window.confirm(`Delete "${event.title}"?`)) deleteMutation.mutate(event.id); }}
+                                className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-red-500/20 text-red-400/50 hover:text-red-400 transition-colors"
+                                title="Delete"
+                                data-testid={`button-delete-event-${event.id}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
-            {showForm && (
-              <div className="bg-secondary/40 border border-white/10 rounded-2xl p-6 mb-8">
-                <h2 className="text-xl font-bold text-white mb-6">
-                  {editingEvent ? `Editing: ${editingEvent.title}` : "Add New Event"}
-                </h2>
-                <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Add / Edit Event Modal */}
+            <Dialog open={showEventModal} onOpenChange={(open) => { if (!open) resetForm(); }}>
+              <DialogContent className="bg-secondary border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>{editingEvent ? `Edit: ${editingEvent.title}` : "Add New Event"}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+                  {/* Required fields */}
                   <div className="sm:col-span-2 space-y-1">
-                    <Label className="text-white/80">Event Title *</Label>
-                    <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. JAZZY FRIDAYS" className="bg-black/40 border-white/10 h-11" />
+                    <Label className="text-white/80">Name of Event <span className="text-red-400">*</span></Label>
+                    <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. JAZZY FRIDAYS" className="bg-black/40 border-white/10 h-11" data-testid="input-event-title" />
+                    {formErrors.title && <p className="text-red-400 text-xs">{formErrors.title}</p>}
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-white/80">City</Label>
-                    <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="e.g. Fort Lee" className="bg-black/40 border-white/10 h-11" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-white/80">Region *</Label>
+                    <Label className="text-white/80">Region <span className="text-red-400">*</span></Label>
                     <Select value={form.region} onValueChange={(v) => setForm({ ...form, region: v })}>
                       <SelectTrigger className="bg-black/40 border-white/10 h-11"><SelectValue placeholder="Select region" /></SelectTrigger>
                       <SelectContent className="bg-secondary border-white/10 text-white">
@@ -1667,78 +1896,143 @@ export default function Admin() {
                         <SelectItem value="South NJ">South NJ</SelectItem>
                       </SelectContent>
                     </Select>
+                    {formErrors.region && <p className="text-red-400 text-xs">{formErrors.region}</p>}
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-white/80">Date *</Label>
-                    <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="bg-black/40 border-white/10 h-11" />
+                    <Label className="text-white/80">Day of Event <span className="text-red-400">*</span></Label>
+                    <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="bg-black/40 border-white/10 h-11" data-testid="input-event-date" />
+                    {formErrors.date && <p className="text-red-400 text-xs">{formErrors.date}</p>}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white/80">Time of Event <span className="text-red-400">*</span></Label>
+                    <Input type="time" value={form.eventTime} onChange={(e) => setForm({ ...form, eventTime: e.target.value })} className="bg-black/40 border-white/10 h-11" data-testid="input-event-time" />
+                    {formErrors.eventTime && <p className="text-red-400 text-xs">{formErrors.eventTime}</p>}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white/80">Venue <span className="text-red-400">*</span></Label>
+                    <Input value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} placeholder="e.g. Club Nova" className="bg-black/40 border-white/10 h-11" data-testid="input-event-venue" />
+                    {formErrors.venue && <p className="text-red-400 text-xs">{formErrors.venue}</p>}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white/80">City <span className="text-red-400">*</span></Label>
+                    <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="e.g. Fort Lee" className="bg-black/40 border-white/10 h-11" data-testid="input-event-city" />
+                    {formErrors.city && <p className="text-red-400 text-xs">{formErrors.city}</p>}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white/80">Instagram Handle <span className="text-red-400">*</span></Label>
+                    <Input value={form.instagramHandle} onChange={(e) => setForm({ ...form, instagramHandle: e.target.value })} placeholder="@handle" className="bg-black/40 border-white/10 h-11" data-testid="input-event-instagram" />
+                    {formErrors.instagramHandle && <p className="text-red-400 text-xs">{formErrors.instagramHandle}</p>}
+                  </div>
+                  {/* Optional fields */}
+                  <div className="space-y-1">
+                    <Label className="text-white/80">Organizer</Label>
+                    <Input value={form.organizer} onChange={(e) => setForm({ ...form, organizer: e.target.value })} placeholder="Optional" className="bg-black/40 border-white/10 h-11" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white/80">Influencer</Label>
+                    <Input value={form.influencer} onChange={(e) => setForm({ ...form, influencer: e.target.value })} placeholder="Optional" className="bg-black/40 border-white/10 h-11" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white/80">Genre</Label>
+                    <Input value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })} placeholder="e.g. Afrobeats, Hip-Hop" className="bg-black/40 border-white/10 h-11" />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-white/80">Ticket Link</Label>
                     <Input value={form.ticketLink} onChange={(e) => setForm({ ...form, ticketLink: e.target.value })} placeholder="https://..." className="bg-black/40 border-white/10 h-11" />
                   </div>
                   <div className="sm:col-span-2 space-y-1">
-                    <Label className="text-white/80">Event Image</Label>
-                    <ImageUpload
-                      value={form.imageUrl}
-                      onChange={(url) => setForm({ ...form, imageUrl: url })}
-                    />
+                    <Label className="text-white/80">Image URL</Label>
+                    <Input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="https://..." className="bg-black/40 border-white/10 h-11" />
                   </div>
                   <div className="sm:col-span-2 flex gap-3 pt-2">
-                    <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90 font-semibold px-8">
-                      {isPending ? "Saving…" : editingEvent ? "Save Changes" : "Create Event"}
+                    <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-primary hover:bg-primary/90 font-semibold px-8">
+                      {(createMutation.isPending || updateMutation.isPending) ? "Saving…" : editingEvent ? "Save Changes" : "Create Event"}
                     </Button>
                     <Button type="button" variant="outline" onClick={resetForm} className="border-white/20 hover:bg-white/10 text-white/70">Cancel</Button>
                   </div>
                 </form>
-              </div>
-            )}
+              </DialogContent>
+            </Dialog>
 
-            <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-white/10">
-                <h2 className="font-bold text-white">All Events <span className="text-muted-foreground font-normal text-sm ml-2">({events.length} total)</span></h2>
-              </div>
-              {isLoading ? (
-                <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
-              ) : events.length === 0 ? (
-                <div className="flex justify-center items-center h-40 text-muted-foreground">No events yet. Add one above.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-white/10 text-muted-foreground text-left">
-                        <th className="px-6 py-3 font-medium">Title</th>
-                        <th className="px-4 py-3 font-medium">City</th>
-                        <th className="px-4 py-3 font-medium">Region</th>
-                        <th className="px-4 py-3 font-medium">Date</th>
-                        <th className="px-4 py-3 font-medium">Ticket Link</th>
-                        <th className="px-4 py-3 font-medium text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {events.map((event, i) => (
-                        <tr key={event.id} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
-                          <td className="px-6 py-4 font-medium text-white max-w-xs"><span className="line-clamp-2">{event.title}</span></td>
-                          <td className="px-4 py-4 text-muted-foreground">{event.city || "—"}</td>
-                          <td className="px-4 py-4"><span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{event.region}</span></td>
-                          <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{event.date}</td>
-                          <td className="px-4 py-4 text-muted-foreground max-w-[160px]">
-                            {event.ticketLink && event.ticketLink !== "#" ? (
-                              <a href={event.ticketLink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate block">{event.ticketLink}</a>
-                            ) : (
-                              <span className="text-white/20">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-right whitespace-nowrap">
-                            <Button variant="outline" size="sm" onClick={() => openEdit(event)} className="border-white/20 hover:bg-white/10 text-white/70 mr-2 text-xs">Edit</Button>
-                            <Button variant="outline" size="sm" onClick={() => { if (window.confirm(`Delete "${event.title}"?`)) deleteMutation.mutate(event.id); }} disabled={deleteMutation.isPending} className="border-red-500/30 hover:bg-red-500/10 text-red-400 text-xs">Delete</Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            {/* CSV Import Modal */}
+            <Dialog open={showImportModal} onOpenChange={(open) => { if (!open) { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportResult(null); } }}>
+              <DialogContent className="bg-secondary border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Import Events from CSV</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <p className="text-sm text-muted-foreground">
+                    Upload a CSV file with the following headers (in any order):<br />
+                    <code className="text-primary text-xs">name, date, time, venue, city, region, organizer, influencer, genre, instagramHandle, ticketLink</code><br />
+                    Date format: <code className="text-xs">YYYY-MM-DD</code> &nbsp;·&nbsp; Time format: <code className="text-xs">HH:MM</code>
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={downloadCsvTemplate} className="border-white/20 hover:bg-white/10 text-white/70">
+                      <Download className="w-3.5 h-3.5 mr-1.5" /> Download Template
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => csvInputRef.current?.click()} className="border-white/20 hover:bg-white/10 text-white/70">
+                      <Upload className="w-3.5 h-3.5 mr-1.5" /> Choose CSV File
+                    </Button>
+                    <input
+                      ref={csvInputRef}
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = ""; }}
+                    />
+                  </div>
+
+                  {csvErrors.length > 0 && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-1">
+                      {csvErrors.map((err, i) => <p key={i} className="text-red-400 text-xs">{err}</p>)}
+                    </div>
+                  )}
+
+                  {csvRows.length > 0 && !importResult && (
+                    <>
+                      <p className="text-sm text-white/70">{csvRows.length} row(s) ready to import. Preview (first 5):</p>
+                      <div className="overflow-x-auto rounded-lg border border-white/10">
+                        <table className="text-xs w-full">
+                          <thead>
+                            <tr className="border-b border-white/10 bg-white/5 text-muted-foreground">
+                              {["name","date","time","venue","city","region"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {csvRows.slice(0, 5).map((row, i) => (
+                              <tr key={i} className="border-b border-white/5">
+                                {["name","date","time","venue","city","region"].map(h => (
+                                  <td key={h} className="px-3 py-2 text-white/80 whitespace-nowrap">{row[h] || "—"}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                  {importResult && (
+                    <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 flex items-center gap-3">
+                      <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                      <p className="text-green-400 text-sm font-medium">
+                        {importResult.imported} event{importResult.imported !== 1 ? "s" : ""} imported, {importResult.skipped} duplicate{importResult.skipped !== 1 ? "s" : ""} skipped
+                      </p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportResult(null); }} className="border-white/20 text-white/70">
+                    {importResult ? "Close" : "Cancel"}
+                  </Button>
+                  {csvRows.length > 0 && !importResult && (
+                    <Button onClick={submitBulkImport} className="bg-primary hover:bg-primary/90 font-semibold">
+                      Import {csvRows.length} Event{csvRows.length !== 1 ? "s" : ""}
+                    </Button>
+                  )}
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </>
         )}
 

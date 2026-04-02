@@ -63,6 +63,7 @@ export interface IStorage {
   createEvent(event: InsertEvent): Promise<Event>;
   updateEvent(id: number, event: Partial<InsertEvent>): Promise<Event>;
   deleteEvent(id: number): Promise<void>;
+  bulkImportEvents(rows: InsertEvent[]): Promise<{ imported: number; skipped: number }>;
 
   // Admin users
   createAdminUser(data: Partial<InsertAdminUser>): Promise<AdminUser>;
@@ -205,6 +206,23 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEvent(id: number): Promise<void> {
     await db.delete(events).where(eq(events.id, id));
+  }
+
+  async bulkImportEvents(rows: InsertEvent[]): Promise<{ imported: number; skipped: number }> {
+    let imported = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      const existing = await db.select({ id: events.id }).from(events).where(
+        eq(events.title, row.title)
+      ).limit(1);
+      if (existing.length > 0) {
+        skipped++;
+      } else {
+        await db.insert(events).values(row);
+        imported++;
+      }
+    }
+    return { imported, skipped };
   }
 
   // ── Admin users ───────────────────────────────────────────────────────
