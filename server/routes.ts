@@ -269,6 +269,105 @@ export async function registerRoutes(
       } catch (emailError) {
         console.error("Email notification failed:", emailError);
       }
+      // Confirmation email to the submitter
+      try {
+        await transporter.sendMail({
+          from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+          to: input.email,
+          subject: `We received your submission! 🎉 — Central Group Events`,
+          html: `
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head>
+            <body style="margin:0;padding:0;background:#0a0a0a;font-family:Arial,sans-serif;">
+              <div style="max-width:600px;margin:0 auto;background:#111111;border-radius:12px;overflow:hidden;">
+                <!-- Header -->
+                <div style="background:#0a0a0a;padding:32px;text-align:center;border-bottom:1px solid #222;">
+                  <img src="https://www.centralgroupevents.com/favicon.png" alt="Central Group Events" style="height:64px;width:auto;" />
+                </div>
+                <!-- Body -->
+                <div style="padding:40px 32px;">
+                  <h1 style="color:#ffffff;font-size:24px;margin:0 0 16px;">Thanks for submitting your event!</h1>
+                  <p style="color:#cccccc;font-size:15px;line-height:1.6;margin:0 0 32px;">
+                    Hey ${input.contactName || "there"}, we've received your event submission and will review it shortly. Here's a summary of what you submitted:
+                  </p>
+                  <!-- Summary Table -->
+                  <table style="width:100%;border-collapse:collapse;margin-bottom:32px;">
+                    <tr style="border-bottom:1px solid #222;">
+                      <td style="padding:12px 0;color:#999;font-size:14px;width:42%;">Event Name</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;font-weight:bold;">${input.eventName || "Not provided"}</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #222;">
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Venue</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.venueName}</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #222;">
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Event Date</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.eventDate}</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #222;">
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Event Time</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.eventTime || "Not provided"}</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #222;">
+                      <td style="padding:12px 0;color:#999;font-size:14px;">City</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.city || "Not provided"}</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #222;">
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Region</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.region}</td>
+                    </tr>
+                    <tr style="border-bottom:1px solid #222;">
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Event Type</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.eventType}${input.eventTypeOther ? ` — ${input.eventTypeOther}` : ""}</td>
+                    </tr>
+                    ${input.instagramHandle ? `
+                    <tr style="border-bottom:1px solid #222;">
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Instagram Handle</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.instagramHandle}</td>
+                    </tr>` : ""}
+                  </table>
+                  <p style="color:#cccccc;font-size:15px;line-height:1.6;margin:0 0 32px;">
+                    Our team will be in touch within 24–48 hours. In the meantime, stay connected with us on social media for the latest NJ events!
+                  </p>
+                  <!-- Social Buttons -->
+                  <table style="width:100%;margin-bottom:40px;">
+                    <tr>
+                      <td style="text-align:center;padding:0 6px;">
+                        <a href="https://www.instagram.com/centralgroupevents/" target="_blank"
+                           style="display:inline-block;background:#E1306C;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:bold;">
+                          Instagram
+                        </a>
+                      </td>
+                      <td style="text-align:center;padding:0 6px;">
+                        <a href="https://www.tiktok.com/@centralgroupevents" target="_blank"
+                           style="display:inline-block;background:#010101;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:bold;border:1px solid #333;">
+                          TikTok
+                        </a>
+                      </td>
+                      <td style="text-align:center;padding:0 6px;">
+                        <a href="https://www.facebook.com/p/Central-Group-Events-61551661541206/" target="_blank"
+                           style="display:inline-block;background:#1877F2;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:bold;">
+                          Facebook
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+                <!-- Footer -->
+                <div style="background:#0a0a0a;padding:24px 32px;text-align:center;border-top:1px solid #222;">
+                  <p style="color:#555;font-size:12px;margin:0;">
+                    © Central Group Events | centralgroupevents@gmail.com | centralgroupevents.com
+                  </p>
+                </div>
+              </div>
+            </body>
+            </html>
+          `,
+        });
+      } catch (confirmEmailError) {
+        console.error("Confirmation email to submitter failed:", confirmEmailError);
+      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({

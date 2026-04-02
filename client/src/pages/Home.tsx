@@ -651,7 +651,7 @@ export default function Home() {
                         <Button
                           variant="outline"
                           className="w-full h-10 rounded-xl border-white/20 hover:bg-white/10 text-white text-sm"
-                          onClick={() => document.getElementById("book")?.scrollIntoView({ behavior: "smooth" })}
+                          onClick={() => window.open("https://calendly.com/centralgroupevents/30min", "_blank")}
                           data-testid="button-get-quote-custom"
                         >
                           Get a Quote
