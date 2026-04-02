@@ -126,7 +126,7 @@ export default function Blog() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SEO
-        title="NJ Event Blog & Weekly Newsletter — Central Group Events"
+        title="NJ Weekly Newsletter & Event Roundups — Central Group Events"
         description="Get the weekly NJ event roundup from Central Group Events. Discover the hottest events across North, Central, and South New Jersey every week."
         keywords="NJ events blog, New Jersey weekend events, NJ nightlife guide, weekly events New Jersey, things to do NJ this weekend"
         canonical="https://www.centralgroupevents.com/blog"
@@ -143,10 +143,10 @@ export default function Blog() {
       {/* Header */}
       <section className="pt-28 pb-12 text-center px-4">
         <div className="max-w-3xl mx-auto">
-          <p className="text-sm font-bold text-primary tracking-widest uppercase mb-3">The CGE Blog</p>
+          <p className="text-sm font-bold text-primary tracking-widest uppercase mb-3">The CGE Newsletter</p>
           <h1 className="text-4xl md:text-6xl font-black mb-4">NJ Nightlife, Served Weekly.</h1>
           <p className="text-lg text-muted-foreground">
-            Weekly event roundups, NJ nightlife news, and more.
+            Weekly NJ event roundups delivered to your inbox. Subscribe for free.
           </p>
         </div>
       </section>
