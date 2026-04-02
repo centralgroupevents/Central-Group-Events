@@ -133,10 +133,11 @@ export class DatabaseStorage implements IStorage {
     let skipped = 0;
     for (const row of rows) {
       const email = row.email.trim().toLowerCase();
+      const name = email.split("@")[0] || email;
       try {
         const result = await db
           .insert(newsletterSubscribers)
-          .values({ email, region: row.region || "All" })
+          .values({ email, name, region: row.region || "All" })
           .onConflictDoNothing()
           .returning();
         if (result.length > 0) {
@@ -148,7 +149,7 @@ export class DatabaseStorage implements IStorage {
         }
       } catch (err) {
         skipped++;
-        console.log(`[subscriber-import] ✗ error for ${email}:`, err);
+        console.error(`[subscriber-import] ✗ error for ${email}:`, err);
       }
     }
     return { imported, skipped };

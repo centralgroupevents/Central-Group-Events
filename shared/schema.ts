@@ -6,8 +6,8 @@ import { z } from "zod";
 
 export const newsletterSubscribers = pgTable("newsletter_subscribers", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull(),
+  name: text("name").notNull().default(""),
+  email: text("email").notNull().unique(),
   region: text("region"),
   referrer: text("referrer"),
   hasAccess: boolean("has_access").default(true),

@@ -1,0 +1,10 @@
+The subscriber import is saying "44 skipped (already subscribed)" but the subscribers are NOT showing in the subscribers table. This means the duplicate check is incorrectly matching emails that don't exist. Debug and fix this:
+
+1. Check the duplicate detection logic in POST /api/subscribers/import — it is likely querying the wrong table, using a broken SQL query, or comparing against the wrong field
+2. Log the exact SQL query being used for duplicate checking and its result for at least one email (e.g. anniee.xo.17@gmail.com)
+3. Check if there is more than one subscribers table or if the import route is checking against a different table than the one the subscribers tab displays from
+4. Fix the duplicate check so it correctly queries the actual subscribers table
+5. After fixing, manually attempt to import these emails and confirm they are inserted and show up in the subscribers list:
+anniee.xo.17@gmail.com, timilehin1108@gmail.com, sostcyr@gmail.com, michaelemeam24@gmail.com, maaterjayy24@gmail.com, aladyfirst84@yahoo.com, tosin3oladipo@gmail.com, uniteeclubb@gmail.com, brylax93@gmail.com, jax.akinde@gmail.com, sweet5878@gmail.com, joneszakiya13@gmail.com, julianpinnixodrick1@gmail.com, x0gabie@gmail.com, darquittag12@gmail.com, anaisnlawson@gmail.com, ajiacty10@gmail.com, alishacooper904@gmail.com, pokukwajo0@gmail.com, calvinat72@gmail.com, adebanke@gmail.com, ahmednmaram@gmail.com, jolibois.ru@gmail.com, akilah20o6@yahoo.com, yshandadenton@gmail.com, byoplo99@gmail.com, monettamoon@gmail.com, abayneh11@gmail.com, arielrmcaphee@gmail.com, abrahimkenneh@gmail.com, lovered711forever@gmail.com, aagu1999@gmail.com, darnel.m@distinctlymktg.com, dreamsolano@yahoo.com, loveable1130@gmail.com, dasorel@gmail.com, judeulokameje@gmail.com, azara917@gmail.com, nd271634@gmail.com, amolina@thewaterfrontproject.org, destinyskinner1124@gmail.com, jared_mompoint@alumni.brown.edu, cmickey33@gmail.com, myteamfresh@gmail.com
+
+6. Confirm the total subscriber count in the subscribers tab after import
