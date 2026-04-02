@@ -740,11 +740,37 @@ export async function registerRoutes(
     try {
       const rows = req.body;
       if (!Array.isArray(rows)) return res.status(400).json({ message: "Expected an array of { email, region? } objects" });
+
+      console.log(`[subscriber-import] Received ${rows.length} rows from client`);
+
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const valid = rows.filter((r: any) => r && typeof r.email === "string" && emailRegex.test(r.email.trim()));
-      const result = await storage.importSubscribers(valid.map((r: any) => ({ email: r.email.trim().toLowerCase(), region: r.region || undefined })));
-      res.json(result);
+      const invalidRows: string[] = [];
+      const valid = rows.filter((r: any) => {
+        if (!r || typeof r.email !== "string") {
+          invalidRows.push("(no email field)");
+          return false;
+        }
+        const email = r.email.trim().toLowerCase();
+        if (!emailRegex.test(email)) {
+          invalidRows.push(email || "(empty)");
+          return false;
+        }
+        return true;
+      });
+
+      if (invalidRows.length > 0) {
+        console.log(`[subscriber-import] ${invalidRows.length} rows failed regex validation:`, invalidRows.slice(0, 10));
+      }
+      console.log(`[subscriber-import] ${valid.length} rows passed validation, sending to storage`);
+
+      const result = await storage.importSubscribers(
+        valid.map((r: any) => ({ email: r.email.trim().toLowerCase(), region: r.region || undefined }))
+      );
+
+      console.log(`[subscriber-import] Result: ${result.imported} imported, ${result.skipped} skipped`);
+      res.json({ ...result, invalidFormat: invalidRows.length });
     } catch (err) {
+      console.error("[subscriber-import] Error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });

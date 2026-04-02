@@ -341,7 +341,7 @@ function SubscribersTab() {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [pasteText, setPasteText] = useState("");
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; invalidFormat?: number } | null>(null);
 
   const { data: subscribers = [], isLoading } = useQuery<Subscriber[]>({
     queryKey: ["/api/admin/subscribers"],
@@ -377,37 +377,60 @@ function SubscribersTab() {
     setImportResult(null);
     try {
       let rows: Array<{ email: string }> = [];
+
       if (importTab === "csv" && csvFile) {
         const text = await csvFile.text();
-        const lines = text.split(/\r?\n/).filter(Boolean);
-        const header = lines[0].toLowerCase().split(",").map((h) => h.trim().replace(/"/g, ""));
-        const emailIdx = header.findIndex((h) => h === "email");
-        if (emailIdx === -1) {
-          toast({ title: "CSV Error", description: "No 'email' column found.", variant: "destructive" });
+
+        // Use papaparse for robust CSV parsing (handles quoted commas, Ghost exports, etc.)
+        const parsed = Papa.parse<Record<string, string>>(text, {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: (h) => h.trim().toLowerCase(),
+        });
+
+        console.log("[subscriber-import] CSV headers detected:", parsed.meta.fields);
+        console.log("[subscriber-import] CSV total data rows:", parsed.data.length);
+
+        if (!parsed.meta.fields?.includes("email")) {
+          toast({
+            title: "CSV Error",
+            description: `No 'email' column found. Columns found: ${parsed.meta.fields?.join(", ") || "none"}`,
+            variant: "destructive",
+          });
           setImporting(false);
           return;
         }
-        rows = lines.slice(1).map((line) => {
-          const cols = line.split(",").map((c) => c.trim().replace(/"/g, ""));
-          return { email: cols[emailIdx] };
-        }).filter((r) => r.email);
+
+        rows = parsed.data
+          .map((row) => ({ email: (row["email"] || "").trim().toLowerCase() }))
+          .filter((r) => r.email.includes("@"));
+
+        console.log(`[subscriber-import] CSV valid email rows after filter: ${rows.length}`);
+
       } else if (importTab === "paste") {
         rows = pasteText
           .split(/[\r\n,;]+/)
-          .map((e) => e.trim())
+          .map((e) => e.trim().toLowerCase())
           .filter((e) => e.includes("@"))
           .map((email) => ({ email }));
+
+        console.log(`[subscriber-import] Paste valid emails parsed: ${rows.length}`);
       }
+
       if (rows.length === 0) {
         toast({ title: "No emails found", description: "Please provide at least one valid email.", variant: "destructive" });
         setImporting(false);
         return;
       }
+
+      console.log(`[subscriber-import] Sending ${rows.length} rows to backend`);
       const res = await apiRequest("POST", "/api/subscribers/import", rows);
       const result = await res.json();
+      console.log("[subscriber-import] Result:", result);
       setImportResult(result);
       qc.invalidateQueries({ queryKey: ["/api/admin/subscribers"] });
-    } catch {
+    } catch (err) {
+      console.error("[subscriber-import] Error:", err);
       toast({ title: "Import failed", description: "An error occurred during import.", variant: "destructive" });
     } finally {
       setImporting(false);
@@ -554,9 +577,14 @@ function SubscribersTab() {
           )}
 
           {importResult && (
-            <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 text-sm">
+            <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 text-sm space-y-0.5">
               <p className="text-green-400 font-semibold">✓ {importResult.imported} imported</p>
-              {importResult.skipped > 0 && <p className="text-white/50 mt-0.5">{importResult.skipped} skipped (duplicates or invalid)</p>}
+              {importResult.skipped > 0 && (
+                <p className="text-white/50">⟳ {importResult.skipped} skipped (already subscribed)</p>
+              )}
+              {importResult.invalidFormat > 0 && (
+                <p className="text-yellow-500/80">⚠ {importResult.invalidFormat} invalid email format (ignored)</p>
+              )}
             </div>
           )}
 

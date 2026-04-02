@@ -132,19 +132,23 @@ export class DatabaseStorage implements IStorage {
     let imported = 0;
     let skipped = 0;
     for (const row of rows) {
+      const email = row.email.trim().toLowerCase();
       try {
         const result = await db
           .insert(newsletterSubscribers)
-          .values({ email: row.email, region: row.region || "All" })
+          .values({ email, region: row.region || "All" })
           .onConflictDoNothing()
           .returning();
         if (result.length > 0) {
           imported++;
+          console.log(`[subscriber-import] ✓ inserted: ${email}`);
         } else {
           skipped++;
+          console.log(`[subscriber-import] ⟳ skipped (duplicate): ${email}`);
         }
-      } catch {
+      } catch (err) {
         skipped++;
+        console.log(`[subscriber-import] ✗ error for ${email}:`, err);
       }
     }
     return { imported, skipped };
