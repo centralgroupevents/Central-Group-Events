@@ -360,7 +360,13 @@ export default function Book() {
   }
 
   function touch(key: keyof WizardData) {
-    setTouched((prev) => new Set([...prev, key]));
+    setTouched((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set<keyof WizardData>();
+      prev.forEach((k) => next.add(k));
+      next.add(key);
+      return next;
+    });
   }
 
   function getFieldError(key: keyof WizardData): string | undefined {
