@@ -852,7 +852,7 @@ export default function Book() {
                           target="_blank"
                           rel="noopener noreferrer"
                           data-testid="button-pay-now"
-                          className="block w-full text-center bg-[#00D632] hover:bg-[#00D632]/90 text-black font-bold text-base py-3.5 rounded-xl transition-colors mb-4"
+                          className="block w-full text-center bg-[#00D632] hover:bg-[#00D632]/90 text-black font-bold text-lg py-4 rounded-xl transition-colors mb-4"
                         >
                           Pay Now via CashApp
                         </a>
