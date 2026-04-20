@@ -15,11 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 
-import { useEvents, useSubscribeNewsletter, useCreateBooking } from "@/hooks/use-landing";
+import { useEvents, useSubscribeNewsletter } from "@/hooks/use-landing";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
@@ -29,32 +27,6 @@ const newsletterSchema = z.object({
   name: z.string().min(2, "Name is required"),
   email: z.string().email("Invalid email address"),
   region: z.string().optional(),
-});
-
-const standardBookingSchema = z.object({
-  mode: z.string(),
-  eventName: z.string().min(1, "Event Name is required"),
-  venueName: z.string().min(2, "Venue Name is required").max(100),
-  email: z.string().email("Invalid email"),
-  eventDate: z.string().min(1, "Event Date is required"),
-  eventTime: z.string().min(1, "Event Time is required"),
-  city: z.string().min(1, "City is required"),
-  region: z.string().min(1, "Region is required"),
-  eventType: z.string().min(1, "Event Type is required"),
-  eventTypeOther: z.string().optional(),
-  contactName: z.string().optional(),
-  phone: z.string().optional(),
-  budgetRange: z.string().optional(),
-  instagramHandle: z.string().max(50).optional(),
-  agreedToTerms: z.boolean().refine((val) => val === true, {
-    message: "You must agree to the Terms & Conditions to proceed",
-  }),
-});
-
-const premiumBookingSchema = standardBookingSchema.extend({
-  contactName: z.string().min(2, "Contact Name is required"),
-  phone: z.string().min(10, "Valid phone number required").max(20),
-  budgetRange: z.string().min(1, "Budget Range is required"),
 });
 
 const fadeIn = {
@@ -197,7 +169,7 @@ export default function Home() {
               className="w-full sm:w-auto h-14 px-8 text-lg rounded-2xl bg-white text-black hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105 transition-all duration-300 font-semibold"
               asChild
             >
-              <a href="#book">
+              <a href="/book">
                 Promote Your Event <ArrowRight className="ml-2 w-5 h-5" />
               </a>
             </Button>
@@ -751,29 +723,24 @@ export default function Home() {
         </div>
       </section>
 
-      {/* BOOKING FORM SECTION */}
+      {/* BOOKING CTA SECTION */}
       <section id="book" className="py-24 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-[50rem] h-[50rem] bg-primary/5 rounded-full blur-[100px] pointer-events-none" />
-
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <motion.div {...fadeIn} className="text-center mb-8">
-            <h2 className="text-3xl md:text-5xl font-black mb-4">Promote Your Event</h2>
-            <p className="text-lg text-muted-foreground">
-              This form is only for our event calendar listing. Please refer to our{" "}
-              <a href="#pricing" className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors">
-                packages
-              </a>{" "}
-              for premium promotion.
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+          <motion.div {...fadeIn}>
+            <h2 className="text-3xl md:text-5xl font-black mb-4">Ready to promote your event?</h2>
+            <p className="text-lg text-muted-foreground mb-8">
+              Join hundreds of NJ venues and promoters who trust CGE to fill their rooms.
             </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="glass-panel p-6 md:p-10 rounded-3xl border-white/10 shadow-2xl"
-          >
-            <BookingFormPanel />
+            <Button
+              size="lg"
+              className="h-14 px-10 text-lg rounded-2xl bg-white text-black hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:scale-105 transition-all duration-300 font-semibold"
+              asChild
+            >
+              <a href="/book" data-testid="button-get-started">
+                Get Started <ArrowRight className="ml-2 w-5 h-5" />
+              </a>
+            </Button>
           </motion.div>
         </div>
       </section>
@@ -814,352 +781,5 @@ export default function Home() {
         </div>
       </footer>
     </div>
-  );
-}
-
-function BookingFormPanel() {
-  const [, navigate] = useLocation();
-  const { toast } = useToast();
-  const bookingMutation = useCreateBooking();
-
-  const bookingForm = useForm<z.infer<typeof standardBookingSchema>>({
-    resolver: zodResolver(standardBookingSchema),
-    defaultValues: {
-      mode: "Standard",
-      eventName: "",
-      venueName: "",
-      contactName: "",
-      phone: "",
-      email: "",
-      eventDate: "",
-      eventTime: "",
-      city: "",
-      region: "",
-      eventType: "",
-      eventTypeOther: "",
-      budgetRange: undefined,
-      instagramHandle: "",
-      agreedToTerms: false,
-    },
-  });
-
-  const [termsModalOpen, setTermsModalOpen] = useState(false);
-
-  const watchedEventType = bookingForm.watch("eventType");
-
-  const onSubmit = (data: z.infer<typeof standardBookingSchema>) => {
-    bookingMutation.mutate({ ...data, mode: "Standard" }, {
-      onSuccess: () => {
-        navigate("/booking-confirmation");
-      },
-      onError: (err) => {
-        toast({
-          variant: "destructive",
-          title: "Submission failed",
-          description: err.message || "Please try again later.",
-        });
-      },
-    });
-  };
-
-  const inputClass = "bg-black/40 border-white/10 h-12 rounded-xl";
-
-  return (
-    <>
-    <Form {...bookingForm}>
-      <form onSubmit={bookingForm.handleSubmit(onSubmit)} className="space-y-6">
-
-        {/* Event Name (full width) */}
-        <FormField control={bookingForm.control} name="eventName" render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-white/80">Event Name *</FormLabel>
-            <FormControl><Input data-testid="input-event-name" className={inputClass} placeholder="e.g. Summer Rooftop Bash" {...field} /></FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
-
-        {/* Venue Name + Contact Name */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField control={bookingForm.control} name="venueName" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-white/80">Venue Name *</FormLabel>
-              <FormControl><Input data-testid="input-venue-name" className={inputClass} placeholder="e.g. Club Luxe" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={bookingForm.control} name="contactName" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-white/80">
-                Contact Name <span className="text-muted-foreground text-xs ml-1">(Optional)</span>
-              </FormLabel>
-              <FormControl><Input data-testid="input-contact-name" className={inputClass} placeholder="Your full name" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-        </div>
-
-        {/* Email + Phone */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField control={bookingForm.control} name="email" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-white/80">Email *</FormLabel>
-              <FormControl><Input data-testid="input-email" type="email" className={inputClass} placeholder="you@example.com" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={bookingForm.control} name="phone" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-white/80">
-                Phone <span className="text-muted-foreground text-xs ml-1">(Optional)</span>
-              </FormLabel>
-              <FormControl><Input data-testid="input-phone" type="tel" className={inputClass} placeholder="(201) 555-0100" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-        </div>
-
-        {/* Event Date + Event Time */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField control={bookingForm.control} name="eventDate" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-white/80">Event Date *</FormLabel>
-              <FormControl><Input data-testid="input-event-date" type="date" className={inputClass} {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={bookingForm.control} name="eventTime" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-white/80">Event Time *</FormLabel>
-              <FormControl><Input data-testid="input-event-time" type="time" className={inputClass} {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-        </div>
-
-        {/* City + Region */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField control={bookingForm.control} name="city" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-white/80">City *</FormLabel>
-              <FormControl><Input data-testid="input-city" className={inputClass} placeholder="e.g. Newark" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={bookingForm.control} name="region" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-white/80">Region *</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger data-testid="select-region" className={inputClass}>
-                    <SelectValue placeholder="Select region" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent className="bg-secondary border-white/10 text-white">
-                  <SelectItem value="North NJ">North NJ</SelectItem>
-                  <SelectItem value="Central NJ">Central NJ</SelectItem>
-                  <SelectItem value="South NJ">South NJ</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )} />
-        </div>
-
-        {/* Event Type */}
-        <FormField control={bookingForm.control} name="eventType" render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-white/80">Event Type *</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
-              <FormControl>
-                <SelectTrigger data-testid="select-event-type" className={inputClass}>
-                  <SelectValue placeholder="Select event type" />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent className="bg-secondary border-white/10 text-white">
-                <SelectItem value="Brunch">Brunch</SelectItem>
-                <SelectItem value="Concert">Concert</SelectItem>
-                <SelectItem value="Dance Class">Dance Class</SelectItem>
-                <SelectItem value="DJ Set">DJ Set</SelectItem>
-                <SelectItem value="Festival">Festival</SelectItem>
-                <SelectItem value="Happy Hour">Happy Hour</SelectItem>
-                <SelectItem value="Live Music">Live Music</SelectItem>
-                <SelectItem value="Music">Music</SelectItem>
-                <SelectItem value="Party">Party</SelectItem>
-                <SelectItem value="Special Event">Special Event</SelectItem>
-                <SelectItem value="Other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )} />
-
-        {/* Other Event Type - conditional */}
-        {watchedEventType === "Other" && (
-          <FormField control={bookingForm.control} name="eventTypeOther" render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-white/80">Please describe your event type</FormLabel>
-              <FormControl>
-                <Input
-                  data-testid="input-event-type-other"
-                  className={inputClass}
-                  placeholder="Briefly describe your event type"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-        )}
-
-        {/* Instagram Handle */}
-        <FormField control={bookingForm.control} name="instagramHandle" render={({ field }) => (
-          <FormItem>
-            <FormLabel className="text-white/80">Instagram Handle <span className="text-muted-foreground text-xs ml-1">(Optional)</span></FormLabel>
-            <FormControl>
-              <Input
-                data-testid="input-instagram"
-                placeholder="@yourvenue"
-                className={inputClass}
-                {...field}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )} />
-
-        {/* Upload Flyer */}
-        <FormItem>
-          <FormLabel className="text-white/80">Upload Event Flyer <span className="text-muted-foreground text-xs ml-1">(Optional)</span></FormLabel>
-          <FormControl>
-            <Input
-              data-testid="input-flyer"
-              type="file"
-              accept="image/*"
-              className="bg-black/40 border-white/10 h-12 rounded-xl text-white/80 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary/20 file:text-primary file:font-medium hover:file:bg-primary/30 cursor-pointer"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) console.log("Flyer selected:", file.name);
-              }}
-            />
-          </FormControl>
-          <p className="text-xs text-muted-foreground mt-1">Accepted formats: JPG, PNG, GIF, WEBP (max 5MB)</p>
-        </FormItem>
-
-        {/* Terms & Conditions checkbox */}
-        <FormField
-          control={bookingForm.control}
-          name="agreedToTerms"
-          render={({ field }) => (
-            <FormItem>
-              <div className="flex items-start gap-3">
-                <FormControl>
-                  <Checkbox
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                    data-testid="checkbox-terms"
-                    className="mt-0.5 border-white/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                  />
-                </FormControl>
-                <FormLabel className="text-white/80 text-sm font-normal leading-relaxed cursor-pointer" onClick={() => bookingForm.setValue("agreedToTerms", !field.value)}>
-                  I have read and agree to the{" "}
-                  <button
-                    type="button"
-                    data-testid="link-terms"
-                    onClick={(e) => { e.stopPropagation(); setTermsModalOpen(true); }}
-                    className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
-                  >
-                    Terms &amp; Conditions
-                  </button>
-                  {" "}before submitting.
-                </FormLabel>
-              </div>
-              <FormMessage className="ml-7" />
-            </FormItem>
-          )}
-        />
-
-        <Button
-          type="submit"
-          size="lg"
-          data-testid="button-submit-booking"
-          disabled={bookingMutation.isPending}
-          className="w-full h-14 text-lg rounded-xl bg-primary hover:bg-primary/90 text-white font-bold mt-4"
-        >
-          {bookingMutation.isPending
-            ? <Loader2 className="w-6 h-6 animate-spin" />
-            : "Submit Listing"
-          }
-        </Button>
-      </form>
-    </Form>
-
-    {/* Terms & Conditions Modal */}
-    <Dialog open={termsModalOpen} onOpenChange={setTermsModalOpen}>
-      <DialogContent className="bg-secondary border border-white/10 text-white max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl p-0">
-        <DialogHeader className="sticky top-0 bg-secondary border-b border-white/10 px-8 py-5 z-10">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <DialogTitle className="text-2xl font-black text-white">Terms &amp; Conditions</DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">Central Group Events — Event Submission Agreement</p>
-            </div>
-            <button
-              onClick={() => setTermsModalOpen(false)}
-              data-testid="button-close-terms"
-              className="shrink-0 p-1.5 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </DialogHeader>
-
-        <div className="px-8 py-6 space-y-7 text-sm">
-          {[
-            {
-              heading: "Please Read Before Proceeding",
-              body: "Thank you for submitting your event to be featured on Central Group Events. By completing this form, you acknowledge that you have read, understood, and agree to the terms outlined below. Central Group Events reserves the right to accept or decline any submission at its sole discretion.",
-            },
-            {
-              heading: "Submission Deadlines",
-              body: "All event promotion submissions are subject to a minimum 7-day lead time prior to the event date. Central Group Events operates on a weekly posting schedule, and available slots fill quickly. Submissions are accepted on a first-come, first-served basis. If your event coincides with a special occasion, holiday, or time-sensitive date, we strongly recommend submitting at least 2 weeks in advance and noting the time-sensitive nature in your submission. Late submissions may not be accommodated, and Central Group Events is not responsible for events that cannot be featured due to timing.",
-            },
-            {
-              heading: "Inclusion Policy",
-              body: "Central Group Events is a curated platform. A limited number of events may be featured in any given week, and submission does not guarantee inclusion. Factors that may affect inclusion include, but are not limited to: paid promotion slots being filled for the requested week, incomplete or missing submission information, unclear event concepts, insufficient contact details, or content determined by our staff to be unsafe, inappropriate, or inconsistent with our community standards.",
-            },
-            {
-              heading: "Paid Promotions",
-              body: "By selecting a paid promotion package, you agree to be contacted by Central Group Events via the email address provided to confirm your promotion details, schedule a posting date, and receive an invoice for payment. Promotion content will be created and scheduled following confirmation and payment. Central Group Events may, at its discretion, arrange to personally experience your event or service prior to promotion. All paid promotions are subject to availability.",
-            },
-            {
-              heading: "Brand Partnerships",
-              body: "This submission form is intended for individual promoters and community-level organizations. Large brands or organizations seeking broader partnership opportunities are encouraged to reach out directly via email at centralgroupevents@gmail.com for custom pricing and partnership inquiries. Submissions from large brands through this form may not be processed.",
-            },
-            {
-              heading: "Contact",
-              body: "For questions regarding your submission or these terms, please contact us at centralgroupevents@gmail.com.",
-            },
-          ].map(({ heading, body }) => (
-            <div key={heading}>
-              <h4 className="font-bold text-white mb-2">{heading}</h4>
-              <p className="text-white/60 leading-relaxed">{body}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="sticky bottom-0 bg-secondary border-t border-white/10 px-8 py-4">
-          <Button
-            onClick={() => {
-              bookingForm.setValue("agreedToTerms", true, { shouldValidate: true });
-              setTermsModalOpen(false);
-            }}
-            data-testid="button-i-understand"
-            className="w-full bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl h-11"
-          >
-            I Understand
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-    </>
   );
 }

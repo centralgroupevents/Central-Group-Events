@@ -14,11 +14,13 @@ import BlogPost from "@/pages/BlogPost";
 import FAQ from "@/pages/FAQ";
 import Welcome from "@/pages/Welcome";
 import AcceptInvite from "@/pages/AcceptInvite";
+import Book from "@/pages/Book";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/book" component={Book} />
       <Route path="/booking-confirmation" component={BookingConfirmation} />
       <Route path="/legal/terms" component={Terms} />
       <Route path="/legal/privacy" component={Privacy} />

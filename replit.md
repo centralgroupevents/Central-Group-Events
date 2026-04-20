@@ -25,7 +25,7 @@ Preferred communication style: Simple, everyday language.
 
 - **Framework**: React 18 with TypeScript, bundled via Vite
 - **Routing**: Wouter (lightweight client-side router)
-  - Routes: `/`, `/booking-confirmation`, `/legal/terms`, `/legal/privacy`, `/admin`, `/blog`, `/blog/:slug`, `/faq`, `/welcome`, `/accept-invite`, `*` (404)
+  - Routes: `/`, `/book`, `/booking-confirmation`, `/legal/terms`, `/legal/privacy`, `/admin`, `/blog`, `/blog/:slug`, `/faq`, `/welcome`, `/accept-invite`, `*` (404)
 - **UI Components**: shadcn/ui (New York style) built on Radix UI primitives
 - **Styling**: Tailwind CSS with CSS variables; forced dark mode with purple (`--primary`) and gold (`--accent`) brand palette
 - **Fonts**: Outfit (display) + Plus Jakarta Sans (body), via Google Fonts
@@ -35,7 +35,8 @@ Preferred communication style: Simple, everyday language.
 - **Rich Text Editor**: Tiptap (with StarterKit, Underline, Link, Heading extensions)
 
 Key pages:
-- `client/src/pages/Home.tsx` — All main sections (hero, services, events, pricing, booking, newsletter)
+- `client/src/pages/Home.tsx` — All main sections (hero, services, events, pricing, newsletter, CTA → /book)
+- `client/src/pages/Book.tsx` — 6-step booking wizard (package selection, event details, logistics, contact info, T&C, payment via CashApp)
 - `client/src/pages/Blog.tsx` — Blog listing with cover images, gating badges, newsletter CTA
 - `client/src/pages/BlogPost.tsx` — Single post with rich text viewer, subscriber gating wall, comments
 - `client/src/pages/FAQ.tsx` — Accordion FAQ page
