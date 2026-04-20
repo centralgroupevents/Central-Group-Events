@@ -1,0 +1,148 @@
+Build a multi-step booking wizard at a new dedicated route /book. This completely replaces the existing "Promote Your Event" booking form section on the homepage — remove that section from the homepage and replace it with a simple centered CTA that says "Ready to promote your event?" with a "Get Started" button that links to /book.
+
+---
+
+ROUTE & PAGE:
+- Create a new page at /book
+- Add /book to the React router
+- Dark themed, matching the rest of the site
+- CGE logo at the top, centered
+- Page title: "Let's Promote Your Event"
+- Subtitle: "Answer a few quick questions and we'll get you set up."
+
+---
+
+WIZARD STRUCTURE:
+The wizard has 6 steps total. Show a progress bar at the top with clickable step indicators labeled:
+1. Package
+2. Event Details
+3. Contact Info
+4. Logistics
+5. Terms
+6. Payment
+
+Users can click completed steps to go back. Back/Next buttons at the bottom of each step. "Next" button is disabled until required fields on the current step are filled.
+
+---
+
+STEP 1 — "Which package are you going with?"
+Show the three packages as selectable cards side by side:
+
+Starter — $70
+- Social Media Page Post (IG, TikTok, FB)
+- Instagram & FB Story Post
+- Email Blast
+- Newsletter Listing
+
+Growth — $150 (show "Most Popular" badge)
+- Everything in Starter
+- Premium Newsletter Placement
+- Event Calendar Feature
+- $50 Ad Credit
+- SMS Marketing
+- Consultation
+
+Custom — $300+
+- Everything in Growth
+- Influencer Reach
+- $100 Ad Credit
+
+Clicking a card selects it (highlighted purple border). Must select one to proceed.
+
+---
+
+STEP 2 — "Tell us about your event" (2 fields)
+- Event Name (text input, required)
+- Event Type (select dropdown: Brunch, Concert, Dance Class, DJ Set, Festival, Happy Hour, Live Music, Party, Special Event, Other)
+- If "Other" selected, show a text input: "Describe your event type"
+
+---
+
+STEP 3 — "When and where?" (2 fields per screen)
+Screen A:
+- Event Date (date picker, required)
+- Event Time (time input, required)
+
+Screen B (next within same step):
+- Venue Name (text input, required)
+- City (text input, required)
+- Region (select: North NJ / Central NJ / South NJ, required)
+
+Note: Step 3 has two sub-screens. The step indicator stays on Step 3 but the content changes. Show "3a" and "3b" progress within the step.
+
+---
+
+STEP 4 — "How can we reach you?" (2 fields)
+Screen A:
+- Contact Name (text input, required)
+- Email Address (email input, required, validated)
+
+Screen B:
+- Phone Number (tel input, required for Growth and Custom, optional for Starter — label it accordingly)
+- Instagram Handle (text input, required, @ prefix hint)
+
+---
+
+STEP 5 — "Almost there — please review our terms"
+- Show the full Terms & Conditions content (same content as the modal from the booking form)
+- Scrollable container, max height 400px
+- Checkbox at the bottom: "I have read and agree to the Terms & Conditions"
+- Cannot proceed without checking the box
+
+---
+
+STEP 6 — "You're almost in! Here's how to complete your booking"
+Show a confirmation summary card on the left:
+- Selected package + price
+- Event Name
+- Event Date + Time
+- Venue + City + Region
+- Contact Name + Email
+
+On the right side:
+- Heading: "Complete Your Payment"
+- Subtext: "Send your payment via CashApp to lock in your slot. Once received, our team will reach out within 24 hours to confirm your promotion."
+- A large green "Pay Now" button linking to https://cash.app/$centralgroupevents in a new tab
+- Payment amount shown clearly based on selected package ($70, $150, or $300+)
+- Below the button, instructions in muted text:
+  1. Click "Pay Now" to open CashApp
+  2. Send [amount] to $centralgroupevents
+  3. Include your event name in the payment note
+  4. You'll receive a confirmation email within 24 hours
+- A purple "Book a Strategy Call" button below the instructions linking to https://calendly.com/centralgroupevents/30min in a new tab
+- Subtext under Calendly button: "Optional but recommended — especially for Growth and Custom packages"
+
+---
+
+BACKEND:
+- On reaching Step 6, automatically save the submission to the database (same bookings table as before) with all collected fields plus the selected package/mode
+- Send the confirmation email to the user's email (same email template as previously built — event details + social links + 24hr response promise)
+- Send notification email to centralgroupevents@gmail.com with full submission details
+- This should happen when the user reaches Step 6, not when they click Pay Now
+
+---
+
+VALIDATION:
+- Each step validates its own required fields before allowing Next
+- Show inline red error messages under each field that fails
+- Required fields vary by package:
+  - Phone is required for Growth and Custom, optional for Starter
+  - All other required fields apply to all packages
+
+---
+
+STYLING:
+- Each step slides in from the right (simple CSS transition)
+- Dark themed glass-panel card for the wizard content, max-w-2xl, centered
+- Progress bar at top shows completed steps in purple, current step highlighted, future steps muted
+- Selected package card has a purple border glow
+- Mobile responsive — stack fields vertically on small screens
+
+---
+
+HOMEPAGE:
+- Remove the entire "Promote Your Event" booking form section
+- Replace it with a simple dark-themed CTA section:
+  - Heading: "Ready to promote your event?"
+  - Subtext: "Join hundreds of NJ venues and promoters who trust CGE to fill their rooms."
+  - A single white button: "Get Started" linking to /book
