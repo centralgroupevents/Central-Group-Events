@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import Papa from "papaparse";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -37,6 +37,10 @@ import {
   ImagePlus,
   CheckCircle2,
   FileText,
+  Copy,
+  ChevronDown,
+  ChevronUp,
+  Search,
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 import { SEO } from "@/components/SEO";
@@ -76,6 +80,7 @@ type Booking = {
   eventTypeOther: string | null;
   budgetRange: string | null;
   instagramHandle: string | null;
+  readyToMoveForward: string | null;
   status: string | null;
   createdAt: string | null;
 };
@@ -1523,19 +1528,22 @@ export default function Admin() {
   });
 
   const [bookingStatusFilter, setBookingStatusFilter] = useState<string>("All");
+  const [bookingSearch, setBookingSearch] = useState<string>("");
+  const [bookingSortDir, setBookingSortDir] = useState<"desc" | "asc">("desc");
+  const [expandedBookingId, setExpandedBookingId] = useState<number | null>(null);
 
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery<Booking[]>({
-    queryKey: ["/api/bookings"],
+    queryKey: ["/api/admin/bookings"],
     enabled: !!user && activeTab === "bookings",
   });
 
   const updateBookingStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      const res = await apiRequest("PATCH", `/api/bookings/${id}/status`, { status });
+      const res = await apiRequest("PATCH", `/api/admin/bookings/${id}/status`, { status });
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/bookings"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
     },
     onError: () => toast({ title: "Failed to update status", variant: "destructive" }),
   });
@@ -2076,31 +2084,57 @@ export default function Admin() {
             Completed: "border-purple-500/40 text-purple-400 bg-purple-500/10",
             Cancelled: "border-red-500/40 text-red-400 bg-red-500/10",
           };
-          const filteredBookings = bookingStatusFilter === "All"
-            ? bookings
-            : bookings.filter((b) => (b.status || "New") === bookingStatusFilter);
+
+          const searchLower = bookingSearch.toLowerCase();
+          const filteredBookings = bookings
+            .filter((b) => bookingStatusFilter === "All" || (b.status || "New") === bookingStatusFilter)
+            .filter((b) => {
+              if (!searchLower) return true;
+              return (
+                (b.contactName || "").toLowerCase().includes(searchLower) ||
+                (b.email || "").toLowerCase().includes(searchLower)
+              );
+            })
+            .slice()
+            .sort((a, b) => {
+              const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const db_ = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return bookingSortDir === "desc" ? db_ - da : da - db_;
+            });
 
           return (
             <div className="space-y-4">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-sm text-muted-foreground font-medium">Filter by status:</span>
-                <div className="flex gap-1.5 flex-wrap">
-                  {BOOKING_STATUSES.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setBookingStatusFilter(s)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
-                        bookingStatusFilter === s
-                          ? s === "All"
-                            ? "bg-primary border-primary text-white"
-                            : statusBadge[s] + " opacity-100 border-opacity-100"
-                          : "border-white/10 text-white/40 hover:text-white/60"
-                      }`}
-                      data-testid={`filter-booking-status-${s}`}
-                    >
-                      {s}
-                    </button>
-                  ))}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-3 flex-wrap flex-1">
+                  <span className="text-sm text-muted-foreground font-medium">Filter:</span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {BOOKING_STATUSES.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setBookingStatusFilter(s)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                          bookingStatusFilter === s
+                            ? s === "All"
+                              ? "bg-primary border-primary text-white"
+                              : statusBadge[s] + " opacity-100 border-opacity-100"
+                            : "border-white/10 text-white/40 hover:text-white/60"
+                        }`}
+                        data-testid={`filter-booking-status-${s}`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={bookingSearch}
+                    onChange={(e) => setBookingSearch(e.target.value)}
+                    placeholder="Search name or email…"
+                    className="pl-8 h-8 text-xs bg-secondary/40 border-white/10 text-white placeholder:text-muted-foreground w-52"
+                    data-testid="input-booking-search"
+                  />
                 </div>
               </div>
 
@@ -2109,7 +2143,7 @@ export default function Admin() {
                   <h2 className="font-bold text-white">
                     All Submissions
                     <span className="text-muted-foreground font-normal text-sm ml-2">
-                      ({filteredBookings.length}{bookingStatusFilter !== "All" ? ` ${bookingStatusFilter}` : ""} of {bookings.length} total)
+                      ({filteredBookings.length}{bookingStatusFilter !== "All" || bookingSearch ? " matching" : ""} of {bookings.length} total)
                     </span>
                   </h2>
                 </div>
@@ -2117,87 +2151,188 @@ export default function Admin() {
                   <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
                 ) : filteredBookings.length === 0 ? (
                   <div className="flex justify-center items-center h-40 text-muted-foreground">
-                    {bookings.length === 0 ? "No submissions yet." : `No ${bookingStatusFilter} submissions.`}
+                    {bookings.length === 0 ? "No submissions yet." : "No submissions match your filters."}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-white/10 text-muted-foreground text-left">
+                          <th className="px-4 py-3 font-medium whitespace-nowrap w-6"></th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Mode</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Event Name</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Venue</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Package</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Contact</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Phone</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Email</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">City</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Region</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Event Name</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Event Date</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Time</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Event Type</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Budget</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Instagram</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Submitted</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">City / Region</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">
+                            <button
+                              onClick={() => setBookingSortDir(d => d === "desc" ? "asc" : "desc")}
+                              className="flex items-center gap-1 hover:text-white transition-colors"
+                              data-testid="button-sort-submitted"
+                            >
+                              Submitted
+                              {bookingSortDir === "desc"
+                                ? <ChevronDown className="w-3 h-3" />
+                                : <ChevronUp className="w-3 h-3" />}
+                            </button>
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredBookings.map((booking, i) => {
                           const currentStatus = booking.status || "New";
-                          const eventType = (booking as any).eventTypeOther || (booking as any).eventType || "—";
+                          const isExpanded = expandedBookingId === booking.id;
+                          const eventType = booking.eventTypeOther || booking.eventType || "—";
                           return (
-                            <tr key={booking.id} data-testid={`row-booking-${booking.id}`} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
-                              <td className="px-4 py-4">
-                                <Select
-                                  value={currentStatus}
-                                  onValueChange={(val) => updateBookingStatusMutation.mutate({ id: booking.id, status: val })}
-                                >
-                                  <SelectTrigger
-                                    className={`h-7 text-xs border rounded-full px-2.5 w-[110px] ${statusBadge[currentStatus] ?? statusBadge["New"]}`}
-                                    data-testid={`select-booking-status-${booking.id}`}
+                            <Fragment key={booking.id}>
+                              <tr
+                                data-testid={`row-booking-${booking.id}`}
+                                className={`border-b border-white/5 hover:bg-white/5 cursor-pointer ${i % 2 !== 0 ? "bg-white/[0.02]" : ""} ${isExpanded ? "bg-white/5" : ""}`}
+                                onClick={() => setExpandedBookingId(isExpanded ? null : booking.id)}
+                              >
+                                <td className="px-4 py-4 text-muted-foreground">
+                                  {isExpanded
+                                    ? <ChevronUp className="w-4 h-4" />
+                                    : <ChevronDown className="w-4 h-4" />}
+                                </td>
+                                <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                                  <Select
+                                    value={currentStatus}
+                                    onValueChange={(val) => updateBookingStatusMutation.mutate({ id: booking.id, status: val })}
                                   >
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-secondary border-white/10 text-white">
-                                    <SelectItem value="New">New</SelectItem>
-                                    <SelectItem value="Contacted">Contacted</SelectItem>
-                                    <SelectItem value="Paid">Paid</SelectItem>
-                                    <SelectItem value="Completed">Completed</SelectItem>
-                                    <SelectItem value="Cancelled">Cancelled</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </td>
-                              <td className="px-4 py-4">
-                                <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-semibold border ${booking.mode === "Premium" ? "bg-primary/15 border-primary/40 text-primary" : "bg-white/5 border-white/20 text-white/60"}`}>
-                                  {booking.mode || "Standard"}
-                                </span>
-                              </td>
-                              <td className="px-4 py-4 font-medium text-white max-w-[180px]"><span className="line-clamp-1">{booking.eventName || "—"}</span></td>
-                              <td className="px-4 py-4 text-muted-foreground max-w-[160px]"><span className="line-clamp-1">{booking.venueName || "—"}</span></td>
-                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).contactName || "—"}</td>
-                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).phone || "—"}</td>
-                              <td className="px-4 py-4 text-muted-foreground">
-                                <a href={`mailto:${booking.email}`} className="text-primary hover:underline whitespace-nowrap">{booking.email}</a>
-                              </td>
-                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).city || "—"}</td>
-                              <td className="px-4 py-4">
-                                <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{booking.region}</span>
-                              </td>
-                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">
-                                {(booking as any).eventDate
-                                  ? new Date((booking as any).eventDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                                  : "—"}
-                              </td>
-                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).eventTime || "—"}</td>
-                              <td className="px-4 py-4 text-muted-foreground max-w-[140px]"><span className="line-clamp-1">{eventType}</span></td>
-                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{(booking as any).budgetRange || "—"}</td>
-                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">
-                                {(booking as any).instagramHandle
-                                  ? <a href={`https://instagram.com/${(booking as any).instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{(booking as any).instagramHandle.replace("@","")}</a>
-                                  : "—"}
-                              </td>
-                              <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">{formatDate(booking.createdAt)}</td>
-                            </tr>
+                                    <SelectTrigger
+                                      className={`h-7 text-xs border rounded-full px-2.5 w-[110px] ${statusBadge[currentStatus] ?? statusBadge["New"]}`}
+                                      data-testid={`select-booking-status-${booking.id}`}
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-secondary border-white/10 text-white">
+                                      <SelectItem value="New">New</SelectItem>
+                                      <SelectItem value="Contacted">Contacted</SelectItem>
+                                      <SelectItem value="Paid">Paid</SelectItem>
+                                      <SelectItem value="Completed">Completed</SelectItem>
+                                      <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </td>
+                                <td className="px-4 py-4">
+                                  <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-semibold border ${booking.mode === "Premium" ? "bg-primary/15 border-primary/40 text-primary" : "bg-white/5 border-white/20 text-white/60"}`}>
+                                    {booking.mode || "Standard"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" data-testid={`text-contact-${booking.id}`}>{booking.contactName || "—"}</td>
+                                <td className="px-4 py-4 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center gap-2 whitespace-nowrap">
+                                    <a href={`mailto:${booking.email}`} className="text-primary hover:underline">{booking.email}</a>
+                                    <button
+                                      title="Copy email"
+                                      data-testid={`button-copy-email-${booking.id}`}
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(booking.email);
+                                        toast({ title: "Email copied", description: booking.email });
+                                      }}
+                                      className="text-muted-foreground hover:text-white transition-colors"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-4 font-medium text-white max-w-[180px]"><span className="line-clamp-1">{booking.eventName || "—"}</span></td>
+                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" data-testid={`text-eventdate-${booking.id}`}>
+                                  {booking.eventDate
+                                    ? new Date(booking.eventDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                    : "—"}
+                                </td>
+                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">
+                                  {booking.city ? `${booking.city}, ` : ""}
+                                  <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{booking.region}</span>
+                                </td>
+                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" data-testid={`text-submitted-${booking.id}`}>{formatDate(booking.createdAt)}</td>
+                              </tr>
+                              {isExpanded && (
+                                <tr key={`${booking.id}-detail`} className="border-b border-white/5 bg-white/[0.03]">
+                                  <td colSpan={9} className="px-6 py-5">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Contact Name</p>
+                                        <p className="text-white">{booking.contactName || "—"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Email</p>
+                                        <div className="flex items-center gap-2">
+                                          <a href={`mailto:${booking.email}`} className="text-primary hover:underline">{booking.email}</a>
+                                          <button
+                                            data-testid={`button-copy-email-detail-${booking.id}`}
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(booking.email);
+                                              toast({ title: "Email copied", description: booking.email });
+                                            }}
+                                            className="text-muted-foreground hover:text-white transition-colors"
+                                          >
+                                            <Copy className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Phone</p>
+                                        <p className="text-white">{booking.phone || "—"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Instagram</p>
+                                        <p className="text-white">
+                                          {booking.instagramHandle
+                                            ? <a href={`https://instagram.com/${booking.instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{booking.instagramHandle.replace("@","")}</a>
+                                            : "—"}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Event Name</p>
+                                        <p className="text-white">{booking.eventName || "—"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Venue</p>
+                                        <p className="text-white">{booking.venueName || "—"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Event Date</p>
+                                        <p className="text-white">
+                                          {booking.eventDate
+                                            ? new Date(booking.eventDate + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+                                            : "—"}
+                                          {booking.eventTime ? ` at ${booking.eventTime}` : ""}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Location</p>
+                                        <p className="text-white">{[booking.city, booking.region].filter(Boolean).join(", ") || "—"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Event Type</p>
+                                        <p className="text-white">{eventType}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Package</p>
+                                        <p className="text-white">{booking.mode || "Standard"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Budget Range</p>
+                                        <p className="text-white">{booking.budgetRange || "—"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Ready to Move Forward</p>
+                                        <p className="text-white">{booking.readyToMoveForward || "—"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Submitted</p>
+                                        <p className="text-white">{formatDate(booking.createdAt)}</p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
                           );
                         })}
                       </tbody>

@@ -432,7 +432,16 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/bookings", async (req: Request, res: Response) => {
+  app.get("/api/bookings", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const bookings = await storage.getBookings();
+      res.status(200).json(bookings);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/bookings", requireAuth(), async (req: Request, res: Response) => {
     try {
       const bookings = await storage.getBookings();
       res.status(200).json(bookings);
@@ -442,6 +451,23 @@ export async function registerRoutes(
   });
 
   app.patch("/api/bookings/:id/status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid booking id" });
+      const { status } = req.body;
+      const validStatuses = ["New", "Contacted", "Paid", "Completed", "Cancelled"];
+      if (!status || !validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      const booking = await storage.updateBookingStatus(id, status);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      res.json(booking);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/bookings/:id/status", requireAuth(), async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid booking id" });
