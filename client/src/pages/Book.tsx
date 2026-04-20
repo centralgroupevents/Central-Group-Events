@@ -191,6 +191,32 @@ export default function Book() {
     return i < step;
   }
 
+  // ── Real-time step validity (drives disabled state of Next button) ─────────
+
+  function isCurrentStepValid(): boolean {
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email);
+    if (step === 0) return !!data.mode;
+    if (step === 1) {
+      const baseOk = !!data.eventName.trim() && !!data.eventType;
+      const otherOk = data.eventType !== "Other" || !!data.eventTypeOther.trim();
+      return baseOk && otherOk;
+    }
+    if (step === 2) {
+      if (subStep === "a") return !!data.eventDate && !!data.eventTime;
+      return !!data.venueName.trim() && !!data.city.trim() && !!data.region;
+    }
+    if (step === 3) {
+      if (subStep === "a") return !!data.contactName.trim() && emailOk;
+      const phoneRequired = data.mode === "Growth" || data.mode === "Custom";
+      const phoneOk = !phoneRequired || !!data.phone.trim();
+      return phoneOk && !!data.instagramHandle.trim();
+    }
+    if (step === 4) return data.agreedToTerms;
+    return true;
+  }
+
+  const currentStepValid = isCurrentStepValid();
+
   // ── Navigation ────────────────────────────────────────────────────────────
 
   function goToStep(i: number) {
@@ -701,7 +727,7 @@ export default function Book() {
                   <h2 className="text-2xl font-black mb-1">Terms & Conditions</h2>
                   <p className="text-muted-foreground text-sm mb-4">Please read and agree before continuing.</p>
 
-                  <div className="max-h-80 overflow-y-auto border border-white/10 rounded-xl p-5 space-y-5 mb-5 bg-black/20 text-sm">
+                  <div className="max-h-96 overflow-y-auto border border-white/10 rounded-xl p-5 space-y-5 mb-5 bg-black/20 text-sm">
                     {TERMS_SECTIONS.map(({ heading, body }) => (
                       <div key={heading}>
                         <h4 className="font-bold text-white mb-1">{heading}</h4>
@@ -830,8 +856,9 @@ export default function Book() {
               )}
               <Button
                 onClick={validateAndNext}
+                disabled={!currentStepValid}
                 data-testid="button-next-step"
-                className="bg-primary hover:bg-primary/90 text-white font-semibold px-8 rounded-xl"
+                className="bg-primary hover:bg-primary/90 text-white font-semibold px-8 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {step === 4 ? "Proceed to Payment" : "Next"}
                 {step < 4 && <ChevronRight className="w-4 h-4 ml-1" />}
