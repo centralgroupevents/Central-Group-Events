@@ -171,6 +171,7 @@ export default function Book() {
   const [stepState, setStepState] = useState<StepState>({ step: 0, subStep: "main" });
   const [data, setData] = useState<WizardData>(INITIAL_DATA);
   const [errors, setErrors] = useState<Partial<Record<keyof WizardData, string>>>({});
+  const [touched, setTouched] = useState<Set<keyof WizardData>>(new Set());
   const [direction, setDirection] = useState<1 | -1>(1);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const hasSavedRef = useRef(false);
@@ -229,6 +230,7 @@ export default function Book() {
   function advance(toSubStep?: SubStep) {
     setDirection(1);
     setErrors({});
+    setTouched(new Set());
     if (toSubStep) {
       setStepState((s) => ({ ...s, subStep: toSubStep }));
     } else {
@@ -239,6 +241,7 @@ export default function Book() {
   function retreat(toSubStep?: SubStep) {
     setDirection(-1);
     setErrors({});
+    setTouched(new Set());
     if (toSubStep) {
       setStepState((s) => ({ ...s, subStep: toSubStep }));
     } else {
@@ -345,7 +348,7 @@ export default function Book() {
       });
   }, [step]);
 
-  // ── Update helpers ────────────────────────────────────────────────────────
+  // ── Update & touch helpers ────────────────────────────────────────────────
 
   function set<K extends keyof WizardData>(key: K, value: WizardData[K]) {
     setData((d) => ({ ...d, [key]: value }));
@@ -354,6 +357,36 @@ export default function Book() {
       delete next[key];
       return next;
     });
+  }
+
+  function touch(key: keyof WizardData) {
+    setTouched((prev) => new Set([...prev, key]));
+  }
+
+  function getFieldError(key: keyof WizardData): string | undefined {
+    if (errors[key]) return errors[key];
+    if (!touched.has(key)) return undefined;
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email);
+    switch (key) {
+      case "mode": return !data.mode ? "Please select a package" : undefined;
+      case "eventName": return !data.eventName.trim() ? "Event name is required" : undefined;
+      case "eventType": return !data.eventType ? "Event type is required" : undefined;
+      case "eventTypeOther": return data.eventType === "Other" && !data.eventTypeOther.trim() ? "Please describe your event type" : undefined;
+      case "eventDate": return !data.eventDate ? "Event date is required" : undefined;
+      case "eventTime": return !data.eventTime ? "Event time is required" : undefined;
+      case "venueName": return !data.venueName.trim() ? "Venue name is required" : undefined;
+      case "city": return !data.city.trim() ? "City is required" : undefined;
+      case "region": return !data.region ? "Region is required" : undefined;
+      case "contactName": return !data.contactName.trim() ? "Contact name is required" : undefined;
+      case "email": return !data.email.trim() ? "Email is required" : !emailOk ? "Enter a valid email address" : undefined;
+      case "phone": {
+        const phoneRequired = data.mode === "Growth" || data.mode === "Custom";
+        return phoneRequired && !data.phone.trim() ? "Phone number is required" : undefined;
+      }
+      case "instagramHandle": return !data.instagramHandle.trim() ? "Instagram handle is required" : undefined;
+      case "agreedToTerms": return !data.agreedToTerms ? "You must agree to the Terms & Conditions" : undefined;
+      default: return undefined;
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -514,13 +547,14 @@ export default function Book() {
                       placeholder="e.g. Summer Rooftop Bash"
                       value={data.eventName}
                       onChange={(e) => set("eventName", e.target.value)}
+                      onBlur={() => touch("eventName")}
                     />
-                    <FieldError msg={errors.eventName} />
+                    <FieldError msg={getFieldError("eventName")} />
                   </div>
 
                   <div>
                     <Label htmlFor="eventType" className="text-white/80 mb-1.5 block">Event Type *</Label>
-                    <Select value={data.eventType} onValueChange={(v) => set("eventType", v)}>
+                    <Select value={data.eventType} onValueChange={(v) => { set("eventType", v); touch("eventType"); }}>
                       <SelectTrigger data-testid="select-event-type" className={inputClass}>
                         <SelectValue placeholder="Select event type" />
                       </SelectTrigger>
@@ -530,7 +564,7 @@ export default function Book() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <FieldError msg={errors.eventType} />
+                    <FieldError msg={getFieldError("eventType")} />
                   </div>
 
                   {data.eventType === "Other" && (
@@ -543,8 +577,9 @@ export default function Book() {
                         placeholder="e.g. Charity Gala"
                         value={data.eventTypeOther}
                         onChange={(e) => set("eventTypeOther", e.target.value)}
+                        onBlur={() => touch("eventTypeOther")}
                       />
-                      <FieldError msg={errors.eventTypeOther} />
+                      <FieldError msg={getFieldError("eventTypeOther")} />
                     </div>
                   )}
                 </div>
@@ -567,8 +602,9 @@ export default function Book() {
                       className={inputClass}
                       value={data.eventDate}
                       onChange={(e) => set("eventDate", e.target.value)}
+                      onBlur={() => touch("eventDate")}
                     />
-                    <FieldError msg={errors.eventDate} />
+                    <FieldError msg={getFieldError("eventDate")} />
                   </div>
 
                   <div>
@@ -580,8 +616,9 @@ export default function Book() {
                       className={inputClass}
                       value={data.eventTime}
                       onChange={(e) => set("eventTime", e.target.value)}
+                      onBlur={() => touch("eventTime")}
                     />
-                    <FieldError msg={errors.eventTime} />
+                    <FieldError msg={getFieldError("eventTime")} />
                   </div>
                 </div>
               )}
@@ -603,8 +640,9 @@ export default function Book() {
                       placeholder="e.g. Club Luxe"
                       value={data.venueName}
                       onChange={(e) => set("venueName", e.target.value)}
+                      onBlur={() => touch("venueName")}
                     />
-                    <FieldError msg={errors.venueName} />
+                    <FieldError msg={getFieldError("venueName")} />
                   </div>
 
                   <div>
@@ -616,13 +654,14 @@ export default function Book() {
                       placeholder="e.g. Newark"
                       value={data.city}
                       onChange={(e) => set("city", e.target.value)}
+                      onBlur={() => touch("city")}
                     />
-                    <FieldError msg={errors.city} />
+                    <FieldError msg={getFieldError("city")} />
                   </div>
 
                   <div>
                     <Label htmlFor="region" className="text-white/80 mb-1.5 block">Region *</Label>
-                    <Select value={data.region} onValueChange={(v) => set("region", v)}>
+                    <Select value={data.region} onValueChange={(v) => { set("region", v); touch("region"); }}>
                       <SelectTrigger data-testid="select-region" className={inputClass}>
                         <SelectValue placeholder="Select region" />
                       </SelectTrigger>
@@ -632,7 +671,7 @@ export default function Book() {
                         <SelectItem value="South NJ">South NJ</SelectItem>
                       </SelectContent>
                     </Select>
-                    <FieldError msg={errors.region} />
+                    <FieldError msg={getFieldError("region")} />
                   </div>
                 </div>
               )}
@@ -654,8 +693,9 @@ export default function Book() {
                       placeholder="Your full name"
                       value={data.contactName}
                       onChange={(e) => set("contactName", e.target.value)}
+                      onBlur={() => touch("contactName")}
                     />
-                    <FieldError msg={errors.contactName} />
+                    <FieldError msg={getFieldError("contactName")} />
                   </div>
 
                   <div>
@@ -668,8 +708,9 @@ export default function Book() {
                       placeholder="you@example.com"
                       value={data.email}
                       onChange={(e) => set("email", e.target.value)}
+                      onBlur={() => touch("email")}
                     />
-                    <FieldError msg={errors.email} />
+                    <FieldError msg={getFieldError("email")} />
                   </div>
                 </div>
               )}
@@ -699,8 +740,9 @@ export default function Book() {
                       placeholder="(201) 555-0100"
                       value={data.phone}
                       onChange={(e) => set("phone", e.target.value)}
+                      onBlur={() => touch("phone")}
                     />
-                    <FieldError msg={errors.phone} />
+                    <FieldError msg={getFieldError("phone")} />
                   </div>
 
                   <div>
@@ -714,9 +756,10 @@ export default function Book() {
                         placeholder="yourevent"
                         value={data.instagramHandle.replace(/^@/, "")}
                         onChange={(e) => set("instagramHandle", e.target.value.replace(/^@/, ""))}
+                        onBlur={() => touch("instagramHandle")}
                       />
                     </div>
-                    <FieldError msg={errors.instagramHandle} />
+                    <FieldError msg={getFieldError("instagramHandle")} />
                   </div>
                 </div>
               )}
@@ -741,14 +784,14 @@ export default function Book() {
                       id="terms-checkbox"
                       data-testid="checkbox-terms"
                       checked={data.agreedToTerms}
-                      onCheckedChange={(checked) => set("agreedToTerms", !!checked)}
+                      onCheckedChange={(checked) => { set("agreedToTerms", !!checked); touch("agreedToTerms"); }}
                       className="mt-0.5 border-white/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                     />
                     <span className="text-sm text-white/80 group-hover:text-white transition-colors">
                       I have read and agree to the Terms & Conditions
                     </span>
                   </label>
-                  <FieldError msg={errors.agreedToTerms} />
+                  <FieldError msg={getFieldError("agreedToTerms")} />
                 </div>
               )}
 
