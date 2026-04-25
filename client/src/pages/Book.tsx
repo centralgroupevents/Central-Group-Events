@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Check } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -168,6 +168,7 @@ function FieldError({ msg }: { msg?: string }) {
 
 export default function Book() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [stepState, setStepState] = useState<StepState>({ step: 0, subStep: "main" });
   const [data, setData] = useState<WizardData>(INITIAL_DATA);
   const [errors, setErrors] = useState<Partial<Record<keyof WizardData, string>>>({});
@@ -318,6 +319,30 @@ export default function Book() {
     if (step !== 5 || hasSavedRef.current) return;
     hasSavedRef.current = true;
     setSaveStatus("saving");
+
+    // Persist summary so confirmation page can read it
+    try {
+      sessionStorage.setItem(
+        "cge_booking_summary",
+        JSON.stringify({
+          mode: data.mode,
+          budgetRange: data.budgetRange,
+          eventName: data.eventName,
+          eventType: data.eventType,
+          eventTypeOther: data.eventTypeOther,
+          eventDate: data.eventDate,
+          eventTime: data.eventTime,
+          venueName: data.venueName,
+          city: data.city,
+          region: data.region,
+          contactName: data.contactName,
+          email: data.email,
+          instagramHandle: data.instagramHandle,
+        })
+      );
+    } catch {
+      // ignore storage errors
+    }
 
     const payload = {
       mode: data.mode,
@@ -916,21 +941,24 @@ export default function Book() {
           )}
 
           {step === 5 && (
-            <div className="px-6 md:px-10 pb-8 flex justify-between items-center">
+            <div className="px-6 md:px-10 pb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
               <Button
                 variant="ghost"
                 onClick={() => retreat()}
                 data-testid="button-back-step"
-                className="text-white/60 hover:text-white hover:bg-white/5"
+                className="text-white/60 hover:text-white hover:bg-white/5 order-last sm:order-first"
               >
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 Back
               </Button>
-              <Link href="/">
-                <span className="text-xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
-                  Return to homepage
-                </span>
-              </Link>
+              <Button
+                onClick={() => navigate("/booking-confirmation")}
+                data-testid="button-view-confirmation"
+                className="bg-primary hover:bg-primary/90 text-white font-semibold px-8 rounded-xl w-full sm:w-auto"
+              >
+                Done — View Confirmation
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
             </div>
           )}
         </div>
