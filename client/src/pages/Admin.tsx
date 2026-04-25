@@ -2102,6 +2102,32 @@ export default function Admin() {
               return bookingSortDir === "desc" ? db_ - da : da - db_;
             });
 
+          const handleExportCSV = () => {
+            const escape = (val: string | null | undefined) => {
+              const s = val ?? "";
+              return `"${s.replace(/"/g, '""')}"`;
+            };
+            const headers = ["Submitted", "Contact Name", "Email", "Package", "Event Name", "Event Date", "City/Region", "Status"];
+            const rows = filteredBookings.map((b) => [
+              escape(b.createdAt ? new Date(b.createdAt).toLocaleDateString("en-US") : ""),
+              escape(b.contactName),
+              escape(b.email),
+              escape(b.mode || "Standard"),
+              escape(b.eventName),
+              escape(b.eventDate ? new Date(b.eventDate + "T00:00:00").toLocaleDateString("en-US") : ""),
+              escape(b.city ? `${b.city}, ${b.region}` : b.region),
+              escape(b.status || "New"),
+            ]);
+            const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `bookings-export-${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+          };
+
           return (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
@@ -2139,13 +2165,22 @@ export default function Admin() {
               </div>
 
               <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
-                <div className="px-6 py-4 border-b border-white/10">
+                <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between gap-3">
                   <h2 className="font-bold text-white">
                     All Submissions
                     <span className="text-muted-foreground font-normal text-sm ml-2">
                       ({filteredBookings.length}{bookingStatusFilter !== "All" || bookingSearch ? " matching" : ""} of {bookings.length} total)
                     </span>
                   </h2>
+                  <button
+                    onClick={handleExportCSV}
+                    disabled={filteredBookings.length === 0}
+                    data-testid="button-export-csv"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 text-white/70 hover:text-white hover:border-white/30 hover:bg-white/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Export CSV
+                  </button>
                 </div>
                 {bookingsLoading ? (
                   <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
