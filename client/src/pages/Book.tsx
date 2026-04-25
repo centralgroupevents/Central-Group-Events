@@ -166,11 +166,22 @@ function FieldError({ msg }: { msg?: string }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+function getPackageFromParam(): { mode: string; budgetRange: string } {
+  const param = new URLSearchParams(window.location.search).get("package")?.toLowerCase();
+  if (param === "starter") return { mode: "Starter", budgetRange: "$70" };
+  if (param === "growth") return { mode: "Growth", budgetRange: "$150" };
+  if (param === "custom") return { mode: "Custom", budgetRange: "$300+" };
+  return { mode: "", budgetRange: "" };
+}
+
 export default function Book() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [stepState, setStepState] = useState<StepState>({ step: 0, subStep: "main" });
-  const [data, setData] = useState<WizardData>(INITIAL_DATA);
+  const [data, setData] = useState<WizardData>(() => ({
+    ...INITIAL_DATA,
+    ...getPackageFromParam(),
+  }));
   const [errors, setErrors] = useState<Partial<Record<keyof WizardData, string>>>({});
   const [touched, setTouched] = useState<Set<keyof WizardData>>(new Set());
   const [direction, setDirection] = useState<1 | -1>(1);
