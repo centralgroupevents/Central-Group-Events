@@ -79,16 +79,41 @@ export default function Home() {
   // Events Calendar
   const [activeRegion, setActiveRegion] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [timeOfDay, setTimeOfDay] = useState("All Times");
+  const [eventType, setEventType] = useState("All Types");
   const { data: events, isLoading: eventsLoading } = useEvents(activeRegion);
 
-  const upcomingEvents = events || [];
+  const todayStr = new Date().toISOString().split("T")[0];
+  const upcomingEvents = (events || []).filter(e => e.date >= todayStr);
 
-  const filteredEvents = searchQuery.trim()
-    ? upcomingEvents.filter(e =>
-        e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ((e as any).city || "").toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : upcomingEvents;
+  function getTimeOfDayBucket(time?: string | null): string {
+    if (!time) return "unknown";
+    const [hStr] = time.split(":");
+    const h = parseInt(hStr, 10);
+    if (isNaN(h)) return "unknown";
+    if (h < 12) return "Morning";
+    if (h < 17) return "Afternoon";
+    if (h < 21) return "Evening";
+    return "Late Night";
+  }
+
+  const filteredEvents = upcomingEvents.filter(e => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        e.title.toLowerCase().includes(q) ||
+        ((e as any).city || "").toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+    }
+    if (timeOfDay !== "All Times") {
+      if (getTimeOfDayBucket((e as any).eventTime) !== timeOfDay) return false;
+    }
+    if (eventType !== "All Types") {
+      const genre = ((e as any).genre || "").toLowerCase();
+      if (genre !== eventType.toLowerCase()) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-hidden">
@@ -382,9 +407,9 @@ export default function Home() {
             />
           </div>
 
-          {/* Centered region tabs */}
+          {/* Region tabs + filter dropdowns */}
           <Tabs defaultValue="All" className="w-full" onValueChange={val => { setActiveRegion(val); setSearchQuery(""); }}>
-            <div className="flex justify-center mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
               <TabsList className="bg-white/5 border border-white/10 p-1 rounded-2xl flex overflow-x-auto hide-scrollbar">
                 {["All", "North NJ", "Central NJ", "South NJ"].map(region => (
                   <TabsTrigger
@@ -397,6 +422,36 @@ export default function Home() {
                   </TabsTrigger>
                 ))}
               </TabsList>
+
+              <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                <Select value={timeOfDay} onValueChange={setTimeOfDay}>
+                  <SelectTrigger
+                    className="h-9 rounded-xl bg-white/5 border-white/10 text-sm text-foreground focus:ring-primary min-w-[140px]"
+                    data-testid="select-time-of-day"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-secondary border-white/10 text-white">
+                    {["All Times", "Morning", "Afternoon", "Evening", "Late Night"].map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={eventType} onValueChange={setEventType}>
+                  <SelectTrigger
+                    className="h-9 rounded-xl bg-white/5 border-white/10 text-sm text-foreground focus:ring-primary min-w-[140px]"
+                    data-testid="select-event-type"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-secondary border-white/10 text-white">
+                    {["All Types", "Brunch", "Concert", "DJ Set", "Happy Hour", "Live Music", "Party", "Festival", "Dance Class", "Special Event", "Other"].map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <TabsContent value={activeRegion} className="min-h-[400px]">

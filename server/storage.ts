@@ -23,7 +23,7 @@ import {
   type Comment,
   type InsertComment,
 } from "@shared/schema";
-import { eq, desc, sql, count, and, isNull } from "drizzle-orm";
+import { eq, desc, sql, count, and, isNull, gte } from "drizzle-orm";
 import slugifyLib from "slugify";
 
 // ─── Slug helper ──────────────────────────────────────────────────────────
@@ -203,10 +203,11 @@ export class DatabaseStorage implements IStorage {
   // ── Events ────────────────────────────────────────────────────────────
 
   async getEvents(region?: string): Promise<Event[]> {
+    const today = new Date().toISOString().split("T")[0];
     if (region && region !== "All") {
-      return await db.select().from(events).where(eq(events.region, region));
+      return await db.select().from(events).where(and(eq(events.region, region), gte(events.date, today)));
     }
-    return await db.select().from(events);
+    return await db.select().from(events).where(gte(events.date, today));
   }
 
   async createEvent(event: InsertEvent): Promise<Event> {
