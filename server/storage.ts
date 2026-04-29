@@ -23,7 +23,7 @@ import {
   type Comment,
   type InsertComment,
 } from "@shared/schema";
-import { eq, desc, sql, count, and, isNull, gte } from "drizzle-orm";
+import { eq, desc, sql, count, and, isNull, gte, inArray } from "drizzle-orm";
 import slugifyLib from "slugify";
 
 // ─── Slug helper ──────────────────────────────────────────────────────────
@@ -64,6 +64,7 @@ export interface IStorage {
   createEvent(event: InsertEvent): Promise<Event>;
   updateEvent(id: number, event: Partial<InsertEvent>): Promise<Event>;
   deleteEvent(id: number): Promise<void>;
+  bulkDeleteEvents(ids: number[]): Promise<void>;
   bulkImportEvents(rows: InsertEvent[]): Promise<{ imported: number; skipped: number }>;
 
   // Admin users
@@ -222,6 +223,11 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEvent(id: number): Promise<void> {
     await db.delete(events).where(eq(events.id, id));
+  }
+
+  async bulkDeleteEvents(ids: number[]): Promise<void> {
+    if (ids.length === 0) return;
+    await db.delete(events).where(inArray(events.id, ids));
   }
 
   async bulkImportEvents(rows: InsertEvent[]): Promise<{ imported: number; skipped: number }> {

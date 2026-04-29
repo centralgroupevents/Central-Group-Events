@@ -78,6 +78,7 @@ type Booking = {
   region: string;
   eventType: string;
   eventTypeOther: string | null;
+  adminNotes: string | null;
   budgetRange: string | null;
   instagramHandle: string | null;
   readyToMoveForward: string | null;
@@ -587,7 +588,7 @@ function SubscribersTab() {
               {importResult.skipped > 0 && (
                 <p className="text-white/50">⟳ {importResult.skipped} skipped (already subscribed)</p>
               )}
-              {importResult.invalidFormat > 0 && (
+              {(importResult.invalidFormat ?? 0) > 0 && (
                 <p className="text-yellow-500/80">⚠ {importResult.invalidFormat} invalid email format (ignored)</p>
               )}
             </div>
@@ -1487,6 +1488,29 @@ function TeamTab({ currentRole }: { currentRole: string }) {
 
 /* ─────────────────────────────────────────────────────────── */
 /*  MAIN ADMIN COMPONENT                                      */
+const GENRE_OPTIONS = [
+  "Brunch", "Concert", "DJ Set", "Happy Hour", "Live Music",
+  "Party", "Festival", "Dance Class", "Special Event", "Other",
+];
+
+function formatEventDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const d = new Date(year, month - 1, day);
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatEventTime(timeStr: string | null): string {
+  if (!timeStr) return "—";
+  if (timeStr.includes("AM") || timeStr.includes("PM")) return timeStr;
+  const [hStr, mStr] = timeStr.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr || "0", 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 /* ─────────────────────────────────────────────────────────── */
 export default function Admin() {
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -1498,9 +1522,17 @@ export default function Admin() {
   const [form, setForm] = useState<EventForm>(emptyEventForm);
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof EventForm, string>>>({});
   const [showImportModal, setShowImportModal] = useState(false);
-  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
-  const [csvErrors, setCsvErrors] = useState<string[]>([]);
-  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [importStep, setImportStep] = useState<"input" | "mapping">("input");
+  const [importActiveTab, setImportActiveTab] = useState<"file" | "paste">("file");
+  const [importRawHeaders, setImportRawHeaders] = useState<string[]>([]);
+  const [importRawRows, setImportRawRows] = useState<string[][]>([]);
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({});
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; invalidFormat?: number } | null>(null);
+  const [pasteText, setPasteText] = useState("");
+  const [genreIsOther, setGenreIsOther] = useState(false);
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [inlineEdit, setInlineEdit] = useState<{ id: number; field: string; value: string } | null>(null);
   const [inlineSaved, setInlineSaved] = useState<{ id: number; field: string } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -1636,6 +1668,19 @@ export default function Admin() {
     onError: () => toast({ title: "Failed to delete event", variant: "destructive" }),
   });
 
+  const batchDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await apiRequest("DELETE", "/api/events/batch", { ids });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/events"] });
+      setSelectedEventIds(new Set());
+      setShowDeleteConfirm(false);
+      toast({ title: "Events deleted" });
+    },
+    onError: () => toast({ title: "Failed to delete events", variant: "destructive" }),
+  });
+
   async function handleLogout() {
     await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
     setUser(null);
@@ -1646,11 +1691,15 @@ export default function Admin() {
     setEditingEvent(null);
     setForm(emptyEventForm);
     setFormErrors({});
+    setGenreIsOther(false);
     setShowEventModal(true);
   }
 
   function openEdit(event: Event) {
     setEditingEvent(event);
+    const currentGenre = event.genre || "";
+    const isOther = !!currentGenre && !GENRE_OPTIONS.slice(0, -1).includes(currentGenre);
+    setGenreIsOther(isOther);
     setForm({
       title: event.title,
       date: event.date,
@@ -1661,7 +1710,7 @@ export default function Admin() {
       instagramHandle: event.instagramHandle || "",
       organizer: event.organizer || "",
       influencer: event.influencer || "",
-      genre: event.genre || "",
+      genre: currentGenre,
       ticketLink: event.ticketLink || "",
       imageUrl: event.imageUrl || "",
     });
@@ -1675,6 +1724,7 @@ export default function Admin() {
     setEditingEvent(null);
     setForm(emptyEventForm);
     setFormErrors({});
+    setGenreIsOther(false);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -1714,39 +1764,129 @@ export default function Admin() {
     setInlineEdit(null);
   }
 
+  // ── Import modal helpers ─────────────────────────────────────────────
+
+  const CGE_IMPORT_FIELDS: { key: string; label: string; required: boolean }[] = [
+    { key: "name",            label: "Name",             required: true },
+    { key: "date",            label: "Date",             required: true },
+    { key: "time",            label: "Time",             required: false },
+    { key: "venue",           label: "Venue",            required: false },
+    { key: "city",            label: "City",             required: false },
+    { key: "region",          label: "Region",           required: false },
+    { key: "organizer",       label: "Organizer",        required: false },
+    { key: "influencer",      label: "Influencer",       required: false },
+    { key: "genre",           label: "Genre",            required: false },
+    { key: "instagramHandle", label: "Instagram Handle", required: false },
+    { key: "ticketLink",      label: "Ticket Link",      required: false },
+  ];
+
+  const IMPORT_ALIASES: Record<string, string[]> = {
+    name:            ["name", "title", "event", "event name"],
+    date:            ["date", "event date", "day", "event_date"],
+    time:            ["time", "event time", "start time", "start_time"],
+    venue:           ["venue", "location", "place"],
+    city:            ["city", "town"],
+    region:          ["region", "area"],
+    organizer:       ["organizer", "host", "promoter"],
+    influencer:      ["influencer"],
+    genre:           ["genre", "type", "music type"],
+    instagramHandle: ["instagram", "ig", "handle", "insta", "instagramhandle"],
+    ticketLink:      ["ticket", "link", "url", "tickets", "ticketlink"],
+  };
+
+  function autoMatchHeader(headers: string[], cgeKey: string): string {
+    const aliases = IMPORT_ALIASES[cgeKey] || [cgeKey];
+    return headers.find(h =>
+      aliases.some(a => h.toLowerCase().includes(a.toLowerCase()))
+    ) || "";
+  }
+
+  function buildInitialMapping(headers: string[]): Record<string, string> {
+    const mapping: Record<string, string> = {};
+    for (const { key } of CGE_IMPORT_FIELDS) {
+      mapping[key] = autoMatchHeader(headers, key);
+    }
+    return mapping;
+  }
+
+  function parsePasteData(text: string): { headers: string[]; rows: string[][] } | null {
+    const lines = text.trim().split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) return null;
+    const sep = lines[0].includes("\t") ? "\t" : ",";
+    const headers = lines[0].split(sep).map(h => h.trim().replace(/^"|"$/g, ""));
+    const rows = lines.slice(1).map(l =>
+      l.split(sep).map(c => c.trim().replace(/^"|"$/g, ""))
+    );
+    return { headers, rows };
+  }
+
   function handleCsvFile(file: File) {
-    setCsvErrors([]);
+    setImportErrors([]);
     setImportResult(null);
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
+    Papa.parse<string[]>(file, {
+      header: false,
       skipEmptyLines: true,
       complete: (results) => {
-        const errs: string[] = [];
-        const valid: Record<string, string>[] = [];
-        results.data.forEach((row, i) => {
-          const name = row.name || row.title || "";
-          const date = row.date || "";
-          if (!name) { errs.push(`Row ${i + 1}: missing name`); return; }
-          if (!date) { errs.push(`Row ${i + 1}: missing date`); return; }
-          valid.push(row);
-        });
-        setCsvRows(valid);
-        setCsvErrors(errs);
+        const allRows = results.data as string[][];
+        if (allRows.length < 2) {
+          setImportErrors(["File appears to be empty or has only headers."]);
+          return;
+        }
+        const headers = allRows[0].map(h => h.trim());
+        const dataRows = allRows.slice(1);
+        setImportRawHeaders(headers);
+        setImportRawRows(dataRows);
+        setImportMapping(buildInitialMapping(headers));
+        setImportStep("mapping");
       },
-      error: (err: Error) => setCsvErrors([err.message]),
+      error: (err: Error) => setImportErrors([err.message]),
     });
   }
 
-  async function submitBulkImport() {
+  function handlePasteConfirm() {
+    const parsed = parsePasteData(pasteText);
+    if (!parsed) {
+      setImportErrors(["Could not parse pasted data. Make sure the first row is headers and rows are comma- or tab-separated."]);
+      return;
+    }
+    setImportErrors([]);
+    setImportRawHeaders(parsed.headers);
+    setImportRawRows(parsed.rows);
+    setImportMapping(buildInitialMapping(parsed.headers));
+    setImportStep("mapping");
+  }
+
+  async function submitMappedImport() {
+    const mapped: Record<string, string>[] = importRawRows.map(row => {
+      const obj: Record<string, string> = {};
+      for (const { key } of CGE_IMPORT_FIELDS) {
+        const col = importMapping[key];
+        if (col) {
+          const colIdx = importRawHeaders.indexOf(col);
+          obj[key] = colIdx >= 0 ? (row[colIdx] || "") : "";
+        }
+      }
+      return obj;
+    });
     try {
-      const res = await apiRequest("POST", "/api/events/bulk-import", csvRows);
+      const res = await apiRequest("POST", "/api/events/bulk-import", mapped);
       const data = await res.json();
-      setImportResult(data);
-      setCsvRows([]);
+      setImportResult(data as { imported: number; skipped: number });
       qc.invalidateQueries({ queryKey: ["/api/events"] });
     } catch {
       toast({ title: "Import failed", variant: "destructive" });
     }
+  }
+
+  function resetImportModal() {
+    setImportStep("input");
+    setImportActiveTab("file");
+    setImportRawHeaders([]);
+    setImportRawRows([]);
+    setImportMapping({});
+    setImportErrors([]);
+    setImportResult(null);
+    setPasteText("");
   }
 
   function downloadCsvTemplate() {
@@ -1817,10 +1957,10 @@ export default function Admin() {
         {activeTab === "events" && (
           <>
             {/* Header row */}
-            <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+            <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
               <h2 className="text-xl font-bold text-white">Events <span className="text-muted-foreground font-normal text-sm ml-1">({events.length} total)</span></h2>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => { setShowImportModal(true); setCsvRows([]); setCsvErrors([]); setImportResult(null); }} className="border-white/20 hover:bg-white/10 text-white/70" data-testid="button-import-csv">
+                <Button variant="outline" onClick={() => { resetImportModal(); setShowImportModal(true); }} className="border-white/20 hover:bg-white/10 text-white/70" data-testid="button-import-csv">
                   <Upload className="w-4 h-4 mr-1.5" /> Import CSV
                 </Button>
                 <Button onClick={openAdd} className="bg-primary hover:bg-primary/90 font-semibold" data-testid="button-add-event">
@@ -1828,6 +1968,28 @@ export default function Admin() {
                 </Button>
               </div>
             </div>
+
+            {/* Batch delete bar */}
+            {selectedEventIds.size > 0 && (
+              <div className="flex items-center gap-3 mb-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5">
+                <span className="text-sm text-red-300 font-medium">{selectedEventIds.size} event{selectedEventIds.size !== 1 ? "s" : ""} selected</span>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="ml-auto"
+                  data-testid="button-delete-selected-events"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Selected ({selectedEventIds.size})
+                </Button>
+                <button
+                  onClick={() => setSelectedEventIds(new Set())}
+                  className="text-white/40 hover:text-white/70 transition-colors text-xs"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
 
             {/* Scrollable table */}
             <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
@@ -1840,8 +2002,18 @@ export default function Admin() {
                   <table className="text-sm" style={{ minWidth: "1100px", width: "100%" }}>
                     <thead>
                       <tr className="border-b border-white/10 text-muted-foreground text-left bg-secondary/60">
+                        <th className="px-3 py-3 w-8">
+                          <input
+                            type="checkbox"
+                            className="accent-primary cursor-pointer"
+                            checked={selectedEventIds.size === events.length && events.length > 0}
+                            onChange={(e) => setSelectedEventIds(e.target.checked ? new Set(events.map(ev => ev.id)) : new Set())}
+                            data-testid="checkbox-select-all-events"
+                            title="Select all"
+                          />
+                        </th>
                         <th className="px-4 py-3 font-medium whitespace-nowrap sticky left-0 z-10 bg-[#1a1a2e] min-w-[200px]">Name of Event</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[110px]">Day of Event</th>
+                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[160px]">Day of Event</th>
                         <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[100px]">Time</th>
                         <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[140px]">Venue</th>
                         <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[120px]">City</th>
@@ -1858,7 +2030,7 @@ export default function Admin() {
                         const rowBg = i % 2 !== 0 ? "bg-white/[0.02]" : "";
                         const stickyBg = i % 2 !== 0 ? "bg-[#161624]" : "bg-[#111120]";
 
-                        function InlineCell({ field, value, placeholder }: { field: string; value: string | null; placeholder?: string }) {
+                        function InlineCell({ field, value, displayValue, placeholder }: { field: string; value: string | null; displayValue?: string; placeholder?: string }) {
                           const isEditing = inlineEdit?.id === event.id && inlineEdit?.field === field;
                           const isSaved = inlineSaved?.id === event.id && inlineSaved?.field === field;
                           if (isEditing) {
@@ -1873,6 +2045,7 @@ export default function Admin() {
                               />
                             );
                           }
+                          const shownText = displayValue ?? value;
                           return (
                             <span
                               className="cursor-pointer hover:bg-white/10 rounded px-1 py-0.5 transition-colors flex items-center gap-1 group"
@@ -1880,7 +2053,7 @@ export default function Admin() {
                               title="Click to edit"
                             >
                               {isSaved && <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />}
-                              <span className={value ? "text-white" : "text-white/20 italic"}>{value || (placeholder || "—")}</span>
+                              <span className={shownText ? "text-white" : "text-white/20 italic"}>{shownText || (placeholder || "—")}</span>
                               <Pencil className="w-2.5 h-2.5 text-white/20 group-hover:text-white/50 ml-auto flex-shrink-0" />
                             </span>
                           );
@@ -1888,12 +2061,26 @@ export default function Admin() {
 
                         return (
                           <tr key={event.id} className={`border-b border-white/5 hover:bg-white/5 ${rowBg}`}>
+                            <td className="px-3 py-3">
+                              <input
+                                type="checkbox"
+                                className="accent-primary cursor-pointer"
+                                checked={selectedEventIds.has(event.id)}
+                                onChange={(e) => {
+                                  const next = new Set(selectedEventIds);
+                                  if (e.target.checked) next.add(event.id);
+                                  else next.delete(event.id);
+                                  setSelectedEventIds(next);
+                                }}
+                                data-testid={`checkbox-event-${event.id}`}
+                              />
+                            </td>
                             <td className={`px-4 py-3 font-medium sticky left-0 z-10 ${stickyBg}`}>
                               <InlineCell field="title" value={event.title} />
                             </td>
-                            <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{event.date}</td>
+                            <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatEventDate(event.date)}</td>
                             <td className="px-4 py-3">
-                              <InlineCell field="eventTime" value={event.eventTime} placeholder="add time" />
+                              <InlineCell field="eventTime" value={event.eventTime} displayValue={event.eventTime ? formatEventTime(event.eventTime) : undefined} placeholder="add time" />
                             </td>
                             <td className="px-4 py-3">
                               <InlineCell field="venue" value={event.venue} placeholder="add venue" />
@@ -1991,7 +2178,35 @@ export default function Admin() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-white/80">Genre</Label>
-                    <Input value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })} placeholder="e.g. Afrobeats, Hip-Hop" className="bg-black/40 border-white/10 h-11" />
+                    <Select
+                      value={genreIsOther ? "Other" : form.genre}
+                      onValueChange={(v) => {
+                        if (v !== "Other") {
+                          setGenreIsOther(false);
+                          setForm({ ...form, genre: v });
+                        } else {
+                          setGenreIsOther(true);
+                          setForm({ ...form, genre: "" });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="bg-black/40 border-white/10 h-11" data-testid="select-event-genre">
+                        <SelectValue placeholder="Select genre (optional)" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-secondary border-white/10 text-white">
+                        {GENRE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {genreIsOther && (
+                      <Input
+                        value={form.genre}
+                        onChange={(e) => setForm({ ...form, genre: e.target.value })}
+                        placeholder="Describe genre (e.g. Afrobeats, Hip-Hop)"
+                        className="bg-black/40 border-white/10 h-11 mt-1"
+                        autoFocus
+                        data-testid="input-event-genre-other"
+                      />
+                    )}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-white/80">Ticket Link</Label>
@@ -2011,82 +2226,205 @@ export default function Admin() {
               </DialogContent>
             </Dialog>
 
-            {/* CSV Import Modal */}
-            <Dialog open={showImportModal} onOpenChange={(open) => { if (!open) { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportResult(null); } }}>
+            {/* Import Events Modal */}
+            <Dialog open={showImportModal} onOpenChange={(open) => { if (!open) { setShowImportModal(false); resetImportModal(); } }}>
               <DialogContent className="bg-secondary border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Import Events from CSV</DialogTitle>
+                  <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Import Events</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4 py-2">
-                  <p className="text-sm text-muted-foreground">
-                    Upload a CSV file with the following headers (in any order):<br />
-                    <code className="text-primary text-xs">name, date, time, venue, city, region, organizer, influencer, genre, instagramHandle, ticketLink</code><br />
-                    Date format: <code className="text-xs">YYYY-MM-DD</code> &nbsp;·&nbsp; Time format: <code className="text-xs">HH:MM</code>
-                  </p>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={downloadCsvTemplate} className="border-white/20 hover:bg-white/10 text-white/70">
-                      <Download className="w-3.5 h-3.5 mr-1.5" /> Download Template
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => csvInputRef.current?.click()} className="border-white/20 hover:bg-white/10 text-white/70">
-                      <Upload className="w-3.5 h-3.5 mr-1.5" /> Choose CSV File
-                    </Button>
-                    <input
-                      ref={csvInputRef}
-                      type="file"
-                      accept=".csv"
-                      className="hidden"
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = ""; }}
-                    />
-                  </div>
 
-                  {csvErrors.length > 0 && (
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-1">
-                      {csvErrors.map((err, i) => <p key={i} className="text-red-400 text-xs">{err}</p>)}
+                {importStep === "input" && (
+                  <div className="space-y-4 py-2">
+                    {/* Tab bar */}
+                    <div className="flex gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
+                      {(["file", "paste"] as const).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => { setImportActiveTab(t); setImportErrors([]); }}
+                          className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${importActiveTab === t ? "bg-primary text-white" : "text-muted-foreground hover:text-white"}`}
+                          data-testid={`import-tab-${t}`}
+                        >
+                          {t === "file" ? "Upload File" : "Paste Data"}
+                        </button>
+                      ))}
                     </div>
-                  )}
 
-                  {csvRows.length > 0 && !importResult && (
-                    <>
-                      <p className="text-sm text-white/70">{csvRows.length} row(s) ready to import. Preview (first 5):</p>
-                      <div className="overflow-x-auto rounded-lg border border-white/10">
-                        <table className="text-xs w-full">
-                          <thead>
-                            <tr className="border-b border-white/10 bg-white/5 text-muted-foreground">
-                              {["name","date","time","venue","city","region"].map(h => <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>)}
+                    {importActiveTab === "file" ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">Upload a CSV or Excel file. You'll map columns in the next step.</p>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={downloadCsvTemplate} className="border-white/20 hover:bg-white/10 text-white/70">
+                            <Download className="w-3.5 h-3.5 mr-1.5" /> Download Template
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => csvInputRef.current?.click()} className="border-white/20 hover:bg-white/10 text-white/70" data-testid="button-choose-csv">
+                            <Upload className="w-3.5 h-3.5 mr-1.5" /> Choose File
+                          </Button>
+                          <input
+                            ref={csvInputRef}
+                            type="file"
+                            accept=".csv,.xlsx,.xls"
+                            className="hidden"
+                            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = ""; }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">Paste rows from Google Sheets or Excel. First row must be column headers. Supports tab-separated or comma-separated.</p>
+                        <Textarea
+                          value={pasteText}
+                          onChange={(e) => setPasteText(e.target.value)}
+                          placeholder={"Name\tDate\tVenue\nJazzy Fridays\t2026-07-15\tClub Nova"}
+                          className="bg-black/40 border-white/10 text-xs font-mono min-h-[140px]"
+                          data-testid="textarea-import-paste"
+                        />
+                        <Button
+                          onClick={handlePasteConfirm}
+                          disabled={!pasteText.trim()}
+                          className="bg-primary hover:bg-primary/90"
+                          data-testid="button-parse-paste"
+                        >
+                          Parse & Map Columns
+                        </Button>
+                      </div>
+                    )}
+
+                    {importErrors.length > 0 && (
+                      <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 space-y-1">
+                        {importErrors.map((err, i) => <p key={i} className="text-red-400 text-xs">{err}</p>)}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {importStep === "mapping" && !importResult && (
+                  <div className="space-y-4 py-2">
+                    <p className="text-sm text-muted-foreground">
+                      Map your file's columns to CGE event fields. Required fields are marked <span className="text-red-400">*</span>.
+                    </p>
+
+                    {/* Mapping table */}
+                    <div className="rounded-lg border border-white/10 overflow-hidden">
+                      <table className="text-sm w-full">
+                        <thead>
+                          <tr className="bg-white/5 border-b border-white/10 text-muted-foreground text-left">
+                            <th className="px-3 py-2 font-medium w-1/2">CGE Field</th>
+                            <th className="px-3 py-2 font-medium w-1/2">Your Column</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {CGE_IMPORT_FIELDS.map(({ key, label, required }) => (
+                            <tr key={key} className="border-b border-white/5">
+                              <td className="px-3 py-2 text-white/80">
+                                {label}{required && <span className="text-red-400 ml-1">*</span>}
+                              </td>
+                              <td className="px-3 py-2">
+                                <Select
+                                  value={importMapping[key] || "__none__"}
+                                  onValueChange={(v) => setImportMapping({ ...importMapping, [key]: v === "__none__" ? "" : v })}
+                                >
+                                  <SelectTrigger className="h-8 bg-black/40 border-white/10 text-xs" data-testid={`map-${key}`}>
+                                    <SelectValue placeholder="— skip —" />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-secondary border-white/10 text-white">
+                                    <SelectItem value="__none__">— skip —</SelectItem>
+                                    {importRawHeaders.map(h => (
+                                      <SelectItem key={h} value={h}>{h}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
                             </tr>
-                          </thead>
-                          <tbody>
-                            {csvRows.slice(0, 5).map((row, i) => (
-                              <tr key={i} className="border-b border-white/5">
-                                {["name","date","time","venue","city","region"].map(h => (
-                                  <td key={h} className="px-3 py-2 text-white/80 whitespace-nowrap">{row[h] || "—"}</td>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 3-row data preview */}
+                    {importRawRows.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-muted-foreground">Preview (first 3 rows with current mapping):</p>
+                        <div className="overflow-x-auto rounded-lg border border-white/10">
+                          <table className="text-xs w-full">
+                            <thead>
+                              <tr className="bg-white/5 border-b border-white/10 text-muted-foreground">
+                                {CGE_IMPORT_FIELDS.filter(f => importMapping[f.key]).map(f => (
+                                  <th key={f.key} className="px-3 py-2 text-left font-medium whitespace-nowrap">{f.label}</th>
                                 ))}
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {importRawRows.slice(0, 3).map((row, ri) => (
+                                <tr key={ri} className="border-b border-white/5">
+                                  {CGE_IMPORT_FIELDS.filter(f => importMapping[f.key]).map(f => {
+                                    const colIdx = importRawHeaders.indexOf(importMapping[f.key]);
+                                    return (
+                                      <td key={f.key} className="px-3 py-2 text-white/80 whitespace-nowrap max-w-[160px] truncate">
+                                        {colIdx >= 0 ? (row[colIdx] || "—") : "—"}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </>
-                  )}
+                    )}
 
-                  {importResult && (
+                    <div className="flex gap-2 pt-1">
+                      <Button variant="outline" onClick={() => { setImportStep("input"); setImportErrors([]); }} className="border-white/20 text-white/70">
+                        Back
+                      </Button>
+                      <Button
+                        onClick={submitMappedImport}
+                        className="bg-primary hover:bg-primary/90 font-semibold"
+                        disabled={!importMapping["name"] || !importMapping["date"]}
+                        data-testid="button-confirm-import"
+                      >
+                        Import {importRawRows.length} Row{importRawRows.length !== 1 ? "s" : ""}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {importResult && (
+                  <div className="py-4 space-y-4">
                     <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 flex items-center gap-3">
                       <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
                       <p className="text-green-400 text-sm font-medium">
                         {importResult.imported} event{importResult.imported !== 1 ? "s" : ""} imported, {importResult.skipped} duplicate{importResult.skipped !== 1 ? "s" : ""} skipped
                       </p>
                     </div>
-                  )}
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => { setShowImportModal(false); setCsvRows([]); setCsvErrors([]); setImportResult(null); }} className="border-white/20 text-white/70">
-                    {importResult ? "Close" : "Cancel"}
-                  </Button>
-                  {csvRows.length > 0 && !importResult && (
-                    <Button onClick={submitBulkImport} className="bg-primary hover:bg-primary/90 font-semibold">
-                      Import {csvRows.length} Event{csvRows.length !== 1 ? "s" : ""}
+                    <Button variant="outline" onClick={() => { setShowImportModal(false); resetImportModal(); }} className="border-white/20 text-white/70">
+                      Close
                     </Button>
-                  )}
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
+
+            {/* Batch delete confirmation dialog */}
+            <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+              <DialogContent className="bg-secondary border-white/10 text-white max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Delete {selectedEventIds.size} Event{selectedEventIds.size !== 1 ? "s" : ""}?</DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-muted-foreground py-2">
+                  This will permanently delete {selectedEventIds.size} selected event{selectedEventIds.size !== 1 ? "s" : ""}. This cannot be undone.
+                </p>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} className="border-white/20 text-white/70">
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => batchDeleteMutation.mutate(Array.from(selectedEventIds))}
+                    disabled={batchDeleteMutation.isPending}
+                    data-testid="button-confirm-batch-delete"
+                  >
+                    {batchDeleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Delete ${selectedEventIds.size}`}
+                  </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>

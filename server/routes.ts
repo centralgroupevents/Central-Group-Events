@@ -626,6 +626,21 @@ export async function registerRoutes(
     }
   });
 
+  // batch delete must be registered before /:id to avoid param capture
+  app.delete("/api/events/batch", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body as { ids?: unknown[] };
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Expected non-empty ids array" });
+      }
+      const numIds = ids.map((id) => Number(id)).filter((id) => !isNaN(id));
+      await storage.bulkDeleteEvents(numIds);
+      res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.delete("/api/events/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string, 10);
