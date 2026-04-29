@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { X, Loader2 } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -85,15 +85,15 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }:
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="bg-[#0e0e0e] border border-white/10 rounded-2xl p-0 max-w-md w-full shadow-2xl overflow-hidden">
-        <button
-          onClick={() => handleOpenChange(false)}
+      {/* [&>button:last-child]:hidden suppresses the default DialogContent close button so only our styled one renders */}
+      <DialogContent className="bg-[#0e0e0e] border border-white/10 rounded-2xl p-0 max-w-md w-full shadow-2xl overflow-hidden [&>button:last-child]:hidden">
+        <DialogClose
           className="absolute top-4 right-4 z-10 text-muted-foreground hover:text-white transition-colors"
           data-testid="button-close-subscribe-modal"
           aria-label="Close"
         >
           <X className="w-5 h-5" />
-        </button>
+        </DialogClose>
 
         <DialogTitle className="sr-only">Subscribe to the CGE Newsletter</DialogTitle>
         <DialogDescription className="sr-only">Enter your email to get the weekly NJ event list.</DialogDescription>
