@@ -54,6 +54,7 @@ export default function Home() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
+  const [heroSubscribed, setHeroSubscribed] = useState(false);
 
   // Newsletter Form
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
@@ -201,18 +202,27 @@ export default function Home() {
                 Promote Your Event <ArrowRight className="ml-2 w-5 h-5" />
               </a>
             </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
-              className="w-full sm:w-auto h-14 px-8 text-lg rounded-2xl border-white/20 bg-white/5 backdrop-blur-md hover:bg-white/10 hover:border-white/30 transition-all duration-300"
-              data-testid="button-hero-newsletter"
-              onClick={() => {
-                document.getElementById("newsletter")?.scrollIntoView({ behavior: "smooth" });
-                setSubscribeModalOpen(true);
-              }}
-            >
-              Join the Weekly Newsletter
-            </Button>
+            {heroSubscribed ? (
+              <span
+                className="w-full sm:w-auto h-14 px-8 text-base rounded-2xl border border-green-500/40 bg-green-500/10 text-green-400 font-semibold flex items-center justify-center"
+                data-testid="text-hero-subscribe-success"
+              >
+                You're in! Check your inbox.
+              </span>
+            ) : (
+              <Button 
+                size="lg" 
+                variant="outline" 
+                className="w-full sm:w-auto h-14 px-8 text-lg rounded-2xl border-white/20 bg-white/5 backdrop-blur-md hover:bg-white/10 hover:border-white/30 transition-all duration-300"
+                data-testid="button-hero-newsletter"
+                onClick={() => {
+                  document.getElementById("newsletter")?.scrollIntoView({ behavior: "smooth" });
+                  setSubscribeModalOpen(true);
+                }}
+              >
+                Join the Weekly Newsletter
+              </Button>
+            )}
           </motion.div>
         </div>
       </section>
@@ -833,6 +843,7 @@ export default function Home() {
       <SubscribeModal
         open={subscribeModalOpen}
         onOpenChange={setSubscribeModalOpen}
+        onSuccess={() => setHeroSubscribed(true)}
       />
     </div>
   );

@@ -5,32 +5,30 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/compone
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useSubscribeNewsletter } from "@/hooks/use-landing";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
 interface SubscribeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Gated blog post slug — if set, grants cookie access and redirects after subscribe */
   redirectAfter?: string;
+  /** Called after a successful non-gated subscribe so parent can show inline success */
+  onSuccess?: () => void;
 }
 
-export function SubscribeModal({ open, onOpenChange, redirectAfter }: SubscribeModalProps) {
+export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }: SubscribeModalProps) {
   const [, setLocation] = useLocation();
-  const subscribeMutation = useSubscribeNewsletter();
 
   const [email, setEmail] = useState("");
   const [region, setRegion] = useState("");
-  const [gateLoading, setGateLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   function reset() {
     setEmail("");
     setRegion("");
-    setSuccess(false);
+    setLoading(false);
     setError("");
-    setGateLoading(false);
-    subscribeMutation.reset();
   }
 
   function handleOpenChange(val: boolean) {
@@ -43,35 +41,47 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter }: SubscribeM
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) return;
     setError("");
+    setLoading(true);
 
-    if (redirectAfter) {
-      setGateLoading(true);
-      try {
-        const res = await fetch("/api/subscriber/check", {
+    try {
+      // Step 1: always add to the subscriber list (handles both normal + gated flows)
+      const subRes = await fetch("/api/subscribers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, region: region || undefined, name: "" }),
+        credentials: "include",
+      });
+      // 409 conflict (already subscribed) is acceptable — we still proceed
+      if (!subRes.ok && subRes.status !== 409) {
+        const body = await subRes.json().catch(() => ({}));
+        throw new Error((body as { message?: string }).message || "Failed to subscribe");
+      }
+
+      if (redirectAfter) {
+        // Step 2 (gated): set subscriber cookie then redirect to welcome page
+        const checkRes = await fetch("/api/subscriber/check", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: trimmed, referrer: document.referrer }),
           credentials: "include",
         });
-        if (!res.ok) throw new Error();
+        if (!checkRes.ok) throw new Error("Could not verify access. Try again.");
+        // Close modal first, then redirect
+        onOpenChange(false);
+        reset();
         setLocation(`/welcome?redirect=/blog/${redirectAfter}`);
-      } catch {
-        setError("Something went wrong. Please try again.");
-      } finally {
-        setGateLoading(false);
+      } else {
+        // Normal flow: close modal and notify parent for inline success message
+        onOpenChange(false);
+        reset();
+        onSuccess?.();
       }
-    } else {
-      subscribeMutation.mutate(
-        { email: trimmed, region: region || undefined, name: "" },
-        {
-          onSuccess: () => setSuccess(true),
-          onError: (err) => setError(err.message || "Failed to subscribe. Try again."),
-        }
-      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }
-
-  const isLoading = gateLoading || subscribeMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -91,70 +101,54 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter }: SubscribeM
         <div className="p-8 text-center space-y-5">
           <img src={cgeLogo} alt="CGE Logo" className="w-14 h-14 mx-auto object-contain" />
 
-          {success ? (
-            <div className="space-y-3 py-4">
-              <p className="text-xl font-bold text-white">You're in!</p>
-              <p className="text-muted-foreground text-sm">Check your inbox for the weekly NJ event list.</p>
-              <Button
-                className="mt-2 bg-primary hover:bg-primary/90 text-white rounded-xl px-6"
-                onClick={() => handleOpenChange(false)}
-                data-testid="button-subscribe-modal-done"
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold text-white">Get the Weekly NJ Event List</h2>
+            <p className="text-sm text-muted-foreground">
+              {redirectAfter
+                ? "Enter your email for instant access — it's free."
+                : "Free every week. No spam, just events."}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-3 text-left">
+            <Input
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="bg-black/40 border-white/10 h-11 text-white placeholder:text-muted-foreground rounded-xl"
+              data-testid="input-subscribe-modal-email"
+            />
+
+            <Select value={region} onValueChange={setRegion}>
+              <SelectTrigger
+                className="h-11 bg-black/40 border-white/10 text-sm rounded-xl"
+                data-testid="select-subscribe-modal-region"
               >
-                Done
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-1">
-                <h2 className="text-xl font-bold text-white">Get the Weekly NJ Event List</h2>
-                <p className="text-sm text-muted-foreground">
-                  {redirectAfter
-                    ? "Enter your email for instant access — it's free."
-                    : "Free every week. No spam, just events."}
-                </p>
-              </div>
+                <SelectValue placeholder="Region (optional)" />
+              </SelectTrigger>
+              <SelectContent className="bg-secondary border-white/10 text-white">
+                <SelectItem value="All">All NJ</SelectItem>
+                <SelectItem value="North NJ">North NJ</SelectItem>
+                <SelectItem value="Central NJ">Central NJ</SelectItem>
+                <SelectItem value="South NJ">South NJ</SelectItem>
+              </SelectContent>
+            </Select>
 
-              <form onSubmit={handleSubmit} className="space-y-3 text-left">
-                <Input
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="bg-black/40 border-white/10 h-11 text-white placeholder:text-muted-foreground rounded-xl"
-                  data-testid="input-subscribe-modal-email"
-                />
+            {error && (
+              <p className="text-sm text-red-400" data-testid="text-subscribe-modal-error">{error}</p>
+            )}
 
-                <Select value={region} onValueChange={setRegion}>
-                  <SelectTrigger
-                    className="h-11 bg-black/40 border-white/10 text-sm rounded-xl"
-                    data-testid="select-subscribe-modal-region"
-                  >
-                    <SelectValue placeholder="Region (optional)" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-secondary border-white/10 text-white">
-                    <SelectItem value="All">All NJ</SelectItem>
-                    <SelectItem value="North NJ">North NJ</SelectItem>
-                    <SelectItem value="Central NJ">Central NJ</SelectItem>
-                    <SelectItem value="South NJ">South NJ</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {error && (
-                  <p className="text-sm text-red-400" data-testid="text-subscribe-modal-error">{error}</p>
-                )}
-
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl"
-                  data-testid="button-subscribe-modal-submit"
-                >
-                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Subscribe"}
-                </Button>
-              </form>
-            </>
-          )}
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl"
+              data-testid="button-subscribe-modal-submit"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Subscribe"}
+            </Button>
+          </form>
         </div>
       </DialogContent>
     </Dialog>
