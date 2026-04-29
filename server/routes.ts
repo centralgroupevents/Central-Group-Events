@@ -226,6 +226,11 @@ export async function registerRoutes(
           field: err.errors[0].path.join('.'),
         });
       }
+      // PostgreSQL unique-constraint violation on email column
+      const pgErr = err as { code?: string };
+      if (pgErr.code === "23505") {
+        return res.status(409).json({ message: "Email already subscribed." });
+      }
       res.status(500).json({ message: "Internal server error" });
     }
   });
