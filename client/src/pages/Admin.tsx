@@ -1498,7 +1498,9 @@ function formatEventDate(dateStr: string | null): string {
   if (!dateStr) return "—";
   const [year, month, day] = dateStr.split("-").map(Number);
   const d = new Date(year, month - 1, day);
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  // en-US locale produces "Fri, Apr 4, 2026" — strip the comma before the 4-digit year
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+    .replace(/,(\s+\d{4})$/, "$1");
 }
 
 function formatEventTime(timeStr: string | null): string {

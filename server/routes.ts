@@ -633,7 +633,10 @@ export async function registerRoutes(
       if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ message: "Expected non-empty ids array" });
       }
-      const numIds = ids.map((id) => Number(id)).filter((id) => !isNaN(id));
+      const numIds = ids.map((id) => Number(id)).filter((id) => !isNaN(id) && Number.isInteger(id));
+      if (numIds.length === 0) {
+        return res.status(400).json({ message: "No valid numeric event IDs provided" });
+      }
       await storage.bulkDeleteEvents(numIds);
       res.status(204).send();
     } catch (err) {
