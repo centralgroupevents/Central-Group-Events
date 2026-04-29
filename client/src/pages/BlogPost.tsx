@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { ArrowLeft, Lock, MessageSquare, Send } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextViewer } from "@/components/RichTextEditor";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
+import { SubscribeModal } from "@/components/SubscribeModal";
 import { useToast } from "@/hooks/use-toast";
 
 type Post = {
@@ -116,12 +116,10 @@ function CommentItem({ comment, replies, hasAccess, postId, onReply }: CommentIt
 
 export default function BlogPost({ params }: { params: { slug: string } }) {
   const { slug } = params;
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [gateEmail, setGateEmail] = useState("");
-  const [gateLoading, setGateLoading] = useState(false);
+  const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
   const [commentBody, setCommentBody] = useState("");
   const [replyToId, setReplyToId] = useState<number | null>(null);
 
@@ -172,26 +170,6 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
     },
     onError: () => toast({ title: "Failed to post comment", variant: "destructive" }),
   });
-
-  async function handleGateSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!gateEmail.trim()) return;
-    setGateLoading(true);
-    try {
-      const res = await fetch("/api/subscriber/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: gateEmail.trim().toLowerCase(), referrer: document.referrer }),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error();
-      setLocation(`/welcome?redirect=/blog/${slug}`);
-    } catch {
-      toast({ title: "Something went wrong. Try again.", variant: "destructive" });
-    } finally {
-      setGateLoading(false);
-    }
-  }
 
   function handleCommentSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -307,25 +285,13 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
                 </div>
                 <h3 className="text-xl font-bold text-white">This post is for CGE subscribers only.</h3>
                 <p className="text-muted-foreground text-sm">Enter your email to get instant access — it's free.</p>
-                <form onSubmit={handleGateSubmit} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
-                  <Input
-                    type="email"
-                    placeholder="your@email.com"
-                    value={gateEmail}
-                    onChange={(e) => setGateEmail(e.target.value)}
-                    required
-                    className="bg-black/40 border-white/10 h-11 flex-1"
-                    data-testid="input-gate-email"
-                  />
-                  <Button
-                    type="submit"
-                    disabled={gateLoading}
-                    className="bg-primary hover:bg-primary/90 h-11 px-6 font-semibold"
-                    data-testid="button-get-access"
-                  >
-                    {gateLoading ? "Loading…" : "Get Access"}
-                  </Button>
-                </form>
+                <Button
+                  className="bg-primary hover:bg-primary/90 h-11 px-8 font-semibold mx-auto"
+                  onClick={() => setSubscribeModalOpen(true)}
+                  data-testid="button-get-access"
+                >
+                  Get Access
+                </Button>
               </div>
             </div>
           </div>
@@ -414,27 +380,23 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
               <p className="text-muted-foreground text-sm mb-4">
                 Log in as a subscriber to join the discussion.
               </p>
-              <form onSubmit={handleGateSubmit} className="flex flex-col sm:flex-row gap-3 max-w-sm mx-auto">
-                <Input
-                  type="email"
-                  placeholder="your@email.com"
-                  value={gateEmail}
-                  onChange={(e) => setGateEmail(e.target.value)}
-                  required
-                  className="bg-black/40 border-white/10 h-10 flex-1 text-sm"
-                />
-                <Button
-                  type="submit"
-                  disabled={gateLoading}
-                  className="bg-primary hover:bg-primary/90 h-10 px-4 font-semibold text-sm"
-                >
-                  {gateLoading ? "Loading…" : "Get Access"}
-                </Button>
-              </form>
+              <Button
+                className="bg-primary hover:bg-primary/90 h-10 px-6 font-semibold text-sm"
+                onClick={() => setSubscribeModalOpen(true)}
+                data-testid="button-comments-get-access"
+              >
+                Get Access
+              </Button>
             </div>
           )}
         </div>
       </div>
+
+      <SubscribeModal
+        open={subscribeModalOpen}
+        onOpenChange={setSubscribeModalOpen}
+        redirectAfter={slug}
+      />
     </div>
   );
 }

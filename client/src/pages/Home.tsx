@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useEvents, useSubscribeNewsletter } from "@/hooks/use-landing";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
+import { SubscribeModal } from "@/components/SubscribeModal";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
 // Re-defining schemas here for the form resolvers to match the API contract
@@ -52,7 +53,8 @@ const staggerItem = {
 export default function Home() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  
+  const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
+
   // Newsletter Form
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const newsletterForm = useForm<z.infer<typeof newsletterSchema>>({
@@ -203,9 +205,13 @@ export default function Home() {
               size="lg" 
               variant="outline" 
               className="w-full sm:w-auto h-14 px-8 text-lg rounded-2xl border-white/20 bg-white/5 backdrop-blur-md hover:bg-white/10 hover:border-white/30 transition-all duration-300"
-              asChild
+              data-testid="button-hero-newsletter"
+              onClick={() => {
+                document.getElementById("newsletter")?.scrollIntoView({ behavior: "smooth" });
+                setSubscribeModalOpen(true);
+              }}
             >
-              <a href="#newsletter">Join the Weekly Newsletter</a>
+              Join the Weekly Newsletter
             </Button>
           </motion.div>
         </div>
@@ -823,6 +829,11 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      <SubscribeModal
+        open={subscribeModalOpen}
+        onOpenChange={setSubscribeModalOpen}
+      />
     </div>
   );
 }
