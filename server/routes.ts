@@ -329,10 +329,16 @@ export async function registerRoutes(
       }
       // Confirmation email to the submitter
       try {
+        const packageLabel = input.mode && input.budgetRange
+          ? `${input.mode} — ${input.budgetRange}`
+          : input.mode || input.budgetRange || null;
+        const eventDisplayType = input.eventType === "Other" && input.eventTypeOther
+          ? `${input.eventType} — ${input.eventTypeOther}`
+          : input.eventType;
         await transporter.sendMail({
           from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
           to: input.email,
-          subject: `We received your submission! 🎉 — Central Group Events`,
+          subject: `Booking Received — Central Group Events`,
           html: `
             <!DOCTYPE html>
             <html>
@@ -345,50 +351,104 @@ export async function registerRoutes(
                 </div>
                 <!-- Body -->
                 <div style="padding:40px 32px;">
-                  <h1 style="color:#ffffff;font-size:24px;margin:0 0 16px;">Thanks for submitting your event!</h1>
+                  <h1 style="color:#ffffff;font-size:24px;margin:0 0 16px;">You're all set, ${input.contactName || "there"}!</h1>
                   <p style="color:#cccccc;font-size:15px;line-height:1.6;margin:0 0 32px;">
-                    Hey ${input.contactName || "there"}, we've received your event submission and will review it shortly. Here's a summary of what you submitted:
+                    We've received your booking and will confirm within 24 hours. Here's a summary of what you submitted:
                   </p>
                   <!-- Summary Table -->
                   <table style="width:100%;border-collapse:collapse;margin-bottom:32px;">
+                    ${packageLabel ? `
                     <tr style="border-bottom:1px solid #222;">
-                      <td style="padding:12px 0;color:#999;font-size:14px;width:42%;">Event Name</td>
+                      <td style="padding:12px 0;color:#999;font-size:14px;width:42%;">Package</td>
+                      <td style="padding:12px 0;color:#8B2FC9;font-size:14px;font-weight:bold;">${packageLabel}</td>
+                    </tr>` : ""}
+                    <tr style="border-bottom:1px solid #222;">
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Event Name</td>
                       <td style="padding:12px 0;color:#ffffff;font-size:14px;font-weight:bold;">${input.eventName || "Not provided"}</td>
                     </tr>
                     <tr style="border-bottom:1px solid #222;">
-                      <td style="padding:12px 0;color:#999;font-size:14px;">Venue</td>
-                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.venueName}</td>
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Event Type</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${eventDisplayType}</td>
                     </tr>
                     <tr style="border-bottom:1px solid #222;">
                       <td style="padding:12px 0;color:#999;font-size:14px;">Event Date</td>
-                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.eventDate}</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.eventDate}${input.eventTime ? ` at ${input.eventTime}` : ""}</td>
                     </tr>
                     <tr style="border-bottom:1px solid #222;">
-                      <td style="padding:12px 0;color:#999;font-size:14px;">Event Time</td>
-                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.eventTime || "Not provided"}</td>
-                    </tr>
-                    <tr style="border-bottom:1px solid #222;">
-                      <td style="padding:12px 0;color:#999;font-size:14px;">City</td>
-                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.city || "Not provided"}</td>
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Venue</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${[input.venueName, input.city].filter(Boolean).join(", ")}</td>
                     </tr>
                     <tr style="border-bottom:1px solid #222;">
                       <td style="padding:12px 0;color:#999;font-size:14px;">Region</td>
                       <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.region}</td>
                     </tr>
-                    <tr style="border-bottom:1px solid #222;">
-                      <td style="padding:12px 0;color:#999;font-size:14px;">Event Type</td>
-                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.eventType}${input.eventTypeOther ? ` — ${input.eventTypeOther}` : ""}</td>
-                    </tr>
                     ${input.instagramHandle ? `
                     <tr style="border-bottom:1px solid #222;">
-                      <td style="padding:12px 0;color:#999;font-size:14px;">Instagram Handle</td>
-                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">${input.instagramHandle}</td>
+                      <td style="padding:12px 0;color:#999;font-size:14px;">Instagram</td>
+                      <td style="padding:12px 0;color:#ffffff;font-size:14px;">@${input.instagramHandle}</td>
                     </tr>` : ""}
                   </table>
-                  <p style="color:#cccccc;font-size:15px;line-height:1.6;margin:0 0 32px;">
-                    Our team will be in touch within 24–48 hours. In the meantime, stay connected with us on social media for the latest NJ events!
-                  </p>
+
+                  <!-- CashApp Payment Instructions -->
+                  <div style="background:#001a04;border:1px solid #00D63233;border-radius:10px;padding:24px;margin-bottom:32px;">
+                    <table style="width:100%;border-collapse:collapse;">
+                      <tr>
+                        <td style="vertical-align:top;width:48px;padding-right:16px;">
+                          <div style="width:44px;height:44px;background:#00D63215;border:1px solid #00D63240;border-radius:50%;display:flex;align-items:center;justify-content:center;text-align:center;line-height:44px;">
+                            <span style="font-size:20px;">💸</span>
+                          </div>
+                        </td>
+                        <td style="vertical-align:top;">
+                          <p style="color:#ffffff;font-size:15px;font-weight:bold;margin:0 0 8px;">Complete your payment on CashApp</p>
+                          <p style="color:#aaaaaa;font-size:14px;line-height:1.6;margin:0 0 16px;">
+                            Your booking is saved, but your promotion won't be scheduled until payment is received.
+                            Send ${input.budgetRange ? `<strong style="color:#ffffff;">${input.budgetRange}</strong>` : "your package amount"} to
+                            <strong style="color:#00D632;">$centralgroupevents</strong> on CashApp
+                            and include <strong style="color:#ffffff;">${input.eventName || "your event name"}</strong> in the note.
+                          </p>
+                          <a href="https://cash.app/$centralgroupevents"
+                             style="display:inline-block;background:#00D632;color:#000000;text-decoration:none;font-weight:bold;font-size:14px;padding:12px 24px;border-radius:8px;">
+                            Pay via CashApp →
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </div>
+
+                  <!-- What Happens Next -->
+                  <h2 style="color:#ffffff;font-size:16px;font-weight:bold;margin:0 0 16px;text-transform:uppercase;letter-spacing:1px;">What Happens Next</h2>
+                  <table style="width:100%;border-collapse:collapse;margin-bottom:32px;">
+                    <tr>
+                      <td style="vertical-align:top;width:40px;padding-right:12px;padding-bottom:20px;">
+                        <div style="width:36px;height:36px;background:#8B2FC915;border:1px solid #8B2FC940;border-radius:50%;text-align:center;line-height:36px;font-size:12px;font-weight:bold;color:#8B2FC9;">01</div>
+                      </td>
+                      <td style="vertical-align:top;padding-bottom:20px;">
+                        <p style="color:#ffffff;font-size:14px;font-weight:bold;margin:0 0 4px;">Payment Confirmation</p>
+                        <p style="color:#888;font-size:13px;margin:0;">We'll verify your CashApp payment and send you a confirmation within 24 hours.</p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="vertical-align:top;width:40px;padding-right:12px;padding-bottom:20px;">
+                        <div style="width:36px;height:36px;background:#8B2FC915;border:1px solid #8B2FC940;border-radius:50%;text-align:center;line-height:36px;font-size:12px;font-weight:bold;color:#8B2FC9;">02</div>
+                      </td>
+                      <td style="vertical-align:top;padding-bottom:20px;">
+                        <p style="color:#ffffff;font-size:14px;font-weight:bold;margin:0 0 4px;">Content Review</p>
+                        <p style="color:#888;font-size:13px;margin:0;">Our team reviews your event details and begins crafting your promotional content.</p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="vertical-align:top;width:40px;padding-right:12px;">
+                        <div style="width:36px;height:36px;background:#8B2FC915;border:1px solid #8B2FC940;border-radius:50%;text-align:center;line-height:36px;font-size:12px;font-weight:bold;color:#8B2FC9;">03</div>
+                      </td>
+                      <td style="vertical-align:top;">
+                        <p style="color:#ffffff;font-size:14px;font-weight:bold;margin:0 0 4px;">Your Event Goes Live</p>
+                        <p style="color:#888;font-size:13px;margin:0;">We post across our platforms on your scheduled date. Sit back and watch the buzz build.</p>
+                      </td>
+                    </tr>
+                  </table>
+
                   <!-- Social Buttons -->
+                  <p style="color:#aaaaaa;font-size:14px;margin:0 0 16px;">Stay connected with us for the latest NJ events:</p>
                   <table style="width:100%;margin-bottom:40px;">
                     <tr>
                       <td style="text-align:center;padding:0 6px;">
