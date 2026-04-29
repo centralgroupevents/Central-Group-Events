@@ -20,6 +20,8 @@ export const api = {
       responses: {
         201: z.object({ message: z.string() }),
         400: errorSchemas.validation,
+        /** Duplicate email — already subscribed; frontend may treat as success */
+        409: errorSchemas.internal,
       },
     },
   },

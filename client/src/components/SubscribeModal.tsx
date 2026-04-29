@@ -69,7 +69,7 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }:
         // Close modal first, then redirect
         onOpenChange(false);
         reset();
-        setLocation(`/welcome?redirect=/blog/${redirectAfter}`);
+        setLocation(`/welcome?redirect=/blog/${encodeURIComponent(redirectAfter)}`);
       } else {
         // Normal flow: close modal and notify parent for inline success message
         onOpenChange(false);
