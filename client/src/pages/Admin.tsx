@@ -136,7 +136,7 @@ type PostVersion = {
 type AnalyticsData = {
   totalSubscribers: number;
   postViews: { postId: number; title: string; views: number }[];
-  linkClicks: { url: string; count: number }[];
+  linkClicks: { url: string; count: number; sourcePage: string | null }[];
   memberSources: { referrer: string; count: number }[];
 };
 
@@ -1344,6 +1344,7 @@ function AnalyticsTab() {
               <thead>
                 <tr className="border-b border-white/10 text-muted-foreground text-left">
                   <th className="px-6 py-3 font-medium">URL</th>
+                  <th className="px-4 py-3 font-medium">Source Page</th>
                   <th className="px-4 py-3 font-medium text-right">Clicks</th>
                 </tr>
               </thead>
@@ -1351,6 +1352,11 @@ function AnalyticsTab() {
                 {data.linkClicks.map((c, i) => (
                   <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
                     <td className="px-6 py-4 text-primary truncate max-w-xs">{decodeURIComponent(c.url)}</td>
+                    <td className="px-4 py-4 text-muted-foreground text-xs truncate max-w-[200px]">
+                      {c.sourcePage ? (
+                        <span title={c.sourcePage}>{c.sourcePage.replace(/^https?:\/\/[^/]+/, "")}</span>
+                      ) : "—"}
+                    </td>
                     <td className="px-4 py-4 text-right text-white/80">{c.count.toLocaleString()}</td>
                   </tr>
                 ))}

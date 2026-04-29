@@ -100,6 +100,7 @@ export const linkClicks = pgTable("link_clicks", {
   id: serial("id").primaryKey(),
   postId: integer("post_id").references(() => posts.id),
   url: text("url").notNull(),
+  sourcePage: text("source_page"),
   clickedAt: timestamp("clicked_at").defaultNow(),
 });
 

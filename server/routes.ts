@@ -248,6 +248,12 @@ export async function registerRoutes(
       const input = api.bookings.create.input.parse(req.body);
       await storage.createBooking(input);
       res.status(201).json({ message: "Booking request submitted successfully! We'll be in touch." });
+      // Auto-subscribe the booker to the newsletter (non-blocking, ON CONFLICT DO NOTHING via upsert)
+      storage.upsertSubscriber(
+        input.email.toLowerCase().trim(),
+        "booking",
+        input.contactName || undefined
+      ).catch(() => {});
       try {
         const submissionMode = input.mode || "Standard";
         const replyName = input.contactName || input.email;
@@ -1207,7 +1213,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid URL" });
       }
       const postId = postIdRaw ? parseInt(postIdRaw, 10) : undefined;
-      storage.recordClick(url, isNaN(postId as number) ? undefined : postId).catch(() => {});
+      const referer = (req.headers.referer || req.headers.referrer) as string | undefined;
+      const sourcePage = referer && referer.trim() ? referer.trim() : undefined;
+      storage.recordClick(url, isNaN(postId as number) ? undefined : postId, sourcePage).catch(() => {});
       res.redirect(302, url);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });

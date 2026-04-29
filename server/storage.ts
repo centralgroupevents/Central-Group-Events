@@ -49,7 +49,7 @@ export interface IStorage {
   // Subscribers (newsletter + blog gating)
   createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber>;
   findSubscriberByEmail(email: string): Promise<Subscriber | null>;
-  upsertSubscriber(email: string, referrer?: string): Promise<{ subscriber: Subscriber; isNew: boolean }>;
+  upsertSubscriber(email: string, referrer?: string, name?: string): Promise<{ subscriber: Subscriber; isNew: boolean }>;
 
   importSubscribers(rows: Array<{ email: string; region?: string }>): Promise<{ imported: number; skipped: number }>;
 
@@ -99,7 +99,7 @@ export interface IStorage {
   getViewsByPost(postId: number): Promise<number>;
 
   // Link clicks
-  recordClick(url: string, postId?: number): Promise<void>;
+  recordClick(url: string, postId?: number, sourcePage?: string): Promise<void>;
   getClickStats(): Promise<{ url: string; count: number }[]>;
 
   // Comments
@@ -110,7 +110,7 @@ export interface IStorage {
   getAnalytics(): Promise<{
     totalSubscribers: number;
     postViews: { postId: number; title: string; views: number }[];
-    linkClicks: { url: string; count: number }[];
+    linkClicks: { url: string; count: number; sourcePage: string | null }[];
     memberSources: { referrer: string; count: number }[];
   }>;
 }
@@ -157,14 +157,14 @@ export class DatabaseStorage implements IStorage {
     return { imported, skipped };
   }
 
-  async upsertSubscriber(email: string, referrer?: string): Promise<{ subscriber: Subscriber; isNew: boolean }> {
+  async upsertSubscriber(email: string, referrer?: string, name?: string): Promise<{ subscriber: Subscriber; isNew: boolean }> {
     const existing = await this.findSubscriberByEmail(email);
     if (existing) {
       return { subscriber: existing, isNew: false };
     }
     const [created] = await db.insert(newsletterSubscribers).values({
       email,
-      name: email.split("@")[0],
+      name: name || email.split("@")[0],
       region: "All",
       referrer: referrer || null,
       hasAccess: true,
@@ -419,8 +419,12 @@ export class DatabaseStorage implements IStorage {
 
   // ── Link clicks ───────────────────────────────────────────────────────
 
-  async recordClick(url: string, postId?: number): Promise<void> {
-    await db.insert(linkClicks).values({ url, postId: postId ?? null });
+  async recordClick(url: string, postId?: number, sourcePage?: string): Promise<void> {
+    await db.insert(linkClicks).values({
+      url,
+      postId: postId ?? null,
+      sourcePage: sourcePage ?? null,
+    });
   }
 
   async getClickStats(): Promise<{ url: string; count: number }[]> {
@@ -469,6 +473,7 @@ export class DatabaseStorage implements IStorage {
       .select({
         url: linkClicks.url,
         count: count(),
+        sourcePage: sql<string | null>`max(${linkClicks.sourcePage})`,
       })
       .from(linkClicks)
       .groupBy(linkClicks.url)
@@ -493,6 +498,7 @@ export class DatabaseStorage implements IStorage {
       linkClicks: clickRows.map((r) => ({
         url: r.url,
         count: Number(r.count),
+        sourcePage: r.sourcePage ?? null,
       })),
       memberSources: sourceRows.map((r) => ({
         referrer: r.referrer ?? "direct",
