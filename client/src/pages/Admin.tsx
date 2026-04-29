@@ -339,10 +339,25 @@ function ImageUpload({ value, onChange }: { value: string; onChange: (url: strin
 /* ─────────────────────────────────────────────────────────── */
 /*  SUBSCRIBERS TAB                                           */
 /* ─────────────────────────────────────────────────────────── */
+
+const SUB_REGIONS = ["All", "North NJ", "Central NJ", "South NJ", "No Region"] as const;
+const SUB_SOURCES = ["All", "direct", "instagram", "newsletter", "booking", "wizard", "gate"] as const;
+type SubSortCol = "email" | "name" | "region" | "source" | "joined";
+
 function SubscribersTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
+
+  // ── filter + sort state ──────────────────────────────────
   const [search, setSearch] = useState("");
+  const [regionFilter, setRegionFilter] = useState<string>("All");
+  const [sourceFilter, setSourceFilter] = useState<string>("All");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sortCol, setSortCol] = useState<SubSortCol>("joined");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  // ── import state ─────────────────────────────────────────
   const [importOpen, setImportOpen] = useState(false);
   const [importTab, setImportTab] = useState<"csv" | "paste">("csv");
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -354,18 +369,81 @@ function SubscribersTab() {
     queryKey: ["/api/admin/subscribers"],
   });
 
-  const filtered = subscribers.filter((s) =>
-    s.email.toLowerCase().includes(search.toLowerCase())
-  );
+  // ── combined filter ───────────────────────────────────────
+  const filtered: Subscriber[] = (() => {
+    let list = subscribers;
+
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(s => s.email.toLowerCase().includes(q) || (s.name ?? "").toLowerCase().includes(q));
+    }
+    if (regionFilter !== "All") {
+      if (regionFilter === "No Region") {
+        list = list.filter(s => !s.region);
+      } else {
+        list = list.filter(s => s.region === regionFilter);
+      }
+    }
+    if (sourceFilter !== "All") {
+      const src = sourceFilter === "direct" ? "" : sourceFilter;
+      list = list.filter(s => {
+        const ref = (s.referrer ?? "").toLowerCase().trim();
+        return sourceFilter === "direct" ? (!ref || ref === "direct") : ref === src;
+      });
+    }
+    if (dateFrom) {
+      const from = new Date(dateFrom).getTime();
+      list = list.filter(s => s.createdAt && new Date(s.createdAt).getTime() >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo).getTime() + 86_400_000; // inclusive end-of-day
+      list = list.filter(s => s.createdAt && new Date(s.createdAt).getTime() <= to);
+    }
+
+    // ── sort ─────────────────────────────────────────────────
+    list = [...list].sort((a, b) => {
+      let aVal = "";
+      let bVal = "";
+      switch (sortCol) {
+        case "email":   aVal = a.email; bVal = b.email; break;
+        case "name":    aVal = a.name ?? ""; bVal = b.name ?? ""; break;
+        case "region":  aVal = a.region ?? ""; bVal = b.region ?? ""; break;
+        case "source":  aVal = a.referrer ?? "direct"; bVal = b.referrer ?? "direct"; break;
+        case "joined":  aVal = a.createdAt ?? ""; bVal = b.createdAt ?? ""; break;
+      }
+      const cmp = aVal.localeCompare(bVal);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+    return list;
+  })();
+
+  const hasActiveFilter = search.trim() || regionFilter !== "All" || sourceFilter !== "All" || dateFrom || dateTo;
+
+  function handleSortClick(col: SubSortCol) {
+    if (sortCol === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  }
+
+  function SortIcon({ col }: { col: SubSortCol }) {
+    if (sortCol !== col) return <ChevronDown className="w-3.5 h-3.5 text-white/20 inline ml-1" />;
+    return sortDir === "asc"
+      ? <ChevronUp className="w-3.5 h-3.5 text-primary inline ml-1" />
+      : <ChevronDown className="w-3.5 h-3.5 text-primary inline ml-1" />;
+  }
 
   function exportCsv() {
     const rows = [
-      ["Email", "Name", "Region", "Referrer", "Date Joined"],
+      ["Email", "Name", "Region", "Source", "Date Joined"],
       ...subscribers.map((s) => [
         s.email,
         s.name ?? "",
         s.region ?? "",
-        s.referrer ?? "",
+        s.referrer || "direct",
         s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-US") : "",
       ]),
     ];
@@ -387,17 +465,11 @@ function SubscribersTab() {
 
       if (importTab === "csv" && csvFile) {
         const text = await csvFile.text();
-
-        // Use papaparse for robust CSV parsing (handles quoted commas, Ghost exports, etc.)
         const parsed = Papa.parse<Record<string, string>>(text, {
           header: true,
           skipEmptyLines: true,
           transformHeader: (h) => h.trim().toLowerCase(),
         });
-
-        console.log("[subscriber-import] CSV headers detected:", parsed.meta.fields);
-        console.log("[subscriber-import] CSV total data rows:", parsed.data.length);
-
         if (!parsed.meta.fields?.includes("email")) {
           toast({
             title: "CSV Error",
@@ -407,21 +479,15 @@ function SubscribersTab() {
           setImporting(false);
           return;
         }
-
         rows = parsed.data
           .map((row) => ({ email: (row["email"] || "").trim().toLowerCase() }))
           .filter((r) => r.email.includes("@"));
-
-        console.log(`[subscriber-import] CSV valid email rows after filter: ${rows.length}`);
-
       } else if (importTab === "paste") {
         rows = pasteText
           .split(/[\r\n,;]+/)
           .map((e) => e.trim().toLowerCase())
           .filter((e) => e.includes("@"))
           .map((email) => ({ email }));
-
-        console.log(`[subscriber-import] Paste valid emails parsed: ${rows.length}`);
       }
 
       if (rows.length === 0) {
@@ -429,15 +495,11 @@ function SubscribersTab() {
         setImporting(false);
         return;
       }
-
-      console.log(`[subscriber-import] Sending ${rows.length} rows to backend`);
       const res = await apiRequest("POST", "/api/subscribers/import", rows);
       const result = await res.json();
-      console.log("[subscriber-import] Result:", result);
       setImportResult(result);
       qc.invalidateQueries({ queryKey: ["/api/admin/subscribers"] });
-    } catch (err) {
-      console.error("[subscriber-import] Error:", err);
+    } catch {
       toast({ title: "Import failed", description: "An error occurred during import.", variant: "destructive" });
     } finally {
       setImporting(false);
@@ -453,8 +515,9 @@ function SubscribersTab() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="space-y-5">
+      {/* ── Stat cards ─────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <div className="bg-secondary/30 border border-white/10 rounded-xl p-5">
           <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Total Subscribers</p>
           {isLoading ? (
@@ -463,37 +526,94 @@ function SubscribersTab() {
             <p className="text-3xl font-black text-white">{subscribers.length.toLocaleString()}</p>
           )}
         </div>
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5">
+          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Total Shown</p>
+          {isLoading ? (
+            <Skeleton className="h-9 w-20 mt-1" />
+          ) : (
+            <p className={`text-3xl font-black ${hasActiveFilter ? "text-primary" : "text-white"}`}>
+              {filtered.length.toLocaleString()}
+            </p>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* ── Action bar ─────────────────────────────────────── */}
+      <div className="flex items-center gap-2 flex-wrap">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by email…"
-          className="bg-black/40 border-white/10 h-10 max-w-sm"
+          placeholder="Search email or name…"
+          className="bg-black/40 border-white/10 h-9 w-52"
           data-testid="input-subscriber-search"
         />
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={exportCsv}
-          disabled={subscribers.length === 0}
-          className="border-white/20 text-white/70 hover:bg-white/10"
-          data-testid="button-export-subscribers"
-        >
+        <Button size="sm" variant="outline" onClick={exportCsv} disabled={subscribers.length === 0}
+          className="border-white/20 text-white/70 hover:bg-white/10" data-testid="button-export-subscribers">
           <Download className="w-3.5 h-3.5 mr-1.5" /> Export CSV
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => { resetImportModal(); setImportOpen(true); }}
-          className="border-white/20 text-white/70 hover:bg-white/10"
-          data-testid="button-import-subscribers"
-        >
-          <Upload className="w-3.5 h-3.5 mr-1.5" /> Import Subscribers
+        <Button size="sm" variant="outline" onClick={() => { resetImportModal(); setImportOpen(true); }}
+          className="border-white/20 text-white/70 hover:bg-white/10" data-testid="button-import-subscribers">
+          <Upload className="w-3.5 h-3.5 mr-1.5" /> Import
         </Button>
       </div>
 
+      {/* ── Filter bar ─────────────────────────────────────── */}
+      <div className="flex items-center gap-2 flex-wrap bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3">
+        <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mr-1 shrink-0">Filter:</span>
+
+        {/* Region */}
+        <Select value={regionFilter} onValueChange={setRegionFilter}>
+          <SelectTrigger className="h-8 w-36 bg-black/40 border-white/10 text-xs" data-testid="select-region-filter">
+            <SelectValue placeholder="Region" />
+          </SelectTrigger>
+          <SelectContent className="bg-secondary border-white/10 text-white text-xs">
+            {SUB_REGIONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        {/* Source */}
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="h-8 w-36 bg-black/40 border-white/10 text-xs" data-testid="select-source-filter">
+            <SelectValue placeholder="Source" />
+          </SelectTrigger>
+          <SelectContent className="bg-secondary border-white/10 text-white text-xs">
+            {SUB_SOURCES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        {/* Date range */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">From</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-8 rounded-md bg-black/40 border border-white/10 text-xs text-white px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+            data-testid="input-date-from"
+          />
+          <span className="text-xs text-muted-foreground">To</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-8 rounded-md bg-black/40 border border-white/10 text-xs text-white px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+            data-testid="input-date-to"
+          />
+        </div>
+
+        {/* Clear filters */}
+        {hasActiveFilter && (
+          <button
+            onClick={() => { setSearch(""); setRegionFilter("All"); setSourceFilter("All"); setDateFrom(""); setDateTo(""); }}
+            className="text-xs text-primary hover:text-primary/80 transition-colors ml-auto"
+            data-testid="button-clear-filters"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* ── Table ──────────────────────────────────────────── */}
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
         {isLoading ? (
           <div className="p-6 space-y-3">
@@ -502,17 +622,32 @@ function SubscribersTab() {
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-muted-foreground">
             <Mail className="w-12 h-12 mx-auto mb-3 opacity-40" />
-            <p>{search ? "No subscribers match your search." : "No subscribers yet."}</p>
+            <p>{hasActiveFilter ? "No subscribers match the active filters." : "No subscribers yet."}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-muted-foreground text-left">
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Region</th>
-                  <th className="px-4 py-3 font-medium">Source</th>
-                  <th className="px-4 py-3 font-medium">Date Joined</th>
+                <tr className="border-b border-white/10 bg-secondary/60 text-muted-foreground text-left select-none">
+                  {(
+                    [
+                      { col: "email" as SubSortCol, label: "Email" },
+                      { col: "name" as SubSortCol, label: "Name" },
+                      { col: "region" as SubSortCol, label: "Region" },
+                      { col: "source" as SubSortCol, label: "Source" },
+                      { col: "joined" as SubSortCol, label: "Date Joined" },
+                    ] as const
+                  ).map(({ col, label }) => (
+                    <th
+                      key={col}
+                      className="px-4 py-3 font-medium cursor-pointer hover:text-white transition-colors whitespace-nowrap"
+                      onClick={() => handleSortClick(col)}
+                      data-testid={`th-${col}`}
+                    >
+                      {label}
+                      <SortIcon col={col} />
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -525,8 +660,17 @@ function SubscribersTab() {
                     <td className="px-4 py-3 font-medium text-white">
                       <a href={`mailto:${sub.email}`} className="hover:text-primary transition-colors">{sub.email}</a>
                     </td>
+                    <td className="px-4 py-3 text-muted-foreground">{sub.name || "—"}</td>
                     <td className="px-4 py-3 text-muted-foreground">{sub.region || "—"}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{sub.referrer || "direct"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        !sub.referrer || sub.referrer === "direct"
+                          ? "bg-white/10 text-white/60"
+                          : "bg-primary/15 text-primary/90"
+                      }`}>
+                        {sub.referrer || "direct"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(sub.createdAt)}</td>
                   </tr>
                 ))}
@@ -536,14 +680,13 @@ function SubscribersTab() {
         )}
       </div>
 
-      {/* Import Modal */}
+      {/* ── Import Modal ───────────────────────────────────── */}
       <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) resetImportModal(); }}>
         <DialogContent className="bg-[#0d0d0d] border border-white/10 text-white max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-white">Import Subscribers</DialogTitle>
           </DialogHeader>
 
-          {/* Tab switcher */}
           <div className="flex gap-1 bg-white/5 rounded-lg p-1 mb-4">
             {(["csv", "paste"] as const).map((t) => (
               <button
