@@ -1,0 +1,103 @@
+Make the following changes across the site and admin. Do not change anything outside of what is specified.
+
+---
+
+1. CALENDAR LOGIC FIX:
+- On the public event calendar, filter out any event where the date is strictly before today's date (compare date only, not time)
+- This filter must happen on the BACKEND in the GET /api/events route, not just the frontend
+- Change the query to only return events where date >= CURRENT_DATE
+- Also update the frontend upcomingEvents filter to match: hide any event where the date is before today
+- When new events are added via the admin, they should appear immediately without needing a page refresh — ensure the events query is refetched after any add/edit/delete in the admin
+
+---
+
+2. EVENT CALENDAR — FILTERS:
+- Add two filter controls in the top right of the event calendar section, next to the region tabs
+- Filter 1: Time of Day dropdown with options: All Times, Morning (before 12pm), Afternoon (12pm-5pm), Evening (5pm-9pm), Late Night (9pm+)
+- Filter 2: Event Type dropdown with options: All Types, Brunch, Concert, DJ Set, Happy Hour, Live Music, Party, Festival, Dance Class, Special Event, Other
+- Both filters work client-side on the already-fetched events list
+- Filters stack with the region tab filter (all three filters apply simultaneously)
+- On mobile, stack the filters below the region tabs
+
+---
+
+3. "JOIN WEEKLY NEWSLETTER" BUTTON:
+- The "Join the Weekly Newsletter" button in the hero section should scroll to the newsletter section AND immediately open a focused email capture popup/modal
+- The modal should be simple: CGE logo, heading "Get the Weekly NJ Event List", email input, optional region select, and a "Subscribe" button
+- On submit: call the existing POST /api/newsletter route
+- On success: close the modal, show inline success message "You're in! Check your inbox.", and if the user was trying to access a gated post, grant them access via the existing subscriber cookie flow
+- The modal should also appear when a non-subscriber tries to access a gated blog post and clicks "Subscribe" from the gate overlay
+
+---
+
+4. ADMIN — IMPORT EVENTS FLEXIBILITY:
+
+Column mapping:
+- When a CSV or Excel file is uploaded in the Import Events modal, instead of assuming fixed column names, parse the file headers first and show a column mapping UI
+- Display a dropdown for each CGE field (Name, Date, Time, Venue, City, Region, Organizer, Influencer, Genre, Instagram Handle, Ticket Link) 
+- Each dropdown is pre-populated with the detected column headers from the uploaded file
+- The system should attempt to auto-match columns using "contains" logic (case insensitive): e.g. if a column is named "Event Name" or "event_name" or "Name of Event", auto-select it for the Name field
+- Required fields (Name, Date, Region, Time, Venue, City, Instagram Handle) are marked with a red asterisk
+- User can adjust any mapping before confirming import
+- Show a preview of the first 3 rows after mapping is confirmed, before final import
+
+Bulk paste for import:
+- Add a "Paste Data" tab to the Import Events modal (alongside Upload CSV)
+- User can paste raw tab-separated or comma-separated rows copied directly from Google Sheets or Excel
+- First row is treated as headers
+- Apply the same column mapping UI after paste is detected
+- Parse and preview before importing
+
+Date/Time display:
+- In the admin events table, display dates in a human-readable format: "Fri, Apr 4 2026" instead of "2026-04-04"
+- Display times in 12-hour format with AM/PM: "8:00 PM" instead of "20:00"
+- Apply this formatting everywhere dates and times appear in the admin events tab
+
+---
+
+5. ADMIN — MULTI-SELECT DELETE FOR EVENTS:
+- Add a checkbox to the left of each event row in the admin events table
+- Add a "Select All" checkbox in the table header
+- When one or more rows are selected, show a red "Delete Selected (X)" button above the table
+- Clicking it shows a confirmation dialog: "Are you sure you want to delete X events? This cannot be undone."
+- On confirm, delete all selected events via a batch DELETE request
+- After deletion, refresh the events table and clear all selections
+
+---
+
+6. ADMIN — GENRE DROPDOWN IN EVENT EDIT:
+- In the Add/Edit Event modal, replace the Genre free text input with a dropdown
+- Options: Brunch, Concert, DJ Set, Happy Hour, Live Music, Party, Festival, Dance Class, Special Event, Other
+- If "Other" is selected, show a text input below: "Describe the genre"
+- Apply the same dropdown to the bulk import column mapping (map incoming genre values to the closest match)
+
+---
+
+7. ADMIN — SUBSCRIBERS TAB FLEXIBILITY:
+- Add the following filter/search options to the Subscribers tab:
+  - Search by email (already exists — keep it)
+  - Filter by Region (dropdown: All, North NJ, Central NJ, South NJ, No Region)
+  - Filter by Source/Referrer (dropdown: All, direct, instagram, newsletter, booking, wizard, gate)
+  - Filter by Date Joined (date range: From / To)
+- Add a "Total shown" count that updates as filters are applied
+- Add a column "Source" that shows where the subscriber came from (referrer field)
+- Make all columns sortable by clicking the column header
+
+---
+
+8. ALL EMAILS ADDED TO SUBSCRIBER LIST:
+Add logic to automatically insert the email into the subscribers table (if not already present) whenever an email is collected from any of these forms. Use INSERT ... ON CONFLICT DO NOTHING for all:
+
+- Newsletter signup form (POST /api/newsletter) — already does this, confirm it's working
+- Subscriber gate (/api/subscriber/check) — already does this, confirm it's working  
+- Booking form (POST /api/bookings) — add: insert email + name into subscribers with referrer = "booking"
+- Wizard form (/book page submission) — add: insert email + name into subscribers with referrer = "wizard"
+- Set the referrer field appropriately for each source so it shows up correctly in the Subscribers tab filters
+
+---
+
+9. OUTBOUND LINK TRACKING — FIND THE SOURCE:
+- In the Analytics tab in /admin, update the "Top Outbound Links" table to include a new column: "Source Page"
+- When logging a click to the link_clicks table via GET /go, also capture the HTTP Referer header from the request and store it in a new "sourcePage" column in the link_clicks table
+- Add this column to the link_clicks table if it doesn't exist
+- Display the sourcePage in the Top Outbound Links analytics table so you can see which blog post or page each outbound click is coming from
