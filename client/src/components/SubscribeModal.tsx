@@ -117,6 +117,7 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }:
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoFocus
               className="bg-black/40 border-white/10 h-11 text-white placeholder:text-muted-foreground rounded-xl"
               data-testid="input-subscribe-modal-email"
             />
@@ -129,7 +130,7 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }:
                 <SelectValue placeholder="Region (optional)" />
               </SelectTrigger>
               <SelectContent className="bg-secondary border-white/10 text-white">
-                <SelectItem value="All">All NJ</SelectItem>
+                <SelectItem value="All">All</SelectItem>
                 <SelectItem value="North NJ">North NJ</SelectItem>
                 <SelectItem value="Central NJ">Central NJ</SelectItem>
                 <SelectItem value="South NJ">South NJ</SelectItem>
