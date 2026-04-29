@@ -32,6 +32,7 @@ export const promotionBookings = pgTable("promotion_bookings", {
   instagramHandle: text("instagram_handle"),
   readyToMoveForward: text("ready_to_move_forward"),
   status: text("status").default("New"),
+  adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -118,7 +119,7 @@ export const insertSubscriberSchema = createInsertSchema(newsletterSubscribers).
   referrer: z.string().optional(),
   hasAccess: z.boolean().optional(),
 });
-export const insertBookingSchema = createInsertSchema(promotionBookings).omit({ id: true, createdAt: true }).extend({
+export const insertBookingSchema = createInsertSchema(promotionBookings).omit({ id: true, createdAt: true, adminNotes: true }).extend({
   email: z.string().email(),
   mode: z.string().optional(),
   eventName: z.string().optional(),

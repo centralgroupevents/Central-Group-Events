@@ -1548,6 +1548,25 @@ export default function Admin() {
     onError: () => toast({ title: "Failed to update status", variant: "destructive" }),
   });
 
+  const updateBookingNotesMutation = useMutation({
+    mutationFn: async ({ id, adminNotes }: { id: number; adminNotes: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/bookings/${id}/notes`, { adminNotes });
+      return res.json();
+    },
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
+      setBookingNotesDraft((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      toast({ title: "Notes saved" });
+    },
+    onError: () => toast({ title: "Failed to save notes", variant: "destructive" }),
+  });
+
+  const [bookingNotesDraft, setBookingNotesDraft] = useState<Record<number, string>>({});
+
   const createMutation = useMutation({
     mutationFn: async (data: EventForm) => {
       const res = await apiRequest("POST", "/api/events", {
@@ -2362,6 +2381,30 @@ export default function Admin() {
                                       <div>
                                         <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Submitted</p>
                                         <p className="text-white">{formatDate(booking.createdAt)}</p>
+                                      </div>
+                                    </div>
+                                    <div className="mt-5 pt-4 border-t border-white/10" onClick={(e) => e.stopPropagation()}>
+                                      <p className="text-muted-foreground text-xs uppercase tracking-wide mb-2">Internal Notes</p>
+                                      <textarea
+                                        data-testid={`textarea-admin-notes-${booking.id}`}
+                                        className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                                        rows={3}
+                                        placeholder="Add internal notes for your team…"
+                                        value={bookingNotesDraft[booking.id] ?? (booking.adminNotes || "")}
+                                        onChange={(e) => setBookingNotesDraft((prev) => ({ ...prev, [booking.id]: e.target.value }))}
+                                      />
+                                      <div className="flex justify-end mt-2">
+                                        <button
+                                          data-testid={`button-save-notes-${booking.id}`}
+                                          disabled={updateBookingNotesMutation.isPending}
+                                          onClick={() => {
+                                            const notes = bookingNotesDraft[booking.id] ?? (booking.adminNotes || "");
+                                            updateBookingNotesMutation.mutate({ id: booking.id, adminNotes: notes });
+                                          }}
+                                          className="px-4 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                                        >
+                                          {updateBookingNotesMutation.isPending ? "Saving…" : "Save Notes"}
+                                        </button>
                                       </div>
                                     </div>
                                   </td>

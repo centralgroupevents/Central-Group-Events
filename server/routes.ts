@@ -484,6 +484,22 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/admin/bookings/:id/notes", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid booking id" });
+      const { adminNotes } = req.body;
+      if (typeof adminNotes !== "string") {
+        return res.status(400).json({ message: "adminNotes must be a string" });
+      }
+      const booking = await storage.updateBookingNotes(id, adminNotes);
+      if (!booking) return res.status(404).json({ message: "Booking not found" });
+      res.json(booking);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/upload", requireAuth(), upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file provided" });
