@@ -375,7 +375,7 @@ function SubscribersTab() {
 
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(s => s.email.toLowerCase().includes(q) || (s.name ?? "").toLowerCase().includes(q));
+      list = list.filter(s => s.email.toLowerCase().includes(q));
     }
     if (regionFilter !== "All") {
       if (regionFilter === "No Region") {
@@ -438,12 +438,12 @@ function SubscribersTab() {
 
   function exportCsv() {
     const rows = [
-      ["Email", "Name", "Region", "Source", "Date Joined"],
+      ["Email", "Name", "Region", "Referrer", "Date Joined"],
       ...subscribers.map((s) => [
         s.email,
         s.name ?? "",
         s.region ?? "",
-        s.referrer || "direct",
+        s.referrer ?? "",
         s.createdAt ? new Date(s.createdAt).toLocaleDateString("en-US") : "",
       ]),
     ];
@@ -543,7 +543,7 @@ function SubscribersTab() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search email or name…"
+          placeholder="Search by email…"
           className="bg-black/40 border-white/10 h-9 w-52"
           data-testid="input-subscriber-search"
         />
