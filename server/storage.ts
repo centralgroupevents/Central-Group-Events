@@ -158,18 +158,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertSubscriber(email: string, referrer?: string, name?: string): Promise<{ subscriber: Subscriber; isNew: boolean }> {
-    const existing = await this.findSubscriberByEmail(email);
-    if (existing) {
-      return { subscriber: existing, isNew: false };
+    const inserted = await db
+      .insert(newsletterSubscribers)
+      .values({
+        email,
+        name: name || email.split("@")[0],
+        region: "All",
+        referrer: referrer || null,
+        hasAccess: true,
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    if (inserted.length > 0) {
+      return { subscriber: inserted[0], isNew: true };
     }
-    const [created] = await db.insert(newsletterSubscribers).values({
-      email,
-      name: name || email.split("@")[0],
-      region: "All",
-      referrer: referrer || null,
-      hasAccess: true,
-    }).returning();
-    return { subscriber: created, isNew: true };
+
+    // Row already existed — fetch and return it
+    const existing = await this.findSubscriberByEmail(email);
+    return { subscriber: existing!, isNew: false };
   }
 
   // ── Bookings ──────────────────────────────────────────────────────────
