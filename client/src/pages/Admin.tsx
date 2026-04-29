@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from "react";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -1823,24 +1824,56 @@ export default function Admin() {
   function handleCsvFile(file: File) {
     setImportErrors([]);
     setImportResult(null);
-    Papa.parse<string[]>(file, {
-      header: false,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const allRows = results.data as string[][];
-        if (allRows.length < 2) {
-          setImportErrors(["File appears to be empty or has only headers."]);
-          return;
+
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name) ||
+      file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.type === "application/vnd.ms-excel";
+
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const allRows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as string[][];
+          const nonEmpty = allRows.filter(r => r.some(c => String(c).trim() !== ""));
+          if (nonEmpty.length < 2) {
+            setImportErrors(["Spreadsheet appears to be empty or has only headers."]);
+            return;
+          }
+          const headers = nonEmpty[0].map(h => String(h).trim());
+          const dataRows = nonEmpty.slice(1).map(row => row.map(c => String(c).trim()));
+          setImportRawHeaders(headers);
+          setImportRawRows(dataRows);
+          setImportMapping(buildInitialMapping(headers));
+          setImportStep("mapping");
+        } catch {
+          setImportErrors(["Could not read the spreadsheet file. Make sure it's a valid .xlsx or .xls file."]);
         }
-        const headers = allRows[0].map(h => h.trim());
-        const dataRows = allRows.slice(1);
-        setImportRawHeaders(headers);
-        setImportRawRows(dataRows);
-        setImportMapping(buildInitialMapping(headers));
-        setImportStep("mapping");
-      },
-      error: (err: Error) => setImportErrors([err.message]),
-    });
+      };
+      reader.onerror = () => setImportErrors(["Failed to read the file."]);
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse<string[]>(file, {
+        header: false,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const allRows = results.data as string[][];
+          if (allRows.length < 2) {
+            setImportErrors(["File appears to be empty or has only headers."]);
+            return;
+          }
+          const headers = allRows[0].map(h => h.trim());
+          const dataRows = allRows.slice(1);
+          setImportRawHeaders(headers);
+          setImportRawRows(dataRows);
+          setImportMapping(buildInitialMapping(headers));
+          setImportStep("mapping");
+        },
+        error: (err: Error) => setImportErrors([err.message]),
+      });
+    }
   }
 
   function handlePasteConfirm() {
