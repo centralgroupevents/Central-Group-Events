@@ -83,10 +83,11 @@ export default function Home() {
   const [eventType, setEventType] = useState("All Types");
   const { data: events, isLoading: eventsLoading } = useEvents(activeRegion);
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const upcomingEvents = (events || []).filter(e => e.date >= todayStr);
 
-  function getTimeOfDayBucket(time?: string | null): string {
+  function getTimeOfDayBucket(time: string | null | undefined): string {
     if (!time) return "unknown";
     const [hStr] = time.split(":");
     const h = parseInt(hStr, 10);
@@ -102,14 +103,14 @@ export default function Home() {
       const q = searchQuery.toLowerCase();
       const matchesSearch =
         e.title.toLowerCase().includes(q) ||
-        ((e as any).city || "").toLowerCase().includes(q);
+        (e.city || "").toLowerCase().includes(q);
       if (!matchesSearch) return false;
     }
     if (timeOfDay !== "All Times") {
-      if (getTimeOfDayBucket((e as any).eventTime) !== timeOfDay) return false;
+      if (getTimeOfDayBucket(e.eventTime) !== timeOfDay) return false;
     }
     if (eventType !== "All Types") {
-      const genre = ((e as any).genre || "").toLowerCase();
+      const genre = (e.genre || "").toLowerCase();
       if (genre !== eventType.toLowerCase()) return false;
     }
     return true;
@@ -475,7 +476,7 @@ export default function Home() {
                         <p className="font-semibold text-base leading-snug truncate" data-testid={`text-event-title-${event.id}`}>{event.title}</p>
                         <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
                           <MapPin className="w-3 h-3 shrink-0" />
-                          {(event as any).city ? `${(event as any).city}, ${event.region.replace(" NJ", "")} NJ` : event.region}
+                          {event.city ? `${event.city}, ${event.region.replace(" NJ", "")} NJ` : event.region}
                         </p>
                       </div>
                       <div className="flex items-center gap-4 shrink-0">

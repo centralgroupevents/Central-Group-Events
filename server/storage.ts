@@ -203,11 +203,11 @@ export class DatabaseStorage implements IStorage {
   // ── Events ────────────────────────────────────────────────────────────
 
   async getEvents(region?: string): Promise<Event[]> {
-    const today = new Date().toISOString().split("T")[0];
+    const currentDate = sql`CURRENT_DATE::text`;
     if (region && region !== "All") {
-      return await db.select().from(events).where(and(eq(events.region, region), gte(events.date, today)));
+      return await db.select().from(events).where(and(eq(events.region, region), gte(events.date, currentDate)));
     }
-    return await db.select().from(events).where(gte(events.date, today));
+    return await db.select().from(events).where(gte(events.date, currentDate));
   }
 
   async createEvent(event: InsertEvent): Promise<Event> {
