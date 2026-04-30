@@ -575,8 +575,13 @@ export default function Home() {
                   {/* Column headers */}
                   <thead>
                     <tr className="border-b border-white/10">
-                      <th className="text-left px-6 py-6 w-[40%]">
+                      <th className="text-left px-6 py-6 w-[30%]">
                         <span className="text-muted-foreground text-sm font-medium uppercase tracking-wider">Feature</span>
+                      </th>
+                      {/* Basic */}
+                      <th className="px-4 py-6 text-center">
+                        <div className="text-white font-black text-lg">Basic</div>
+                        <div className="text-3xl font-black text-white mt-1">FREE</div>
                       </th>
                       {/* Starter */}
                       <th className="px-4 py-6 text-center">
@@ -598,33 +603,10 @@ export default function Home() {
                   </thead>
 
                   <tbody>
-                    {/* Social Media Post */}
-                    <tr className="border-b border-white/5">
-                      <td className="px-6 py-4 text-sm text-white/80">Social Media Post <span className="text-muted-foreground text-xs">(IG, FB, TT)</span></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* Stories */}
-                    <tr className="border-b border-white/5 bg-white/[0.02]">
-                      <td className="px-6 py-4 text-sm text-white/80">Stories <span className="text-muted-foreground text-xs">(Instagram, FB, TT)</span></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* Email Marketing */}
-                    <tr className="border-b border-white/5">
-                      <td className="px-6 py-4 text-sm text-white/80">Email Marketing</td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
                     {/* Event Calendar */}
                     <tr className="border-b border-white/5 bg-white/[0.02]">
                       <td className="px-6 py-4 text-sm text-white/80">Event Calendar</td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
@@ -633,9 +615,37 @@ export default function Home() {
                     {/* Newsletter */}
                     <tr className="border-b border-white/5">
                       <td className="px-6 py-4 text-sm text-white/80">Newsletter</td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><span className="text-xs text-muted-foreground font-medium">Regular</span></td>
                       <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
                       <td className="px-4 py-4 text-center"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
+                    </tr>
+
+                    {/* Social Media Post */}
+                    <tr className="border-b border-white/5">
+                      <td className="px-6 py-4 text-sm text-white/80">Social Media Post <span className="text-muted-foreground text-xs">(IG, FB, TT)</span></td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                    </tr>
+
+                    {/* Stories */}
+                    <tr className="border-b border-white/5 bg-white/[0.02]">
+                      <td className="px-6 py-4 text-sm text-white/80">Stories <span className="text-muted-foreground text-xs">(Instagram, FB, TT)</span></td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                    </tr>
+
+                    {/* Email Marketing */}
+                    <tr className="border-b border-white/5">
+                      <td className="px-6 py-4 text-sm text-white/80">Email Marketing</td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
                     {/* SMS Marketing */}
@@ -643,6 +653,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">SMS Marketing</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -652,6 +663,7 @@ export default function Home() {
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
                     {/* Influencer Reach */}
@@ -659,6 +671,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Influencer Reach</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -667,6 +680,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Ad Credit</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><span className="text-sm font-bold text-white">$100</span></td>
                     </tr>
                   </tbody>
@@ -676,6 +690,17 @@ export default function Home() {
                     <tr className="border-t border-white/10">
                       {/* Empty feature-label cell */}
                       <td className="px-6 py-5" />
+
+                      {/* Basic */}
+                      <td className="px-4 py-5 text-center">
+                        <a
+                          href="/book?package=basic"
+                          className="inline-flex items-center justify-center w-full h-10 rounded-xl px-3 font-semibold text-sm text-white bg-primary hover:bg-primary/90 transition-colors"
+                          data-testid="button-get-started-basic"
+                        >
+                          Get Started
+                        </a>
+                      </td>
 
                       {/* Starter */}
                       <td className="px-4 py-5 text-center">

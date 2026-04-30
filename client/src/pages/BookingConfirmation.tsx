@@ -39,6 +39,24 @@ const NEXT_STEPS = [
   },
 ];
 
+const BASIC_NEXT_STEPS = [
+  {
+    number: "01",
+    title: "Submission Review",
+    description: "Our team reviews your event details and confirms whether it can be listed in the calendar.",
+  },
+  {
+    number: "02",
+    title: "Calendar Placement",
+    description: "If approved, your event is added to the Central Group Events calendar for the selected week.",
+  },
+  {
+    number: "03",
+    title: "Upgrade Opportunity",
+    description: "Paid promotion unlocks wider reach, premium placement, and more social amplification next time.",
+  },
+];
+
 function SummaryRow({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   if (!value) return null;
   return (
@@ -69,6 +87,7 @@ export default function BookingConfirmation() {
   const packageLabel = booking ? `${booking.mode} — ${booking.budgetRange}` : null;
   const eventDisplayType =
     booking?.eventType === "Other" ? booking.eventTypeOther : booking?.eventType;
+  const nextSteps = booking?.mode === "Basic" ? BASIC_NEXT_STEPS : NEXT_STEPS;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -157,7 +176,7 @@ export default function BookingConfirmation() {
             What Happens Next
           </h2>
           <div className="space-y-6">
-            {NEXT_STEPS.map((s, i) => (
+            {nextSteps.map((s, i) => (
               <div key={s.number} className="flex gap-4">
                 <div className="shrink-0 w-10 h-10 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
                   <span className="text-xs font-black text-primary">{s.number}</span>
@@ -173,42 +192,67 @@ export default function BookingConfirmation() {
           </div>
         </div>
 
-        {/* CashApp Reminder */}
-        <div
-          className="rounded-3xl border border-[#00D632]/20 bg-[#00D632]/5 p-6 md:p-8 mb-8"
-          data-testid="section-cashapp-reminder"
-        >
-          <div className="flex items-start gap-4">
-            <div className="shrink-0 w-12 h-12 rounded-full bg-[#00D632]/10 border border-[#00D632]/30 flex items-center justify-center">
-              <SiCashapp className="w-6 h-6 text-[#00D632]" />
-            </div>
-            <div>
-              <h2 className="font-bold text-white mb-1">If you haven't paid yet…</h2>
-              <p className="text-sm text-white/60 mb-4 leading-relaxed">
-                Your booking is saved, but your promotion won't be scheduled until payment is
-                received. Send{" "}
-                {booking?.budgetRange ? (
-                  <span className="text-white font-semibold">{booking.budgetRange}</span>
-                ) : (
-                  "your package amount"
-                )}{" "}
-                to <span className="text-[#00D632] font-semibold">$centralgroupevents</span> on
-                CashApp and include your event name in the note.
-              </p>
-              <a
-                href="https://cash.app/$centralgroupevents"
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid="button-cashapp-pay"
-                className="inline-flex items-center gap-2 bg-[#00D632] hover:bg-[#00D632]/90 text-black font-bold text-sm px-5 py-2.5 rounded-xl transition-colors"
-              >
-                <SiCashapp className="w-4 h-4" />
-                Pay via CashApp
-                <ArrowRight className="w-4 h-4" />
-              </a>
+        {booking?.mode === "Basic" ? (
+          <div
+            className="rounded-3xl border border-yellow-400/20 bg-yellow-400/10 p-6 md:p-8 mb-8"
+            data-testid="section-paid-upgrade-note"
+          >
+            <div className="flex items-start gap-4">
+              <div className="shrink-0 w-12 h-12 rounded-full bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center">
+                <span className="text-yellow-200 font-bold">!</span>
+              </div>
+              <div>
+                <h2 className="font-bold text-white mb-1">Basic calendar listing confirmed</h2>
+                <p className="text-sm text-white/80 mb-4 leading-relaxed">
+                  Your event submission is saved and will be reviewed for calendar placement.
+                  Paid promotion unlocks wider reach, better visibility, and stronger social amplification
+                  on the next campaign.
+                </p>
+                <ul className="list-disc list-inside space-y-2 text-xs text-white/75">
+                  <li>Priority placement across our newsletter and event hub</li>
+                  <li>Instagram reels, targeted social promotion, and ads</li>
+                  <li>SMS blasts to engaged subscribers</li>
+                </ul>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div
+            className="rounded-3xl border border-[#00D632]/20 bg-[#00D632]/5 p-6 md:p-8 mb-8"
+            data-testid="section-cashapp-reminder"
+          >
+            <div className="flex items-start gap-4">
+              <div className="shrink-0 w-12 h-12 rounded-full bg-[#00D632]/10 border border-[#00D632]/30 flex items-center justify-center">
+                <SiCashapp className="w-6 h-6 text-[#00D632]" />
+              </div>
+              <div>
+                <h2 className="font-bold text-white mb-1">If you haven't paid yet…</h2>
+                <p className="text-sm text-white/60 mb-4 leading-relaxed">
+                  Your booking is saved, but your promotion won't be scheduled until payment is
+                  received. Send{' '}
+                  {booking?.budgetRange ? (
+                    <span className="text-white font-semibold">{booking.budgetRange}</span>
+                  ) : (
+                    'your package amount'
+                  )}{' '}
+                  to <span className="text-[#00D632] font-semibold">$centralgroupevents</span> on
+                  CashApp and include your event name in the note.
+                </p>
+                <a
+                  href="https://cash.app/$centralgroupevents"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="button-cashapp-pay"
+                  className="inline-flex items-center gap-2 bg-[#00D632] hover:bg-[#00D632]/90 text-black font-bold text-sm px-5 py-2.5 rounded-xl transition-colors"
+                >
+                  <SiCashapp className="w-4 h-4" />
+                  Pay via CashApp
+                  <ArrowRight className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Social Links */}
         <div
