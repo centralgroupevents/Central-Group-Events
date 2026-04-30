@@ -53,6 +53,14 @@ const TERMS_SECTIONS = [
 
 const PACKAGES = [
   {
+    id: "Basic",
+    label: "Basic",
+    price: "",
+    badge: null,
+    features: ["Event calendar listing"],
+    testId: "card-package-basic",
+  },
+  {
     id: "Starter",
     label: "Starter",
     price: "$70",
@@ -168,6 +176,7 @@ function FieldError({ msg }: { msg?: string }) {
 
 function getPackageFromParam(): { mode: string; budgetRange: string } {
   const param = new URLSearchParams(window.location.search).get("package")?.toLowerCase();
+  if (param === "basic") return { mode: "Basic", budgetRange: "" };
   if (param === "starter") return { mode: "Starter", budgetRange: "$70" };
   if (param === "growth") return { mode: "Growth", budgetRange: "$150" };
   if (param === "custom") return { mode: "Custom", budgetRange: "$300+" };
@@ -551,7 +560,9 @@ export default function Book() {
                           </span>
                         )}
                         <p className="font-bold text-lg mb-1">{pkg.label}</p>
-                        <p className="text-2xl font-black text-primary mb-3">{pkg.price}</p>
+                        {pkg.price ? (
+                          <p className="text-2xl font-black text-primary mb-3">{pkg.price}</p>
+                        ) : null}
                         <ul className="space-y-1">
                           {pkg.features.map((f) => (
                             <li key={f} className="text-xs text-white/60 flex items-start gap-1.5">
