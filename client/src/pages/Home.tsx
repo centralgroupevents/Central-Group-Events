@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { 
   ArrowRight, Calendar, Megaphone, Video, MessageSquare,
@@ -56,6 +56,12 @@ export default function Home() {
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
   const [heroSubscribed, setHeroSubscribed] = useState(false);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setHeroSubscribed(localStorage.getItem("cge_newsletter_subscribed") === "true");
+    }
+  }, []);
+
   // Newsletter Form
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const newsletterForm = useForm<z.infer<typeof newsletterSchema>>({
@@ -67,7 +73,11 @@ export default function Home() {
   const onNewsletterSubmit = (data: z.infer<typeof newsletterSchema>) => {
     subscribeMutation.mutate(data, {
       onSuccess: () => {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("cge_newsletter_subscribed", "true");
+        }
         setNewsletterSubscribed(true);
+        setHeroSubscribed(true);
       },
       onError: (err) => {
         toast({
@@ -216,6 +226,10 @@ export default function Home() {
                 className="w-full sm:w-auto h-14 px-8 text-lg rounded-2xl border-white/20 bg-white/5 backdrop-blur-md hover:bg-white/10 hover:border-white/30 transition-all duration-300"
                 data-testid="button-hero-newsletter"
                 onClick={() => {
+                  if (heroSubscribed) {
+                    navigate("/blog");
+                    return;
+                  }
                   document.getElementById("newsletter")?.scrollIntoView({ behavior: "smooth" });
                   setSubscribeModalOpen(true);
                 }}
@@ -589,10 +603,16 @@ export default function Home() {
                         <div className="text-3xl font-black text-white mt-1">$70<span className="text-sm text-muted-foreground font-normal"> / event</span></div>
                       </th>
                       {/* Growth */}
-                      <th className="px-4 py-6 text-center bg-primary/10 border-x border-primary/20">
-                        <div className="inline-block bg-primary text-white text-[10px] font-bold tracking-widest uppercase px-3 py-0.5 rounded-full mb-2">Most Popular</div>
-                        <div className="text-primary font-black text-lg">Growth</div>
-                        <div className="text-3xl font-black text-white mt-1">$150<span className="text-sm text-white/50 font-normal"> / event</span></div>
+                      <th className="relative px-4 py-6 text-center bg-primary/10 border-x border-primary/20">
+                        <div className="absolute inset-x-0 -top-3 flex justify-center">
+                          <div className="inline-flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold tracking-widest uppercase px-3 py-0.5">
+                            Most Popular
+                          </div>
+                        </div>
+                        <div className="pt-6">
+                          <div className="text-primary font-black text-lg">Growth</div>
+                          <div className="text-3xl font-black text-white mt-1">$150<span className="text-sm text-white/50 font-normal"> / event</span></div>
+                        </div>
                       </th>
                       {/* Custom */}
                       <th className="px-4 py-6 text-center">
@@ -608,17 +628,8 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Event Calendar</td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* Newsletter */}
-                    <tr className="border-b border-white/5">
-                      <td className="px-6 py-4 text-sm text-white/80">Newsletter</td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><span className="text-xs text-muted-foreground font-medium">Regular</span></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
-                      <td className="px-4 py-4 text-center"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
                     </tr>
 
                     {/* Social Media Post */}
@@ -626,7 +637,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Social Media Post <span className="text-muted-foreground text-xs">(IG, FB, TT)</span></td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -635,7 +646,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Stories <span className="text-muted-foreground text-xs">(Instagram, FB, TT)</span></td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -644,7 +655,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Email Marketing</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -652,7 +663,7 @@ export default function Home() {
                     <tr className="border-b border-white/5 bg-white/[0.02]">
                       <td className="px-6 py-4 text-sm text-white/80">SMS Marketing</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
@@ -661,16 +672,25 @@ export default function Home() {
                     <tr className="border-b border-white/5">
                       <td className="px-6 py-4 text-sm text-white/80">Consultation</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                    </tr>
+
+                    {/* Newsletter */}
+                    <tr className="border-b border-white/5 bg-white/[0.02]">
+                      <td className="px-6 py-4 text-sm text-white/80">Newsletter</td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><span className="text-xs text-muted-foreground font-medium">Regular</span></td>
+                      <td className="px-4 py-4 text-center border-x border-primary/20"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
+                      <td className="px-4 py-4 text-center"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
                     </tr>
 
                     {/* Influencer Reach */}
                     <tr className="border-b border-white/5 bg-white/[0.02]">
                       <td className="px-6 py-4 text-sm text-white/80">Influencer Reach</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
@@ -679,7 +699,7 @@ export default function Home() {
                     <tr>
                       <td className="px-6 py-4 text-sm text-white/80">Ad Credit</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><span className="text-sm font-bold text-white">$100</span></td>
                     </tr>
@@ -695,7 +715,7 @@ export default function Home() {
                       <td className="px-4 py-5 text-center">
                         <a
                           href="/book?package=basic"
-                          className="inline-flex items-center justify-center w-full h-10 rounded-xl px-3 font-semibold text-sm text-white bg-primary hover:bg-primary/90 transition-colors"
+                          className="inline-flex items-center justify-center w-full h-10 rounded-xl px-3 text-sm font-semibold text-white bg-primary hover:bg-primary/90 transition-colors"
                           data-testid="button-get-started-basic"
                         >
                           Get Started
@@ -706,7 +726,7 @@ export default function Home() {
                       <td className="px-4 py-5 text-center">
                         <a
                           href="/book?package=starter"
-                          className="inline-flex items-center justify-center w-full h-10 rounded-xl px-3 font-semibold text-sm text-white bg-primary hover:bg-primary/90 transition-colors"
+                          className="inline-flex items-center justify-center w-full h-11 rounded-xl px-4 text-sm font-semibold text-white bg-primary hover:bg-primary/90 transition-colors"
                           data-testid="button-get-started-starter"
                         >
                           Get Started
@@ -717,7 +737,7 @@ export default function Home() {
                       <td className="px-4 py-5 text-center bg-primary/5 border-x border-primary/20">
                         <a
                           href="/book?package=growth"
-                          className="inline-flex items-center justify-center w-full h-10 rounded-xl px-3 font-bold text-sm text-white bg-primary hover:bg-primary/90 transition-colors"
+                          className="inline-flex items-center justify-center w-full h-12 rounded-xl px-5 text-base font-bold text-white bg-primary hover:bg-primary/90 transition-colors"
                           data-testid="button-get-started-growth"
                         >
                           Get Started
@@ -728,7 +748,7 @@ export default function Home() {
                       <td className="px-4 py-5 text-center">
                         <a
                           href="/book?package=custom"
-                          className="inline-flex items-center justify-center w-full h-10 rounded-xl px-3 font-semibold text-sm text-white bg-primary hover:bg-primary/90 transition-colors"
+                          className="inline-flex items-center justify-center w-full h-12 rounded-xl px-6 text-base font-semibold text-white bg-primary hover:bg-primary/90 transition-colors"
                           data-testid="button-get-started-custom"
                         >
                           Get Started
@@ -868,6 +888,7 @@ export default function Home() {
       <SubscribeModal
         open={subscribeModalOpen}
         onOpenChange={setSubscribeModalOpen}
+        redirectAfter="/blog"
         onSuccess={() => setHeroSubscribed(true)}
       />
     </div>

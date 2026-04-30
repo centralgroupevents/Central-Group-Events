@@ -10,7 +10,7 @@ import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 interface SubscribeModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Gated blog post slug — if set, grants cookie access and redirects after subscribe */
+  /** Redirect target after a successful subscribe. Full path like "/blog" or blog slug like "post-slug". */
   redirectAfter?: string;
   /** Called after a successful non-gated subscribe so parent can show inline success */
   onSuccess?: () => void;
@@ -57,6 +57,10 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }:
         throw new Error((body as { message?: string }).message || "Failed to subscribe");
       }
 
+      if (typeof window !== "undefined") {
+        localStorage.setItem("cge_newsletter_subscribed", "true");
+      }
+
       if (redirectAfter) {
         // Step 2 (gated): set subscriber cookie then redirect to welcome page
         const checkRes = await fetch("/api/subscriber/check", {
@@ -69,7 +73,8 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }:
         // Close modal first, then redirect
         onOpenChange(false);
         reset();
-        setLocation(`/welcome?redirect=/blog/${encodeURIComponent(redirectAfter)}`);
+        const target = redirectAfter.startsWith("/") ? redirectAfter : `/blog/${redirectAfter}`;
+        setLocation(`/welcome?redirect=${encodeURIComponent(target)}`);
       } else {
         // Normal flow: close modal and notify parent for inline success message
         onOpenChange(false);

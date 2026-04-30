@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Instagram, Mail, Calendar, MapPin, ArrowRight } from "lucide-react";
+import { CheckCircle2, Instagram, Mail, Calendar, MapPin, ArrowRight, Megaphone } from "lucide-react";
 import { SiCashapp } from "react-icons/si";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -103,7 +103,7 @@ export default function BookingConfirmation() {
         <div className="text-center mb-12">
           <div className="flex justify-center mb-6">
             <div className="w-24 h-24 rounded-full bg-primary/10 border-2 border-primary/30 flex items-center justify-center">
-              <CheckCircle2 className="w-12 h-12 text-primary" />
+              <Megaphone className="w-12 h-12 text-primary" />
             </div>
           </div>
           <h1
@@ -199,7 +199,7 @@ export default function BookingConfirmation() {
           >
             <div className="flex items-start gap-4">
               <div className="shrink-0 w-12 h-12 rounded-full bg-yellow-400/10 border border-yellow-400/30 flex items-center justify-center">
-                <span className="text-yellow-200 font-bold">!</span>
+                <Megaphone className="w-6 h-6 text-yellow-200" />
               </div>
               <div>
                 <h2 className="font-bold text-white mb-1">Basic calendar listing confirmed</h2>

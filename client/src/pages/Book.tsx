@@ -561,7 +561,7 @@ export default function Book() {
                         )}
                         <p className="font-bold text-lg mb-1">{pkg.label}</p>
                         {pkg.price ? (
-                          <p className="text-2xl font-black text-primary mb-3">{pkg.price}</p>
+                          <p className="text-2xl font-black text-primary mb-3 min-h-[3rem]">{pkg.price}</p>
                         ) : null}
                         <ul className="space-y-1">
                           {pkg.features.map((f) => (
