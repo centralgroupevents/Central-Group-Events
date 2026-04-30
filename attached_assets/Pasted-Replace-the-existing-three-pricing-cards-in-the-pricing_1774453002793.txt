@@ -1,0 +1,43 @@
+Replace the existing three pricing cards in the pricing section of the Home page with a single combined checklist table showing all three tiers. Do not change any other section.
+
+LAYOUT:
+- A single dark-themed table/card with rounded-3xl corners, matching the site's glass-panel style
+- 4 columns: Feature | Starter | Growth | Custom
+- Header row shows the tier names and prices:
+  - Starter: $70 / event
+  - Growth: $150 / event (add a "Most Popular" badge above it in purple)
+  - Custom: $300+ / event
+- Each feature row has the feature name on the left and a checkmark, X, or special badge in each tier column
+
+FEATURES TABLE (rows):
+Feature                          | Starter | Growth | Custom
+---------------------------------|---------|--------|--------
+Price / event                    | $70     | $150   | $300+
+Social Media Page Post (IG/TT/FB)| ✓       | ✓      | ✓
+Instagram & FB Story Post        | ✓       | ✓      | ✓
+Email Blast                      | ✓       | ✓      | ✓
+Newsletter Placement             | Regular | Premium| Premium
+Event Calendar Feature           | ✗       | ✓      | ✓
+Ad Credit                        | ✗       | $50    | $100
+Influencer Reach                 | ✗       | ✗      | ✓
+SMS Blast                        | ✗       | ✗      | ✓
+
+STYLING:
+- Dark background matching bg-background / bg-secondary
+- Column headers: Starter in white, Growth in primary purple with "Most Popular" pill badge above it, Custom in white
+- Prices in large bold white text under each tier name
+- Checkmarks: use CheckCircle2 icon from lucide-react in primary purple color
+- X marks: use X icon from lucide-react in muted gray color
+- "Regular" and "Premium" newsletter labels: Regular in muted gray text, Premium in amber/accent color
+- Ad credit values ($50, $100) in white text
+- Alternating row backgrounds (subtle) for readability
+- On mobile, make the table horizontally scrollable
+
+PAYMENT BUTTONS:
+- Below the table, add three CashApp payment buttons side by side (one per tier)
+- Each button: "Pay with CashApp" linking to https://cash.app/$centralgroupevents in a new tab
+- Style: CashApp green (#00D632) with black text, rounded-xl
+- Custom tier button should also have a secondary "Get a Quote" outline button below it linking to #book
+- Below all buttons add centered muted text: "💳 Stripe payments coming soon"
+
+Remove all old pricing card code entirely and replace with this table layout.

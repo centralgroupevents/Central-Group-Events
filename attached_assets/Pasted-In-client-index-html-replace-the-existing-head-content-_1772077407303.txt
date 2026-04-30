@@ -1,0 +1,38 @@
+In client/index.html, replace the existing <head> content with the following:
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <!-- Primary SEO -->
+  <title>Central Group Events | NJ Event Promotion Agency</title>
+  <meta name="description" content="New Jersey's #1 event promotion agency. We promote 85+ events weekly across North, Central, and South NJ — newsletter, reels, paid ads, SMS blasts, and influencer campaigns." />
+  <meta name="keywords" content="NJ event promotion, New Jersey nightlife, event marketing NJ, event promo agency, North NJ events, Central NJ events, South NJ events, nightlife promotion New Jersey" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://www.centralgroupevents.com/" />
+
+  <!-- Open Graph (Facebook + LinkedIn) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.centralgroupevents.com/" />
+  <meta property="og:title" content="Central Group Events | NJ Event Promotion Agency" />
+  <meta property="og:description" content="We've promoted 85+ events across NJ every week. Newsletter. Reels. Paid Ads. SMS Blasts. Influencers. All in one package." />
+  <meta property="og:image" content="https://www.centralgroupevents.com/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:site_name" content="Central Group Events" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://www.centralgroupevents.com/" />
+  <meta name="twitter:title" content="Central Group Events | NJ Event Promotion Agency" />
+  <meta name="twitter:description" content="We've promoted 85+ events across NJ every week. Newsletter. Reels. Paid Ads. SMS Blasts. Influencers. All in one package." />
+  <meta name="twitter:image" content="https://www.centralgroupevents.com/og-image.jpg" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/images/cge-logo.png" />
+  <link rel="apple-touch-icon" href="/images/cge-logo.png" />
+
+  <!-- Theme -->
+  <meta name="theme-color" content="#8B2FC9" />
+</head>

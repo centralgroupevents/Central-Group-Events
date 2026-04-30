@@ -1,0 +1,109 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-display: 'Outfit', sans-serif;
+    --font-sans: 'Plus Jakarta Sans', sans-serif;
+
+    /* Force Dark Mode for this specific premium nightlife aesthetic */
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    
+    /* CGE Logo Purple */
+    --primary: 280 62% 48%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    
+    /* CGE Logo Gold/Yellow */
+    --accent: 38 82% 52%;
+    --accent-foreground: 0 0% 0%;
+    
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 280 62% 48%;
+    
+    --radius: 0.75rem;
+  }
+
+  /* Applying the dark theme universally */
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground;
+    font-family: var(--font-sans);
+    /* Subtle noise texture for depth */
+    background-image: url("data:CGE_logo.png viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-bold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+  }
+  
+  .box-glow {
+    box-shadow: 0 0 30px -5px rgba(139, 92, 246, 0.3);
+  }
+
+  .glass-panel {
+    @apply bg-background/60 backdrop-blur-xl border border-white/10;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary)/0.5);
+}
+
+/* Smooth scrolling for anchor links */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Welcome page progress bar animation */
+@keyframes progress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+/* Prose editor styles */
+.prose-editor h1 { font-size: 1.75rem; font-weight: 800; margin: 1.2rem 0 0.6rem; line-height: 1.2; }
+.prose-editor h2 { font-size: 1.4rem; font-weight: 700; margin: 1.1rem 0 0.5rem; line-height: 1.25; }
+.prose-editor h3 { font-size: 1.15rem; font-weight: 600; margin: 1rem 0 0.4rem; }
+.prose-editor p { margin: 0.6rem 0; }
+.prose-editor ul { list-style: disc; padding-left: 1.5rem; margin: 0.6rem 0; }
+.prose-editor ol { list-style: decimal; padding-left: 1.5rem; margin: 0.6rem 0; }
+.prose-editor a { color: hsl(var(--primary)); text-decoration: underline; }
+.prose-editor strong { font-weight: 700; }
+.prose-editor em { font-style: italic; }

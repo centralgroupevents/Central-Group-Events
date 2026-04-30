@@ -1,0 +1,96 @@
+Update the Events tab in the /admin dashboard only. Do not change any other tab or component. Here are the full requirements:
+
+---
+
+DATABASE:
+Add the following columns to the events table if they don't already exist:
+- organizer (text, nullable)
+- influencer (text, nullable)
+- venue (text, nullable)
+- genre (text, nullable)
+- instagramHandle (text, nullable)
+- region (text, nullable)
+- eventTime (text, nullable)
+- city (text, nullable)
+
+Note: title/name, date already exist — keep them. Map "Name of Event" to title, "Day of Event" to date.
+
+---
+
+BACKEND:
+- Update PUT /api/events/:id to accept all new fields
+- Update POST /api/events to accept and save all new fields
+- Add POST /api/events/bulk-import route that accepts an array of event objects and inserts them all, skipping duplicates based on title + date + city combination. Return a summary: { imported: X, skipped: Y }
+
+---
+
+ADMIN EVENTS TAB — TABLE:
+Replace the existing events table with a horizontally scrollable table showing ALL of these columns in this order:
+1. Name of Event (title)
+2. Day of Event (date)
+3. Time of Event (eventTime)
+4. Venue
+5. City
+6. Region
+7. Organizer
+8. Influencer
+9. Genre
+10. Instagram Handle
+11. Actions
+
+Actions column per row:
+- Edit button (pencil icon) — opens edit modal
+- Delete button (trash icon) — confirms then deletes
+
+Make the table horizontally scrollable on all screen sizes. Freeze the "Name of Event" column on the left so it stays visible while scrolling.
+
+---
+
+ADD/EDIT EVENT MODAL:
+When clicking "Add New Event" or the edit pencil icon, open a modal with all fields:
+
+Required fields (show red asterisk):
+- Name of Event (text input)
+- Region (select: North NJ / Central NJ / South NJ)
+- Day of Event (date picker)
+- Time of Event (time input)
+- Venue (text input)
+- City (text input)
+- Instagram Handle (text input, with @ prefix hint)
+
+Optional fields:
+- Organizer (text input)
+- Influencer (text input)
+- Genre (text input)
+- Ticket Link (text input)
+- Image URL (text input)
+
+Validation: show inline errors for all required fields on submit attempt.
+
+For the edit modal, pre-fill all fields with the existing event data.
+
+---
+
+INLINE EDITING:
+For quick edits without opening the modal, make these columns directly editable by clicking on the cell:
+- Name of Event
+- Time of Event
+- Venue
+- City
+
+When a cell is clicked, it becomes an input field. On blur (clicking away) or pressing Enter, save the change immediately via PUT /api/events/:id. Show a brief green checkmark on successful save.
+
+---
+
+BULK IMPORT VIA CSV:
+Add a "Import CSV" button at the top of the Events tab next to "Add New Event".
+
+When clicked, open a modal with:
+- A file input accepting .csv files only
+- Instructions text: "Upload a CSV file with the following headers (in any order): name, date, time, venue, city, region, organizer, influencer, genre, instagramHandle, ticketLink. Date format: YYYY-MM-DD. Time format: HH:MM."
+- A "Download Template" button that downloads a blank CSV with the correct headers pre-filled
+- A preview table showing the first 5 rows of the uploaded CSV before confirming import
+- An "Import Events" button that sends the parsed data to POST /api/events/bulk-import
+- After import, show a success message: "X events imported, Y duplicates skipped" and refresh the events table
+
+Parse the CSV on the frontend using the papaparse library (already available). Handle missing required fields gracefully — skip rows with missing required fields and include them in the skipped count with a reason shown to the admin.

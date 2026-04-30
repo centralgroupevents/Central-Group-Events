@@ -1,0 +1,206 @@
+Build a full blog and newsletter system for the CGE site. Follow every requirement below exactly. Do not modify any existing components outside of what is specified.
+
+---
+
+DATABASE — add these new tables:
+
+posts:
+- id (serial primary key)
+- title (text, required)
+- slug (text, unique, auto-generated from title)
+- excerpt (text)
+- content (text — stores rich text HTML)
+- coverImageUrl (text, nullable)
+- isPublished (boolean, default false)
+- isGated (boolean, default false)
+- publishedAt (timestamp, nullable)
+- createdAt (timestamp, default now)
+- updatedAt (timestamp, default now)
+
+post_versions:
+- id (serial primary key)
+- postId (integer, references posts.id)
+- title (text)
+- content (text)
+- savedAt (timestamp, default now)
+- savedBy (integer, references admin_users.id)
+
+post_views:
+- id (serial primary key)
+- postId (integer, references posts.id)
+- viewedAt (timestamp, default now)
+
+link_clicks:
+- id (serial primary key)
+- postId (integer, references posts.id)
+- url (text)
+- clickedAt (timestamp, default now)
+
+admin_users:
+- id (serial primary key)
+- email (text, unique)
+- passwordHash (text)
+- role (text — "superadmin" or "editor")
+- inviteToken (text, nullable)
+- inviteAccepted (boolean, default false)
+- createdAt (timestamp, default now)
+
+Update subscribers table to add these columns if they don't exist:
+- referrer (text, nullable)
+- hasAccess (boolean, default true)
+- createdAt (timestamp, default now)
+
+---
+
+BACKEND API ROUTES:
+
+Posts:
+- GET /api/posts — return all published posts sorted by publishedAt desc. Include id, title, slug, excerpt, coverImageUrl, isGated, publishedAt
+- GET /api/posts/:slug — return full post by slug including content, isGated, isPublished
+- POST /api/posts — create post (admin/editor only)
+- PUT /api/posts/:id — update post, save a snapshot to post_versions before updating (admin/editor only)
+- DELETE /api/posts/:id — delete post (superadmin only)
+- PATCH /api/posts/:id/publish — toggle isPublished (superadmin only)
+- PATCH /api/posts/:id/gate — toggle isGated (superadmin only)
+- GET /api/posts/:id/versions — return all versions for a post (admin only)
+- POST /api/posts/:id/restore/:versionId — restore a post to a previous version (admin only)
+
+Subscriber gating:
+- POST /api/subscriber/check — accepts { email, referrer }. Check if email exists in subscribers table. If found, return { access: true }. If not found, insert the email into subscribers table with the referrer, then return { access: true, isNew: true }. Set a 30-day cookie called "cge_subscriber" with the email value (httpOnly, signed).
+- GET /api/subscriber/verify — checks if the "cge_subscriber" cookie is valid and the email exists in subscribers table. Returns { access: true/false }.
+
+Link click tracking:
+- GET /go — accepts ?url= and ?postId= query params. Log the click to link_clicks table then redirect to the url. Example: /go?url=https://eventbrite.com&postId=3
+
+Analytics:
+- GET /api/analytics — return: { totalSubscribers, postViews: [{ postId, title, views }], linkClicks: [{ url, count }], memberSources: [{ referrer, count }] } (superadmin only)
+
+Admin users:
+- POST /api/admin/invite — send invite email to a new editor (superadmin only). Generate an inviteToken, store it, send email with link to /admin/accept-invite?token=xxx
+- POST /api/admin/accept-invite — accepts { token, password }. Find admin_user by inviteToken, hash password, set inviteAccepted: true, clear token
+- POST /api/admin/login — accepts { email, password }. Return JWT stored in httpOnly cookie.
+- POST /api/admin/logout — clear the auth cookie
+
+---
+
+FRONTEND — PUBLIC PAGES:
+
+Add these routes to the React router:
+- /blog
+- /blog/:slug
+- /faq
+- /go (handled by backend, not frontend)
+- /welcome (post-gate welcome page)
+- /admin/accept-invite
+
+/blog page:
+- Dark theme matching the site
+- Header: "The CGE Blog" with subtitle "Weekly event roundups, NJ nightlife news, and more."
+- Grid of published post cards (2 columns desktop, 1 mobile)
+- Each card: cover image or purple gradient placeholder, title, excerpt, published date, lock icon if isGated, "Read More" button
+- Newsletter signup section at the bottom (reuse existing newsletter form component)
+
+/blog/:slug page:
+- Dark theme matching the site
+- Show cover image, title, published date
+- If isGated:
+  - Check /api/subscriber/verify first
+  - If verified (cookie exists): show full content
+  - If not verified: show excerpt/teaser (first 150 words), then a gate overlay with:
+    - Text: "This post is for CGE subscribers only."
+    - A single email input: "Enter your email to get instant access"
+    - A submit button: "Get Access"
+    - On submit: call POST /api/subscriber/check with the email and document.referrer
+    - On success: redirect to /welcome?redirect=/blog/:slug
+- If not gated: show full content immediately
+- All external links in content must be rewritten to go through /go?url=X&postId=Y so clicks are tracked
+- "Back to Blog" link at top left
+- Newsletter signup CTA at bottom: "Like what you see? Get the weekly NJ event lineup in your inbox."
+- Threaded comments section at bottom — only show if subscriber cookie is verified
+  - Comments have: author email (masked, e.g. j***@gmail.com), body, createdAt, reply button
+  - Replies are nested one level under parent comment
+  - Add a comments table: id, postId, parentId (nullable), email, body, createdAt
+
+/welcome page:
+- Centered dark page
+- CGE logo at top
+- Text: "You're in! Welcome to the CGE insider list."
+- Subtext: "You now have access to all CGE newsletter posts."
+- After 3 seconds, auto-redirect to the URL in the ?redirect= query param, or /blog if none
+
+/faq page:
+- Dark theme matching site
+- Header: "Frequently Asked Questions"
+- Accordion-style FAQ items (use the existing shadcn Accordion component)
+- Seed with these starter questions:
+  1. "How do I get access to newsletter posts?" — "Just enter your email on any gated post. If you're already a subscriber, you're automatically on the list."
+  2. "How often is the newsletter published?" — "Every week. We cover the best events across North, Central, and South NJ."
+  3. "How do I submit my event?" — "Use the Submit Your Event form on our homepage."
+  4. "Is it free to subscribe?" — "Yes, completely free."
+  5. "How do I promote my event with CGE?" — "Fill out the Promote Your Event form and select Standard or Premium. Our team will be in touch within 24 hours."
+
+Add "Blog" and "FAQ" links to the main Navigation component.
+
+---
+
+FRONTEND — ADMIN DASHBOARD:
+
+Add a "Blog Posts" tab to the existing /admin dashboard.
+
+Blog Posts tab:
+- Table of all posts (published and draft) with columns: Title, Status (Published/Draft), Gated (Yes/No), Published Date, Actions
+- Actions per row: Edit, Delete (superadmin only), Publish/Unpublish toggle (superadmin only), Gate/Ungate toggle
+- "Add New Post" button at top
+
+Add/Edit post form (full page or large modal):
+- Title input — show auto-generated slug preview below it
+- Excerpt (textarea)
+- Cover Image URL (text input, optional)
+- isGated toggle switch labeled "Subscriber Only"
+- Rich text editor using Tiptap with these toolbar options:
+  - Bold, Italic, Underline
+  - H1, H2, H3
+  - Bullet list, Numbered list
+  - Add hyperlink (opens a small popover to enter URL, opens in new tab)
+  - Clear formatting
+- "Preview" button — opens a modal showing the post rendered exactly as subscribers will see it on /blog/:slug
+- "Save Draft" button and "Submit for Publish" button (editors) or "Publish" button (superadmin)
+- Version history panel — collapsible sidebar showing all saved versions with timestamp and author. "Restore" button on each version.
+
+Analytics tab in /admin:
+- Total Subscribers (count)
+- Post Views table: post title, view count
+- Top Outbound Links table: URL, click count
+- Member Sources chart or table: referrer, count
+
+Team Members tab in /admin (superadmin only):
+- List of all admin_users with their email, role, and status (invite pending / active)
+- "Invite Editor" button — opens a small form to enter email, triggers POST /api/admin/invite
+- "Revoke Access" button per row
+
+/admin/accept-invite page (public route, no auth needed):
+- Dark themed page matching site
+- Show "Set your password to activate your CGE admin account"
+- Email field (pre-filled from token lookup) and password + confirm password fields
+- On submit: call POST /api/admin/accept-invite
+- On success: redirect to /admin login
+
+---
+
+EMAIL (use existing nodemailer/SendGrid setup):
+
+1. Editor invite email to new team member:
+   Subject: "You've been invited to the CGE admin team"
+   Body: "You've been added as an editor on the CGE website. Click the link below to set your password and activate your account: [link]"
+
+2. Welcome email to new subscribers (only sent when isNew: true from /api/subscriber/check):
+   Subject: "You're on the CGE insider list 🎉"
+   Body: "Welcome! You now have full access to all CGE newsletter posts. Head back to the post you were reading or visit centralgroupevents.com/blog to see everything."
+
+---
+
+STYLING NOTES:
+- All new pages must match the existing dark theme (bg-background, text-foreground, primary purple)
+- Rich text content on public post pages must be styled: links in purple, headings white and bold, lists properly indented, line height comfortable for reading
+- Gate overlay should have a frosted glass effect over the blurred teaser content below it
+- All new components should use the existing shadcn/ui component library

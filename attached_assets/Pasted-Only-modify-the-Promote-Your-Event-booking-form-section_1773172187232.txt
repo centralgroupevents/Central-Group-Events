@@ -1,0 +1,77 @@
+Only modify the "Promote Your Event" booking form section. Do not touch any other component on the page. Here are the full requirements:
+
+---
+
+TOGGLE BUTTON:
+- Add a pill-shaped toggle centered above the glass form panel (between the "Promote Your Event" title/subtitle and the glass panel)
+- Two options: "Standard" and "Premium"
+- Active option is highlighted in purple (primary color), inactive is dark/muted
+- Default to "Standard"
+
+---
+
+NEW FIELDS to add to the form:
+- Event Name (text input) — first field at the top
+- Event Time (time input) — place it next to Event Date
+- City (text input) — place it next to Region
+
+EVENT TYPE "Other" BEHAVIOR:
+- When "Other" is selected from Event Type dropdown, reveal a text input below it labeled "Please describe your event type"
+- Hide that input when any other option is selected
+
+---
+
+STANDARD MODE — required fields:
+- Event Name
+- Venue Name
+- Email
+- Event Date
+- Event Time
+- City
+- Region
+- Event Type (+ free text if Other)
+- Instagram Handle — optional
+- Upload Flyer — optional
+- NOT required (keep in form, mark as optional): Contact Name, Phone, Budget Range
+
+PREMIUM MODE — ALL fields required:
+- Everything from Standard
+- Contact Name
+- Phone
+- Budget Range
+
+---
+
+SUBMIT BUTTON:
+- Standard mode: "Submit Standard Listing"
+- Premium mode: "Submit Premium Inquiry"
+
+---
+
+AFTER SUBMISSION (both modes):
+- Redirect the user to a confirmation page (a new route /booking-confirmation) that shows:
+  - A centered dark-themed page matching the site
+  - Text: "Thank you. We will contact you shortly if we have any questions."
+  - A button to go back to the home page
+- Send an email to centralgroupevents@gmail.com with the full form details including:
+  - Submission type (Standard or Premium)
+  - Event Name, Venue Name, Contact Name, Phone, Email, Event Date, Event Time, City, Region, Event Type, Budget Range, Instagram Handle
+  - Use nodemailer or the existing email setup in the backend to send this. If no email setup exists, set it up using nodemailer with Gmail SMTP. Store credentials as environment variables: EMAIL_USER and EMAIL_PASS.
+
+---
+
+GOOGLE SHEET + DATABASE:
+- Add the new fields (Event Name, Event Time, City, mode) to both the database insert and the Google Sheet webhook payload
+- Add a "Mode" column (Standard or Premium) to the Google Sheet row
+
+---
+
+ADMIN DASHBOARD:
+- Add "Mode" as a visible column in the /admin events table so Standard vs Premium submissions are clearly labeled
+
+---
+
+VALIDATION:
+- Use a separate zod schema for Standard and Premium
+- Dynamically switch the active schema based on the toggle state
+- Show inline validation errors on submit for all required fields per mode

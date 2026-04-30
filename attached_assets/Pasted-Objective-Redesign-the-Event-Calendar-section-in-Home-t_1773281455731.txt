@@ -1,0 +1,39 @@
+Objective
+Redesign the Event Calendar section in Home.tsx with a centered header, search bar, centered tabs, and a clean list layout replacing the image-based card grid.
+Tasks
+T001: Add search state and new icon imports
+* Blocked By: []
+* Details:
+    * Add const [searchQuery, setSearchQuery] = useState("") near the activeRegion state (line ~121)
+    * Add Search and Plus to the lucide-react import line (Search for the search input icon, Plus for the Submit button)
+    * Derive filteredEvents from upcomingEvents filtered by searchQuery (case-insensitive match on event.title and (event as any).city):const filteredEvents = searchQuery.trim() ? upcomingEvents.filter(e => e.title.toLowerCase().includes(searchQuery.toLowerCase()) || ((e as any).city || "").toLowerCase().includes(searchQuery.toLowerCase()) ) : upcomingEvents;  
+    * Files: client/src/pages/Home.tsx
+T002: Replace the event calendar section HTML
+* Blocked By: [T001]
+* Details: Replace lines 341–414 (the entire <section id="events"> block) with the new layout: Header (centered):
+    * <h2> label: "EVENT CALENDAR" — centered, gold/accent color, tracking-widest uppercase
+    * <h3> title: "What's Happening in NJ" — centered, large, font-black
+    * <p> subtitle: "Curated events across North, Central, and South Jersey." — centered, muted
+    * "Submit Your Event" button below subtitle — centered, amber/gold filled (bg-accent text-black hover:bg-accent/90), rounded-full, with <Plus> icon on left, links to #book
+* Search bar (below header):
+    * Full-width <div> with relative positioning
+    * <Search> icon absolutely positioned left inside
+    * <Input> with pl-12, pill-shaped (rounded-full), dark background (bg-white/5 border-white/10), placeholder "Search events by name, venue, or keyword..."
+    * value={searchQuery} + onChange updating searchQuery state
+* Region tabs (centered):
+    * Keep existing Tabs/TabsList/TabsTrigger structure
+    * Add flex justify-center wrapper around TabsList
+    * Same pill styling as current
+* Event list (no images):
+    * Replace the grid of cards with a flat list inside a <div className="divide-y divide-white/10">
+    * Each event row: <div className="flex items-center justify-between py-5 px-2 hover:bg-white/5 rounded-xl transition-colors cursor-default">
+        * Left: <div> with <p className="font-bold text-white text-lg">{event.title}</p> and <p className="text-muted-foreground text-sm mt-0.5">{city display}</p>
+        * Right: <div className="flex items-center gap-4"> with date in primary color + "Get Tickets" outline button
+    * City display: (event as any).city ?${(event as any).city}, ${event.region.replace(" NJ", "")}: event.region
+    * Date formatted same as current: toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+    * "Get Tickets" button: variant="outline", rounded-full, border-white/20 hover:bg-primary hover:border-primary text-white text-sm
+* Empty state:
+    * Show when filteredEvents.length === 0 (not loading)
+    * Calendar icon + "No events found in this region yet. Check back soon!"
+    * Files: client/src/pages/Home.tsx
+    * Acceptance: search filters in real-time, tabs filter by region, list layout renders without images, empty state appears when no matches
