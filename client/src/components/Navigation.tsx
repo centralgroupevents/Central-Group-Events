@@ -96,7 +96,7 @@ export function Navigation() {
             asChild
             className="rounded-full bg-accent text-black hover:bg-accent/90 hover:scale-105 transition-all duration-300 font-semibold"
           >
-            <a href={isHomePage ? "#pricing" : "/#pricing"}>Book Promotion</a>
+            <a href="/book">Book Promotion</a>
           </Button>
         </nav>
 

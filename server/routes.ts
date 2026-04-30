@@ -571,6 +571,19 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/admin/bookings/batch", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === "number")) {
+        return res.status(400).json({ message: "ids must be an array of numbers" });
+      }
+      await storage.batchDeleteBookings(ids);
+      res.json({ message: "Deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/upload", requireAuth(), upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file provided" });

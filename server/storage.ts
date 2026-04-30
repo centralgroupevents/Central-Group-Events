@@ -59,6 +59,7 @@ export interface IStorage {
   getBookings(): Promise<Booking[]>;
   updateBookingStatus(id: number, status: string): Promise<Booking | undefined>;
   updateBookingNotes(id: number, adminNotes: string): Promise<Booking | undefined>;
+  batchDeleteBookings(ids: number[]): Promise<void>;
 
   // Events
   getEvents(region?: string): Promise<Event[]>;
@@ -211,6 +212,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(promotionBookings.id, id))
       .returning();
     return updated;
+  }
+
+  async batchDeleteBookings(ids: number[]): Promise<void> {
+    await db.delete(promotionBookings).where(inArray(promotionBookings.id, ids));
   }
 
   // ── Events ────────────────────────────────────────────────────────────

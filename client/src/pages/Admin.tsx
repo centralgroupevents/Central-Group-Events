@@ -1835,6 +1835,8 @@ export default function Admin() {
   const [bookingStatusFilter, setBookingStatusFilter] = useState<string>("All");
   const [bookingSearch, setBookingSearch] = useState<string>("");
   const [bookingSortDir, setBookingSortDir] = useState<"desc" | "asc">("desc");
+  const [selectedBookingIds, setSelectedBookingIds] = useState<Set<number>>(new Set());
+  const [showBookingDeleteConfirm, setShowBookingDeleteConfirm] = useState(false);
   const [expandedBookingId, setExpandedBookingId] = useState<number | null>(null);
 
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery<Booking[]>({
@@ -1868,6 +1870,19 @@ export default function Admin() {
       toast({ title: "Notes saved" });
     },
     onError: () => toast({ title: "Failed to save notes", variant: "destructive" }),
+  });
+
+  const batchDeleteBookingsMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await apiRequest("DELETE", "/api/admin/bookings/batch", { ids });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
+      setSelectedBookingIds(new Set());
+      setShowBookingDeleteConfirm(false);
+      toast({ title: "Bookings deleted" });
+    },
+    onError: () => toast({ title: "Failed to delete bookings", variant: "destructive" }),
   });
 
   const [bookingNotesDraft, setBookingNotesDraft] = useState<Record<number, string>>({});
@@ -2834,15 +2849,39 @@ export default function Admin() {
                       ({filteredBookings.length}{bookingStatusFilter !== "All" || bookingSearch ? " matching" : ""} of {bookings.length} total)
                     </span>
                   </h2>
-                  <button
-                    onClick={handleExportCSV}
-                    disabled={filteredBookings.length === 0}
-                    data-testid="button-export-csv"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 text-white/70 hover:text-white hover:border-white/30 hover:bg-white/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Export CSV
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {selectedBookingIds.size > 0 && (
+                      <>
+                        <span className="text-sm text-red-300 font-medium">{selectedBookingIds.size} booking{selectedBookingIds.size !== 1 ? "s" : ""} selected</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowBookingDeleteConfirm(true)}
+                          className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50"
+                          data-testid="button-delete-selected-bookings"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Selected ({selectedBookingIds.size})
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedBookingIds(new Set())}
+                          className="border-white/20 text-white/70 hover:bg-white/10"
+                        >
+                          Clear
+                        </Button>
+                      </>
+                    )}
+                    <button
+                      onClick={handleExportCSV}
+                      disabled={filteredBookings.length === 0}
+                      data-testid="button-export-csv"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/15 text-white/70 hover:text-white hover:border-white/30 hover:bg-white/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export CSV
+                    </button>
+                  </div>
                 </div>
                 {bookingsLoading ? (
                   <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
@@ -2855,7 +2894,14 @@ export default function Admin() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-white/10 text-muted-foreground text-left">
-                          <th className="px-4 py-3 font-medium whitespace-nowrap w-6"></th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap w-6">
+                            <input
+                              type="checkbox"
+                              checked={selectedBookingIds.size === filteredBookings.length && filteredBookings.length > 0}
+                              onChange={(e) => setSelectedBookingIds(e.target.checked ? new Set(filteredBookings.map(b => b.id)) : new Set())}
+                              className="rounded border-white/20 bg-black/40"
+                            />
+                          </th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Package</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Contact</th>
@@ -2889,10 +2935,21 @@ export default function Admin() {
                                 className={`border-b border-white/5 hover:bg-white/5 cursor-pointer ${i % 2 !== 0 ? "bg-white/[0.02]" : ""} ${isExpanded ? "bg-white/5" : ""}`}
                                 onClick={() => setExpandedBookingId(isExpanded ? null : booking.id)}
                               >
-                                <td className="px-4 py-4 text-muted-foreground">
-                                  {isExpanded
-                                    ? <ChevronUp className="w-4 h-4" />
-                                    : <ChevronDown className="w-4 h-4" />}
+                                <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedBookingIds.has(booking.id)}
+                                    onChange={(e) => {
+                                      const next = new Set(selectedBookingIds);
+                                      if (e.target.checked) {
+                                        next.add(booking.id);
+                                      } else {
+                                        next.delete(booking.id);
+                                      }
+                                      setSelectedBookingIds(next);
+                                    }}
+                                    className="rounded border-white/20 bg-black/40"
+                                  />
                                 </td>
                                 <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                                   <Select
@@ -2950,7 +3007,7 @@ export default function Admin() {
                               </tr>
                               {isExpanded && (
                                 <tr key={`${booking.id}-detail`} className="border-b border-white/5 bg-white/[0.03]">
-                                  <td colSpan={9} className="px-6 py-5">
+                                  <td colSpan={10} className="px-6 py-5">
                                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
                                       <div>
                                         <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Contact Name</p>
@@ -3061,6 +3118,31 @@ export default function Admin() {
                   </div>
                 )}
               </div>
+
+              {/* Batch delete confirmation dialog */}
+              <Dialog open={showBookingDeleteConfirm} onOpenChange={setShowBookingDeleteConfirm}>
+                <DialogContent className="bg-secondary border-white/10 text-white max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle>Delete {selectedBookingIds.size} Booking{selectedBookingIds.size !== 1 ? "s" : ""}?</DialogTitle>
+                  </DialogHeader>
+                  <p className="text-sm text-muted-foreground py-2">
+                    This will permanently delete {selectedBookingIds.size} selected booking{selectedBookingIds.size !== 1 ? "s" : ""}. This cannot be undone.
+                  </p>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowBookingDeleteConfirm(false)} className="border-white/20 text-white/70">
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() => batchDeleteBookingsMutation.mutate(Array.from(selectedBookingIds))}
+                      disabled={batchDeleteBookingsMutation.isPending}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      {batchDeleteBookingsMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Delete ${selectedBookingIds.size}`}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           );
         })()}
