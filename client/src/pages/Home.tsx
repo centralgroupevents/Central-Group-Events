@@ -507,7 +507,7 @@ export default function Home() {
                           data-testid={`button-tickets-${event.id}`}
                         >
                           <a href={event.ticketLink || "#"} target="_blank" rel="noopener noreferrer">
-                            Get Tickets
+                            Learn more
                           </a>
                         </Button>
                       </div>
