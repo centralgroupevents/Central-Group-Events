@@ -55,7 +55,7 @@ const PACKAGES = [
   {
     id: "Basic",
     label: "Basic",
-    price: "",
+    price: "FREE",
     badge: null,
     features: ["Event calendar listing"],
     testId: "card-package-basic",
@@ -176,7 +176,7 @@ function FieldError({ msg }: { msg?: string }) {
 
 function getPackageFromParam(): { mode: string; budgetRange: string } {
   const param = new URLSearchParams(window.location.search).get("package")?.toLowerCase();
-  if (param === "basic") return { mode: "Basic", budgetRange: "" };
+  if (param === "basic") return { mode: "Basic", budgetRange: "FREE" };
   if (param === "starter") return { mode: "Starter", budgetRange: "$70" };
   if (param === "growth") return { mode: "Growth", budgetRange: "$150" };
   if (param === "custom") return { mode: "Custom", budgetRange: "$300+" };
@@ -538,7 +538,7 @@ export default function Book() {
                 <div>
                   <h2 className="text-2xl font-black mb-1">Choose Your Package</h2>
                   <p className="text-muted-foreground text-sm mb-6">Select the plan that fits your event size and budget.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     {PACKAGES.map((pkg) => (
                       <button
                         key={pkg.id}
@@ -890,37 +890,59 @@ export default function Book() {
                     {/* Payment */}
                     <div className="flex flex-col gap-4">
                       <div className="bg-black/30 border border-white/10 rounded-2xl p-5">
-                        <h3 className="font-bold text-white/80 uppercase tracking-wider text-xs mb-3">Complete Your Payment</h3>
+                        <h3 className="font-bold text-white/80 uppercase tracking-wider text-xs mb-3">Complete Your Booking</h3>
                         <p className="text-3xl font-black text-primary mb-1">{data.budgetRange}</p>
                         <p className="text-xs text-white/50 mb-4">{data.mode} package</p>
+                        {data.mode === "Basic" ? (
+                          <p className="text-sm text-white/70">
+                            No payment is required for this Basic calendar listing. We will review your submission and confirm scheduling shortly.
+                          </p>
+                        ) : (
+                          <>
+                            <a
+                              href="https://cash.app/$centralgroupevents"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              data-testid="button-pay-now"
+                              className="block w-full text-center bg-[#00D632] hover:bg-[#00D632]/90 text-black font-bold text-lg py-4 rounded-xl transition-colors mb-4"
+                            >
+                              Pay Now via CashApp
+                            </a>
 
-                        <a
-                          href="https://cash.app/$centralgroupevents"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          data-testid="button-pay-now"
-                          className="block w-full text-center bg-[#00D632] hover:bg-[#00D632]/90 text-black font-bold text-lg py-4 rounded-xl transition-colors mb-4"
-                        >
-                          Pay Now via CashApp
-                        </a>
-
-                        <ol className="space-y-2 text-xs text-white/50 list-decimal list-inside">
-                          <li>Tap "Pay Now" to open CashApp</li>
-                          <li>Send {data.budgetRange} to <span className="text-white/70">$centralgroupevents</span></li>
-                          <li>Add your event name in the note field</li>
-                          <li>We'll confirm your booking within 24 hours</li>
-                        </ol>
+                            <ol className="space-y-2 text-xs text-white/50 list-decimal list-inside">
+                              <li>Tap "Pay Now" to open CashApp</li>
+                              <li>Send {data.budgetRange} to <span className="text-white/70">$centralgroupevents</span></li>
+                              <li>Add your event name in the note field</li>
+                              <li>We'll confirm your booking within 24 hours</li>
+                            </ol>
+                          </>
+                        )}
                       </div>
 
-                      <a
-                        href="https://calendly.com/centralgroupevents/30min"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-testid="button-calendly"
-                        className="block w-full text-center bg-primary hover:bg-primary/90 text-white font-bold text-sm py-3.5 rounded-xl transition-colors"
-                      >
-                        Book a Strategy Call
-                      </a>
+                      {data.mode === "Basic" ? (
+                        <div className="rounded-3xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-sm text-white">
+                          <p className="font-bold text-yellow-200 mb-2">Want extra reach next time?</p>
+                          <p className="text-white/80 mb-3">
+                            Upgrade to a paid promotion for premium exposure, priority scheduling, and deeper event distribution.
+                          </p>
+                          <ul className="list-disc list-inside space-y-2 text-xs text-white/75">
+                            <li>Priority event placement across our calendar and newsletter</li>
+                            <li>Instagram reels, targeted social promotion, and ads</li>
+                            <li>SMS blasts to engaged subscribers</li>
+                            <li>Faster confirmation and campaign support</li>
+                          </ul>
+                        </div>
+                      ) : (
+                        <a
+                          href="https://calendly.com/centralgroupevents/30min"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid="button-calendly"
+                          className="block w-full text-center bg-primary hover:bg-primary/90 text-white font-bold text-sm py-3.5 rounded-xl transition-colors"
+                        >
+                          Book a Strategy Call
+                        </a>
+                      )}
 
                       {(data.mode === "Growth" || data.mode === "Custom") && (
                         <p className="text-xs text-white/40 text-center">
