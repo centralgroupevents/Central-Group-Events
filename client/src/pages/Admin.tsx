@@ -369,6 +369,17 @@ function SubscribersTab() {
     queryKey: ["/api/admin/subscribers"],
   });
 
+  const deleteSubscriberMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/subscribers/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/subscribers"] });
+      toast({ title: "Subscriber deleted" });
+    },
+    onError: () => toast({ title: "Failed to delete subscriber", variant: "destructive" }),
+  });
+
   // ── combined filter ───────────────────────────────────────
   const filtered: Subscriber[] = (() => {
     let list = subscribers;
@@ -457,50 +468,115 @@ function SubscribersTab() {
     URL.revokeObjectURL(url);
   }
 
+  async function parseCsvSubscriberFile(file: File) {
+    const text = await file.text();
+    const parsed = Papa.parse<Record<string, string>>(text, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: normalizeHeaderValue,
+    });
+
+    const headers = parsed.meta.fields ?? [];
+    const emailHeader = findEmailHeader(headers);
+    if (!emailHeader) {
+      throw new Error(`No email column found. Columns found: ${headers.join(", ") || "none"}`);
+    }
+
+    const rows: { email: string }[] = [];
+    let invalidCount = 0;
+    for (const row of parsed.data) {
+      const email = normalizeEmail(String(row[emailHeader] ?? ""));
+      if (email && EMAIL_REGEX.test(email)) {
+        rows.push({ email });
+      } else {
+        invalidCount++;
+      }
+    }
+
+    return { rows, invalidCount };
+  }
+
+  async function parseXlsxSubscriberFile(file: File) {
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const allRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+    const rows = Array.isArray(allRows) ? allRows.filter((row) => Array.isArray(row) && row.some((cell) => String(cell).trim() !== "")) : [];
+
+    if (rows.length < 2) {
+      throw new Error("Spreadsheet appears to be empty or has only headers.");
+    }
+
+    const headers = (rows[0] as unknown[]).map((cell) => normalizeHeaderValue(String(cell ?? "")));
+    const emailHeader = findEmailHeader(headers);
+    if (!emailHeader) {
+      throw new Error(`No email column found. Columns found: ${headers.join(", ") || "none"}`);
+    }
+
+    const emailColumnIndex = headers.indexOf(emailHeader);
+    const parsedRows: { email: string }[] = [];
+    let invalidCount = 0;
+
+    for (const row of rows.slice(1)) {
+      const value = String((row as unknown[])[emailColumnIndex] ?? "");
+      const email = normalizeEmail(value);
+      if (email && EMAIL_REGEX.test(email)) {
+        parsedRows.push({ email });
+      } else {
+        invalidCount++;
+      }
+    }
+
+    return { rows: parsedRows, invalidCount };
+  }
+
   async function handleImport() {
     setImporting(true);
     setImportResult(null);
     try {
       let rows: Array<{ email: string }> = [];
+      let invalidCount = 0;
 
       if (importTab === "csv" && csvFile) {
-        const text = await csvFile.text();
-        const parsed = Papa.parse<Record<string, string>>(text, {
-          header: true,
-          skipEmptyLines: true,
-          transformHeader: (h) => h.trim().toLowerCase(),
-        });
-        if (!parsed.meta.fields?.includes("email")) {
-          toast({
-            title: "CSV Error",
-            description: `No 'email' column found. Columns found: ${parsed.meta.fields?.join(", ") || "none"}`,
-            variant: "destructive",
-          });
-          setImporting(false);
-          return;
-        }
-        rows = parsed.data
-          .map((row) => ({ email: (row["email"] || "").trim().toLowerCase() }))
-          .filter((r) => r.email.includes("@"));
+        const isExcel = /\.(xlsx|xls)$/i.test(csvFile.name) ||
+          csvFile.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+          csvFile.type === "application/vnd.ms-excel";
+
+        const parsed = isExcel
+          ? await parseXlsxSubscriberFile(csvFile)
+          : await parseCsvSubscriberFile(csvFile);
+
+        rows = parsed.rows;
+        invalidCount = parsed.invalidCount;
       } else if (importTab === "paste") {
-        rows = pasteText
+        const parsedRows = pasteText
           .split(/[\r\n,;]+/)
-          .map((e) => e.trim().toLowerCase())
-          .filter((e) => e.includes("@"))
-          .map((email) => ({ email }));
+          .map((e) => normalizeEmail(e))
+          .filter((e) => EMAIL_REGEX.test(e));
+
+        rows = parsedRows.map((email) => ({ email }));
+        invalidCount = pasteText
+          .split(/[\r\n,;]+/)
+          .map((e) => normalizeEmail(e))
+          .filter((e) => e && !EMAIL_REGEX.test(e)).length;
       }
 
       if (rows.length === 0) {
-        toast({ title: "No emails found", description: "Please provide at least one valid email.", variant: "destructive" });
+        toast({ title: "No valid emails found", description: "Please provide at least one valid email.", variant: "destructive" });
         setImporting(false);
         return;
       }
+
       const res = await apiRequest("POST", "/api/subscribers/import", rows);
       const result = await res.json();
-      setImportResult(result);
+      setImportResult({ ...result, invalidFormat: invalidCount > 0 ? invalidCount : result.invalidFormat });
       qc.invalidateQueries({ queryKey: ["/api/admin/subscribers"] });
-    } catch {
-      toast({ title: "Import failed", description: "An error occurred during import.", variant: "destructive" });
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith("No email column found")) {
+        toast({ title: "CSV Error", description: err.message, variant: "destructive" });
+      } else {
+        toast({ title: "Import failed", description: "An error occurred during import.", variant: "destructive" });
+      }
     } finally {
       setImporting(false);
     }
@@ -648,6 +724,7 @@ function SubscribersTab() {
                       <SortIcon col={col} />
                     </th>
                   ))}
+                  <th className="px-4 py-3 font-medium text-right text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -672,6 +749,20 @@ function SubscribersTab() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatDate(sub.createdAt)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Delete subscriber ${sub.email}?`)) {
+                            deleteSubscriberMutation.mutate(sub.id);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/80 hover:bg-white/10 transition"
+                        data-testid={`button-delete-subscriber-${sub.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -702,10 +793,10 @@ function SubscribersTab() {
 
           {importTab === "csv" ? (
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">Upload a CSV file with an <code className="text-primary">email</code> column. Other columns are ignored.</p>
+              <p className="text-xs text-muted-foreground">Upload a CSV or Excel file with an <code className="text-primary">email</code> column. Other columns are ignored.</p>
               <input
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.xlsx,.xls,text/csv"
                 data-testid="input-csv-file"
                 onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
                 className="block w-full text-sm text-white/70 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary/20 file:text-primary hover:file:bg-primary/30 cursor-pointer"
@@ -1662,6 +1753,36 @@ function formatEventTime(timeStr: string | null): string {
   const h12 = h % 12 || 12;
   return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
+
+const EMAIL_HEADER_ALIASES = [
+  "email",
+  "e-mail",
+  "email address",
+  "email_address",
+  "emailaddress",
+  "subscriber email",
+  "contact email",
+  "email addr",
+  "emailaddr",
+];
+
+function normalizeHeaderValue(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, " ")
+    .replace(/[^a-z0-9 ]/g, "");
+}
+
+function findEmailHeader(headers: string[]) {
+  return headers.find((header) => EMAIL_HEADER_ALIASES.includes(normalizeHeaderValue(header)));
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /* ─────────────────────────────────────────────────────────── */
 export default function Admin() {

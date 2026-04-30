@@ -52,6 +52,7 @@ export interface IStorage {
   upsertSubscriber(email: string, referrer?: string, name?: string): Promise<{ subscriber: Subscriber; isNew: boolean }>;
 
   importSubscribers(rows: Array<{ email: string; region?: string }>): Promise<{ imported: number; skipped: number }>;
+  deleteSubscriber(id: number): Promise<void>;
 
   // Bookings
   createBooking(booking: InsertBooking): Promise<Booking>;
@@ -155,6 +156,10 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return { imported, skipped };
+  }
+
+  async deleteSubscriber(id: number): Promise<void> {
+    await db.delete(newsletterSubscribers).where(eq(newsletterSubscribers.id, id));
   }
 
   async upsertSubscriber(email: string, referrer?: string, name?: string): Promise<{ subscriber: Subscriber; isNew: boolean }> {

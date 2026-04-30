@@ -906,6 +906,17 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/subscribers/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      await storage.deleteSubscriber(id);
+      res.json({ message: "Deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/admin/analytics", requireAuth(), async (req: Request, res: Response) => {
     try {
       const allPosts = await storage.getAllPosts();
