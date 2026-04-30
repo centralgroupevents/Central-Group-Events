@@ -604,14 +604,14 @@ export default function Home() {
                       </th>
                       {/* Growth */}
                       <th className="relative px-4 py-6 text-center bg-primary/10 border-x border-primary/20">
-                        <div className="absolute inset-x-0 -top-3 flex justify-center">
+                        <div className="absolute -inset-x-4 top-0 flex justify-center">
                           <div className="inline-flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold tracking-widest uppercase px-3 py-0.5">
                             Most Popular
                           </div>
                         </div>
-                        <div className="pt-6">
+                        <div className="pt-8">
                           <div className="text-primary font-black text-lg">Growth</div>
-                          <div className="text-3xl font-black text-white mt-1">$150<span className="text-sm text-white/50 font-normal"> / event</span></div>
+                          <div className="text-3xl font-black text-white mt-3">$150<span className="text-sm text-white/50 font-normal"> / event</span></div>
                         </div>
                       </th>
                       {/* Custom */}
@@ -637,7 +637,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Social Media Post <span className="text-muted-foreground text-xs">(IG, FB, TT)</span></td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -646,7 +646,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Stories <span className="text-muted-foreground text-xs">(Instagram, FB, TT)</span></td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -655,7 +655,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Email Marketing</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -664,7 +664,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">SMS Marketing</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -673,7 +673,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Consultation</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -682,7 +682,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Newsletter</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><span className="text-xs text-muted-foreground font-medium">Regular</span></td>
-                      <td className="px-4 py-4 text-center border-x border-primary/20"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
                       <td className="px-4 py-4 text-center"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
                     </tr>
 
@@ -691,7 +691,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Influencer Reach</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
 
@@ -700,7 +700,7 @@ export default function Home() {
                       <td className="px-6 py-4 text-sm text-white/80">Ad Credit</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><span className="text-sm font-bold text-white">$100</span></td>
                     </tr>
                   </tbody>
