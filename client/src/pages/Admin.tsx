@@ -1784,6 +1784,52 @@ function normalizeEmail(value: string) {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Accepts common date formats from CSV / Excel and returns YYYY-MM-DD,
+// the format the server stores and the formatter on the page expects.
+// Returns "" for unrecognized input so the server can reject the row.
+function normalizeEventDate(input: string): string {
+  if (!input) return "";
+  const s = String(input).trim();
+
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+  // YYYY/MM/DD or YYYY-MM-DD with single-digit month/day
+  let m = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (m) {
+    const [, y, mo, d] = m;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // M/D/YYYY, M-D-YYYY, M.D.YY, etc. (US-style; default for this site)
+  m = s.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$/);
+  if (m) {
+    let [, mo, d, y] = m;
+    if (y.length === 2) y = (parseInt(y, 10) >= 70 ? "19" : "20") + y;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // Excel serial number (days since 1899-12-30, with Excel's 1900 leap-year quirk)
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const serial = parseFloat(s);
+    if (serial > 20000 && serial < 80000) {
+      const ms = Math.round((serial - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) {
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      }
+    }
+  }
+
+  // Fallback: let JS Date try ("May 1, 2026", "1 May 2026", "Fri May 01 2026...", ISO timestamps)
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+  }
+
+  return "";
+}
+
 /* ─────────────────────────────────────────────────────────── */
 export default function Admin() {
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -2186,6 +2232,7 @@ export default function Admin() {
           obj[key] = colIdx >= 0 ? (row[colIdx] || "") : "";
         }
       }
+      if (obj.date) obj.date = normalizeEventDate(obj.date);
       return obj;
     });
     try {
