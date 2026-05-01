@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { 
   ArrowRight, Calendar, Megaphone, Video, MessageSquare,
@@ -92,7 +92,7 @@ export default function Home() {
   // Events Calendar
   const [activeRegion, setActiveRegion] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [timeOfDay, setTimeOfDay] = useState("All Times");
+  const [dayOfWeek, setDayOfWeek] = useState("All Days");
   const [eventType, setEventType] = useState("All Types");
   const { data: events, isLoading: eventsLoading } = useEvents(activeRegion);
 
@@ -100,16 +100,29 @@ export default function Home() {
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const upcomingEvents = (events || []).filter(e => e.date >= todayStr);
 
-  function getTimeOfDayBucket(time: string | null | undefined): string {
-    if (!time) return "unknown";
-    const [hStr] = time.split(":");
-    const h = parseInt(hStr, 10);
-    if (isNaN(h)) return "unknown";
-    if (h < 12) return "Morning";
-    if (h < 17) return "Afternoon";
-    if (h < 21) return "Evening";
-    return "Late Night";
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function getDayOfWeek(dateStr: string | null | undefined): string {
+    if (!dateStr) return "";
+    const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return "";
+    const date = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+    return DAY_NAMES[date.getDay()] || "";
   }
+
+  // Event-type dropdown options derived from the actual events in view —
+  // adapts automatically when admins add new genres.
+  const availableEventTypes = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const e of upcomingEvents) {
+      const g = (e.genre || "").trim();
+      if (g && !seen.has(g.toLowerCase())) {
+        seen.add(g.toLowerCase());
+        out.push(g);
+      }
+    }
+    return out.sort((a, b) => a.localeCompare(b));
+  }, [upcomingEvents]);
 
   const filteredEvents = upcomingEvents.filter(e => {
     if (searchQuery.trim()) {
@@ -119,12 +132,11 @@ export default function Home() {
         (e.city || "").toLowerCase().includes(q);
       if (!matchesSearch) return false;
     }
-    if (timeOfDay !== "All Times") {
-      if (getTimeOfDayBucket(e.eventTime) !== timeOfDay) return false;
+    if (dayOfWeek !== "All Days") {
+      if (getDayOfWeek(e.date) !== dayOfWeek) return false;
     }
     if (eventType !== "All Types") {
-      const genre = (e.genre || "").toLowerCase();
-      if (genre !== eventType.toLowerCase()) return false;
+      if ((e.genre || "").trim().toLowerCase() !== eventType.toLowerCase()) return false;
     }
     return true;
   });
@@ -455,16 +467,16 @@ export default function Home() {
               </TabsList>
 
               <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-                <Select value={timeOfDay} onValueChange={setTimeOfDay}>
+                <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
                   <SelectTrigger
                     className="h-9 rounded-xl bg-white/5 border-white/10 text-sm text-foreground focus:ring-primary min-w-[140px]"
-                    data-testid="select-time-of-day"
+                    data-testid="select-day-of-week"
                   >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-secondary border-white/10 text-white">
-                    {["All Times", "Morning", "Afternoon", "Evening", "Late Night"].map(t => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    {["All Days", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -477,7 +489,8 @@ export default function Home() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-secondary border-white/10 text-white">
-                    {["All Types", "Brunch", "Concert", "DJ Set", "Happy Hour", "Live Music", "Party", "Festival", "Dance Class", "Special Event", "Other"].map(t => (
+                    <SelectItem value="All Types">All Types</SelectItem>
+                    {availableEventTypes.map(t => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
                   </SelectContent>
