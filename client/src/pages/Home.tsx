@@ -534,19 +534,7 @@ export default function Home() {
                       variant="outline"
                       className="rounded-full border-white/20 hover:bg-primary hover:border-primary hover:text-white transition-all duration-200 px-8"
                       data-testid="button-see-full-list"
-                      onClick={async () => {
-                        try {
-                          const res = await fetch("/api/posts?limit=1");
-                          const posts = await res.json();
-                          if (posts && posts.length > 0 && posts[0].slug) {
-                            navigate(`/blog/${posts[0].slug}`);
-                          } else {
-                            navigate("/blog");
-                          }
-                        } catch {
-                          navigate("/blog");
-                        }
-                      }}
+                      onClick={() => navigate("/blog")}
                     >
                       See Full List
                     </Button>
