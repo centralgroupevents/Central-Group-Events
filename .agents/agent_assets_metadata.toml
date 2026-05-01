@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "YWnodJvA15vOd_ka8XpZe"
+uri = "file://production_backup.tar.gz"
+type = "unspecified"
+title = "production_backup.sql (tar.gz, 6.2 KB)"
