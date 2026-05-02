@@ -3387,6 +3387,7 @@ function ThisWeekTab() {
   const [adTop, setAdTop] = useState<AdSlotData>(emptyAdSlot());
   const [adMid, setAdMid] = useState<AdSlotData>(emptyAdSlot());
   const [adBottom, setAdBottom] = useState<AdSlotData>(emptyAdSlot());
+  const [adSidebar, setAdSidebar] = useState<AdSlotData>(emptyAdSlot());
   const [hydrated, setHydrated] = useState(false);
   const [saveError, setSaveError] = useState<{ status: number | null; reason: string; raw: string } | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -3399,6 +3400,7 @@ function ThisWeekTab() {
       setAdTop(parseAdSlot(page.adSlotTop));
       setAdMid(parseAdSlot(page.adSlotMid));
       setAdBottom(parseAdSlot(page.adSlotBottom));
+      setAdSidebar(parseAdSlot(page.adSlotSidebar));
       setHydrated(true);
     }
   }, [page, hydrated]);
@@ -3412,6 +3414,7 @@ function ThisWeekTab() {
         adSlotTop: serializeAdSlot(adTop),
         adSlotMid: serializeAdSlot(adMid),
         adSlotBottom: serializeAdSlot(adBottom),
+        adSlotSidebar: serializeAdSlot(adSidebar),
       };
       const res = await apiRequest("PUT", `/api/pages/${PAGE_SLUG}`, body);
       return res.json();
@@ -3524,7 +3527,8 @@ function ThisWeekTab() {
             <p className="text-xs text-muted-foreground">Leave any slot empty to hide it. Image-only slots show without a click-through.</p>
           </div>
           <AdSlotEditor label="Top banner" value={adTop} onChange={setAdTop} />
-          <AdSlotEditor label="Mid-list" value={adMid} onChange={setAdMid} />
+          <AdSlotEditor label="Mid-list (in-feed)" value={adMid} onChange={setAdMid} />
+          <AdSlotEditor label="Sidebar (sticky on desktop)" value={adSidebar} onChange={setAdSidebar} />
           <AdSlotEditor label="Bottom" value={adBottom} onChange={setAdBottom} />
         </div>
       </div>

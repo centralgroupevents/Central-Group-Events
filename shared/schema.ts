@@ -65,6 +65,7 @@ export const pages = pgTable("pages", {
   adSlotTop: text("ad_slot_top"),
   adSlotMid: text("ad_slot_mid"),
   adSlotBottom: text("ad_slot_bottom"),
+  adSlotSidebar: text("ad_slot_sidebar"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
@@ -175,6 +176,7 @@ export const insertPageSchema = createInsertSchema(pages).omit({ id: true, updat
   adSlotTop: z.string().optional().nullable(),
   adSlotMid: z.string().optional().nullable(),
   adSlotBottom: z.string().optional().nullable(),
+  adSlotSidebar: z.string().optional().nullable(),
 });
 
 // ─── Types ────────────────────────────────────────────────────────────────

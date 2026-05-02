@@ -156,6 +156,7 @@ export default function ThingsToDo() {
   const adTop = parseAdSlot(page?.adSlotTop);
   const adMid = parseAdSlot(page?.adSlotMid);
   const adBottom = parseAdSlot(page?.adSlotBottom);
+  const adSidebar = parseAdSlot((page as any)?.adSlotSidebar);
 
   const heroTitle = page?.title?.trim() || "Things to Do in NJ This Week";
   const description = "Fun and creative events across North, Central, and South New Jersey — curated weekly. Brunches, concerts, day parties, dance nights, and more.";
@@ -219,22 +220,41 @@ export default function ThingsToDo() {
           )}
         </div>
 
-        {/* Events list (mid ad slot is rendered inline inside the list) */}
+        {/* Events list with optional sticky sidebar ad. Mid ad renders inline inside the list. */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <EventBrowser
-            pinFeatured
-            inlineAd={
-              adMid && adMid.imageUrl ? (
-                adMid.linkUrl ? (
-                  <a href={adMid.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={adMid.alt || "Sponsored"}>
-                    <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-auto rounded-xl" loading="lazy" />
-                  </a>
-                ) : (
-                  <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-auto rounded-xl" loading="lazy" />
-                )
-              ) : undefined
-            }
-          />
+          <div className="flex flex-col lg:flex-row lg:items-start gap-8">
+            <div className="flex-1 min-w-0">
+              <EventBrowser
+                pinFeatured
+                inlineAd={
+                  adMid && adMid.imageUrl ? (
+                    adMid.linkUrl ? (
+                      <a href={adMid.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={adMid.alt || "Sponsored"}>
+                        <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-auto rounded-xl" loading="lazy" />
+                      </a>
+                    ) : (
+                      <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-auto rounded-xl" loading="lazy" />
+                    )
+                  ) : undefined
+                }
+              />
+            </div>
+
+            {adSidebar && adSidebar.imageUrl && (
+              <aside className="lg:w-72 lg:flex-shrink-0" data-testid="ad-slot-sidebar">
+                <div className="lg:sticky lg:top-24">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/40 mb-2 px-1">Sponsored</p>
+                  {adSidebar.linkUrl ? (
+                    <a href={adSidebar.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={adSidebar.alt || "Sponsored"}>
+                      <img src={adSidebar.imageUrl} alt={adSidebar.alt || "Sponsored"} className="w-full h-auto rounded-2xl border border-white/10" loading="lazy" />
+                    </a>
+                  ) : (
+                    <img src={adSidebar.imageUrl} alt={adSidebar.alt || "Sponsored"} className="w-full h-auto rounded-2xl border border-white/10" loading="lazy" />
+                  )}
+                </div>
+              </aside>
+            )}
+          </div>
         </div>
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
