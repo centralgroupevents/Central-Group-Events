@@ -42,6 +42,8 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
+  Megaphone,
+  Star,
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 import { SEO } from "@/components/SEO";
@@ -63,6 +65,7 @@ type Event = {
   influencer: string | null;
   genre: string | null;
   instagramHandle: string | null;
+  isFeatured?: boolean;
 };
 
 type Booking = {
@@ -165,6 +168,7 @@ const emptyEventForm: EventForm = {
 
 const TABS = [
   { id: "events", label: "Events", icon: Calendar },
+  { id: "this-week", label: "This Week", icon: Megaphone },
   { id: "bookings", label: "Bookings", icon: ClipboardList },
   { id: "subscribers", label: "Subscribers", icon: Mail },
   { id: "blog", label: "Blog Posts", icon: BookOpen },
@@ -2002,6 +2006,17 @@ export default function Admin() {
     onError: () => toast({ title: "Failed to delete event", variant: "destructive" }),
   });
 
+  const toggleFeaturedMutation = useMutation({
+    mutationFn: async ({ id, isFeatured }: { id: number; isFeatured: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/events/${id}/featured`, { isFeatured });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/events"] });
+    },
+    onError: () => toast({ title: "Failed to toggle featured", variant: "destructive" }),
+  });
+
   const batchDeleteMutation = useMutation({
     mutationFn: async (ids: number[]) => {
       await apiRequest("DELETE", "/api/events/batch", { ids });
@@ -2463,6 +2478,18 @@ export default function Admin() {
                             <td className="px-4 py-3 text-muted-foreground text-xs">{event.genre || <span className="text-white/20">—</span>}</td>
                             <td className="px-4 py-3 text-muted-foreground text-xs">{event.instagramHandle || <span className="text-white/20">—</span>}</td>
                             <td className="px-4 py-3 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => toggleFeaturedMutation.mutate({ id: event.id, isFeatured: !event.isFeatured })}
+                                className={`inline-flex items-center justify-center w-7 h-7 rounded transition-colors mr-1 ${
+                                  event.isFeatured
+                                    ? "bg-primary/20 text-primary hover:bg-primary/30"
+                                    : "hover:bg-white/10 text-white/30 hover:text-white/70"
+                                }`}
+                                title={event.isFeatured ? "Unfeature on This Week page" : "Feature on This Week page"}
+                                data-testid={`button-feature-event-${event.id}`}
+                              >
+                                <Star className={`w-3.5 h-3.5 ${event.isFeatured ? "fill-current" : ""}`} />
+                              </button>
                               <button onClick={() => openEdit(event)} className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors mr-1" title="Edit" data-testid={`button-edit-event-${event.id}`}>
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
@@ -3196,8 +3223,194 @@ export default function Admin() {
 
         {activeTab === "subscribers" && <SubscribersTab />}
         {activeTab === "blog" && <BlogPostsTab />}
+        {activeTab === "this-week" && <ThisWeekTab />}
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "team" && <TeamTab currentRole={user.role} />}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/*  THIS WEEK TAB — edits the /things-to-do-in-nj page         */
+
+const PAGE_SLUG = "things-to-do-in-nj";
+
+type AdSlotData = { imageUrl: string; linkUrl: string; alt: string };
+
+function emptyAdSlot(): AdSlotData {
+  return { imageUrl: "", linkUrl: "", alt: "" };
+}
+
+function parseAdSlot(raw: string | null | undefined): AdSlotData {
+  if (!raw) return emptyAdSlot();
+  try {
+    const p = JSON.parse(raw);
+    return {
+      imageUrl: p.imageUrl || "",
+      linkUrl: p.linkUrl || "",
+      alt: p.alt || "",
+    };
+  } catch {
+    return emptyAdSlot();
+  }
+}
+
+function serializeAdSlot(s: AdSlotData): string | null {
+  if (!s.imageUrl.trim()) return null;
+  return JSON.stringify({ imageUrl: s.imageUrl.trim(), linkUrl: s.linkUrl.trim() || undefined, alt: s.alt.trim() || undefined });
+}
+
+function AdSlotEditor({ label, value, onChange }: { label: string; value: AdSlotData; onChange: (v: AdSlotData) => void }) {
+  return (
+    <div className="border border-white/10 rounded-2xl p-5 bg-white/[0.02] space-y-3">
+      <h4 className="font-semibold text-white">{label}</h4>
+      <div className="space-y-1">
+        <Label className="text-white/70 text-xs">Image</Label>
+        <ImageUpload value={value.imageUrl} onChange={(url) => onChange({ ...value, imageUrl: url })} />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-white/70 text-xs">Click-through URL (optional)</Label>
+        <Input
+          value={value.linkUrl}
+          onChange={(e) => onChange({ ...value, linkUrl: e.target.value })}
+          placeholder="https://..."
+          className="bg-black/40 border-white/10"
+        />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-white/70 text-xs">Alt text</Label>
+        <Input
+          value={value.alt}
+          onChange={(e) => onChange({ ...value, alt: e.target.value })}
+          placeholder="What the ad is about"
+          className="bg-black/40 border-white/10"
+        />
+      </div>
+      {value.imageUrl && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange(emptyAdSlot())}
+          className="border-white/20 text-white/60 hover:bg-white/10 text-xs"
+        >
+          Clear slot
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function ThisWeekTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: page, isLoading } = useQuery<any>({
+    queryKey: [`/api/pages/${PAGE_SLUG}`],
+  });
+
+  const [title, setTitle] = useState("");
+  const [heroImageUrl, setHeroImageUrl] = useState("");
+  const [editorContent, setEditorContent] = useState("");
+  const [adTop, setAdTop] = useState<AdSlotData>(emptyAdSlot());
+  const [adMid, setAdMid] = useState<AdSlotData>(emptyAdSlot());
+  const [adBottom, setAdBottom] = useState<AdSlotData>(emptyAdSlot());
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    if (page && !hydrated) {
+      setTitle(page.title || "");
+      setHeroImageUrl(page.heroImageUrl || "");
+      setEditorContent(page.editorContent || "");
+      setAdTop(parseAdSlot(page.adSlotTop));
+      setAdMid(parseAdSlot(page.adSlotMid));
+      setAdBottom(parseAdSlot(page.adSlotBottom));
+      setHydrated(true);
+    }
+  }, [page, hydrated]);
+
+  const savePage = useMutation({
+    mutationFn: async () => {
+      const body = {
+        title: title.trim(),
+        heroImageUrl: heroImageUrl.trim() || null,
+        editorContent,
+        adSlotTop: serializeAdSlot(adTop),
+        adSlotMid: serializeAdSlot(adMid),
+        adSlotBottom: serializeAdSlot(adBottom),
+      };
+      const res = await apiRequest("PUT", `/api/pages/${PAGE_SLUG}`, body);
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/pages/${PAGE_SLUG}`] });
+      toast({ title: "Page saved" });
+    },
+    onError: () => toast({ title: "Failed to save page", variant: "destructive" }),
+  });
+
+  if (isLoading) {
+    return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black">This Week ("Things to Do in NJ")</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Edits the public page at <code className="text-white/80">/{PAGE_SLUG}</code>. Visitors must subscribe before viewing.
+          </p>
+        </div>
+        <Button
+          onClick={() => savePage.mutate()}
+          disabled={savePage.isPending}
+          className="bg-primary hover:bg-primary/90 font-semibold"
+          data-testid="button-save-this-week"
+        >
+          {savePage.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save changes"}
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: cover + content */}
+        <div className="lg:col-span-2 space-y-5">
+          <div className="space-y-2">
+            <Label className="text-white/80">Page title</Label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Things to Do in NJ This Week"
+              className="bg-black/40 border-white/10"
+              data-testid="input-this-week-title"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-white/80">Hero image (optional)</Label>
+            <ImageUpload value={heroImageUrl} onChange={setHeroImageUrl} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-white/80">Cover content</Label>
+            <p className="text-xs text-muted-foreground">
+              2–3 paragraphs introducing the week. Format with the toolbar; paste from Google Docs / Word — formatting is preserved.
+            </p>
+            <RichTextEditor content={editorContent} onChange={setEditorContent} />
+          </div>
+        </div>
+
+        {/* Right: ad slots */}
+        <div className="space-y-4">
+          <div>
+            <h3 className="font-bold text-white mb-1">Ad slots</h3>
+            <p className="text-xs text-muted-foreground">Leave any slot empty to hide it. Image-only slots show without a click-through.</p>
+          </div>
+          <AdSlotEditor label="Top banner" value={adTop} onChange={setAdTop} />
+          <AdSlotEditor label="Mid-list" value={adMid} onChange={setAdMid} />
+          <AdSlotEditor label="Bottom" value={adBottom} onChange={setAdBottom} />
+        </div>
       </div>
     </div>
   );
