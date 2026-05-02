@@ -423,15 +423,13 @@ export default function Home() {
                       </th>
                       {/* Growth */}
                       <th className="relative px-4 py-6 text-center bg-primary/10 border-x border-primary/20">
-                        <div className="absolute -inset-x-4 top-0 flex justify-center">
-                          <div className="inline-flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold tracking-widest uppercase px-3 py-0.5">
+                        <div className="absolute inset-x-0 -top-3 flex justify-center pointer-events-none">
+                          <div className="inline-flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold tracking-widest uppercase px-3 py-0.5 shadow-lg">
                             Most Popular
                           </div>
                         </div>
-                        <div className="pt-8">
-                          <div className="text-primary font-black text-lg">Growth</div>
-                          <div className="text-3xl font-black text-white mt-3">$150<span className="text-sm text-white/50 font-normal"> / event</span></div>
-                        </div>
+                        <div className="text-primary font-black text-lg">Growth</div>
+                        <div className="text-3xl font-black text-white mt-1">$150<span className="text-sm text-white/50 font-normal"> / event</span></div>
                       </th>
                       {/* Custom */}
                       <th className="px-4 py-6 text-center">

@@ -548,7 +548,7 @@ export default function Book() {
                           set("budgetRange", pkg.price);
                         }}
                         className={[
-                          "flex flex-col h-full justify-between text-left border-2 rounded-2xl p-5 cursor-pointer transition-all duration-200 relative",
+                          "flex flex-col h-full justify-start text-left border-2 rounded-2xl p-5 cursor-pointer transition-all duration-200 relative",
                           data.mode === pkg.id
                             ? "border-primary shadow-[0_0_20px_rgba(139,47,201,0.3)] bg-primary/5"
                             : "border-white/10 hover:border-primary/50 bg-black/20",
