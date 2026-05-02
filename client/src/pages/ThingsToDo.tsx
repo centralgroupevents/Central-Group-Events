@@ -219,15 +219,25 @@ export default function ThingsToDo() {
           )}
         </div>
 
-        {/* Events list */}
+        {/* Events list (mid ad slot is rendered inline inside the list) */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <EventBrowser pinFeatured />
+          <EventBrowser
+            pinFeatured
+            inlineAd={
+              adMid && adMid.imageUrl ? (
+                adMid.linkUrl ? (
+                  <a href={adMid.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={adMid.alt || "Sponsored"}>
+                    <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-auto rounded-xl" loading="lazy" />
+                  </a>
+                ) : (
+                  <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-auto rounded-xl" loading="lazy" />
+                )
+              ) : undefined
+            }
+          />
         </div>
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          {/* Mid ad slot */}
-          <AdBanner slot={adMid} label="Mid" />
-
           {/* Bottom ad slot */}
           <AdBanner slot={adBottom} label="Bottom" />
         </div>

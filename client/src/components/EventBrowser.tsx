@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Loader2, Search, MapPin, Calendar } from "lucide-react";
 import { useLocation } from "wouter";
@@ -17,6 +17,10 @@ interface EventBrowserProps {
   onSeeMore?: () => void;
   /** When true, events with isFeatured=true float to the top with a Featured badge. */
   pinFeatured?: boolean;
+  /** Optional sponsored content rendered as a row inside the events list. */
+  inlineAd?: ReactNode;
+  /** Zero-indexed position to insert the inlineAd. Defaults to after the 5th visible row. */
+  inlineAdAfterIndex?: number;
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -29,7 +33,7 @@ function getDayOfWeek(dateStr: string | null | undefined): string {
   return DAY_NAMES[date.getDay()] || "";
 }
 
-export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, pinFeatured = false }: EventBrowserProps) {
+export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, pinFeatured = false, inlineAd, inlineAdAfterIndex = 4 }: EventBrowserProps) {
   const [, navigate] = useLocation();
   const [activeRegion, setActiveRegion] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -160,8 +164,8 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
             <>
               <div className="divide-y divide-white/10 rounded-2xl border border-white/10 overflow-hidden">
                 {visibleEvents.map((event, idx) => (
+                  <Fragment key={event.id}>
                   <motion.div
-                    key={event.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.04 }}
@@ -202,6 +206,15 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
                       </Button>
                     </div>
                   </motion.div>
+                  {inlineAd && idx === inlineAdAfterIndex && (
+                    <div className="px-6 py-4 bg-white/[0.04]" data-testid="event-list-inline-ad">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">Sponsored</span>
+                      </div>
+                      {inlineAd}
+                    </div>
+                  )}
+                  </Fragment>
                 ))}
               </div>
               {showSeeMoreButton && hasMore && (
