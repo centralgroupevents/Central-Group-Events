@@ -28,6 +28,7 @@ import {
 } from "@shared/schema";
 import { eq, desc, sql, count, and, isNull, gte, inArray } from "drizzle-orm";
 import slugifyLib from "slugify";
+import { regionSection, normalizeRegion } from "@shared/region";
 
 // ─── Slug helper ──────────────────────────────────────────────────────────
 
@@ -230,18 +231,28 @@ export class DatabaseStorage implements IStorage {
   async getEvents(region?: string): Promise<Event[]> {
     const currentDate = sql`CURRENT_DATE::text`;
     if (region && region !== "All") {
-      return await db.select().from(events).where(and(eq(events.region, region), gte(events.date, currentDate)));
+      const section = regionSection(region);
+      if (section) {
+        // Match any region whose value contains the section keyword
+        // ("Central NJ", "central", "central jersey" all match "central").
+        return await db.select().from(events).where(and(
+          sql`LOWER(${events.region}) LIKE ${"%" + section + "%"}`,
+          gte(events.date, currentDate),
+        ));
+      }
     }
     return await db.select().from(events).where(gte(events.date, currentDate));
   }
 
   async createEvent(event: InsertEvent): Promise<Event> {
-    const [newEvent] = await db.insert(events).values(event).returning();
+    const normalized = { ...event, region: normalizeRegion(event.region) || event.region };
+    const [newEvent] = await db.insert(events).values(normalized).returning();
     return newEvent;
   }
 
   async updateEvent(id: number, data: Partial<InsertEvent>): Promise<Event> {
-    const [updated] = await db.update(events).set(data).where(eq(events.id, id)).returning();
+    const normalized = data.region ? { ...data, region: normalizeRegion(data.region) || data.region } : data;
+    const [updated] = await db.update(events).set(normalized).where(eq(events.id, id)).returning();
     return updated;
   }
 
@@ -264,7 +275,8 @@ export class DatabaseStorage implements IStorage {
       if (existing.length > 0) {
         skipped++;
       } else {
-        await db.insert(events).values(row);
+        const normalized = { ...row, region: normalizeRegion(row.region) || row.region };
+        await db.insert(events).values(normalized);
         imported++;
       }
     }

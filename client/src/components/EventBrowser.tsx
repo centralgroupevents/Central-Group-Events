@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEvents } from "@/hooks/use-landing";
+import { normalizeRegion } from "@shared/region";
 
 interface EventBrowserProps {
   /** Cap the number of rows shown. Defaults to no cap. */
@@ -178,7 +179,10 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
                       </div>
                       <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
                         <MapPin className="w-3 h-3 shrink-0" />
-                        {event.city ? `${event.city}, ${event.region.replace(" NJ", "")} NJ` : event.region}
+                        {(() => {
+                          const region = normalizeRegion(event.region) || event.region;
+                          return event.city ? `${event.city}, ${region.replace(" NJ", "")} NJ` : region;
+                        })()}
                       </p>
                     </div>
                     <div className="flex items-center gap-4 shrink-0">
