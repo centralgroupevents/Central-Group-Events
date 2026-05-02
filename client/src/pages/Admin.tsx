@@ -3302,11 +3302,82 @@ function AdSlotEditor({ label, value, onChange }: { label: string; value: AdSlot
   );
 }
 
+// Parses the apiRequest error string ("400: {...json...}" or "500: <text>")
+// into a status code and a human-readable message. Returns the status code,
+// a short reason, and the full raw text in case the dev wants more context.
+function describeApiError(err: unknown): { status: number | null; reason: string; raw: string } {
+  if (!(err instanceof Error)) {
+    return { status: null, reason: "Unknown error", raw: String(err) };
+  }
+  const m = err.message.match(/^(\d{3}):\s*([\s\S]*)$/);
+  if (!m) {
+    return { status: null, reason: err.message, raw: err.message };
+  }
+  const status = parseInt(m[1], 10);
+  const body = m[2];
+  let reason = body;
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed === "object") {
+      if (parsed.message) reason = parsed.message;
+      else if (parsed.error) reason = parsed.error;
+      else reason = JSON.stringify(parsed);
+    }
+  } catch {
+    // Leave reason as the raw body text.
+  }
+  return { status, reason, raw: err.message };
+}
+
+function ErrorPanel({ title, status, reason, raw, onClose }: { title: string; status: number | null; reason: string; raw: string; onClose: () => void }) {
+  const [showRaw, setShowRaw] = useState(false);
+  function copyAll() {
+    const txt = `${title}\nStatus: ${status ?? "(none)"}\nMessage: ${reason}\nRaw:\n${raw}`;
+    navigator.clipboard?.writeText(txt);
+  }
+  return (
+    <div className="border border-red-500/40 bg-red-500/10 rounded-2xl p-4 space-y-2" data-testid="this-week-error-panel">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-red-300 text-sm">{title}</p>
+          <p className="text-sm text-white/80 mt-1 break-words">
+            {status !== null && <span className="font-mono text-xs text-white/60 mr-2">[{status}]</span>}
+            {reason}
+          </p>
+        </div>
+        <button onClick={onClose} className="text-white/40 hover:text-white" aria-label="Dismiss"><X className="w-4 h-4" /></button>
+      </div>
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          onClick={() => setShowRaw((v) => !v)}
+          className="text-xs text-white/60 hover:text-white underline underline-offset-2"
+        >
+          {showRaw ? "Hide raw response" : "Show raw response"}
+        </button>
+        <span className="text-white/30 text-xs">·</span>
+        <button
+          type="button"
+          onClick={copyAll}
+          className="text-xs text-white/60 hover:text-white underline underline-offset-2"
+        >
+          Copy details
+        </button>
+      </div>
+      {showRaw && (
+        <pre className="mt-2 text-[11px] leading-relaxed font-mono bg-black/40 border border-white/10 rounded-lg p-3 text-white/70 whitespace-pre-wrap break-all max-h-48 overflow-y-auto">
+          {raw}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function ThisWeekTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data: page, isLoading } = useQuery<any>({
+  const { data: page, isLoading, error: loadError, refetch } = useQuery<any>({
     queryKey: [`/api/pages/${PAGE_SLUG}`],
   });
 
@@ -3317,6 +3388,8 @@ function ThisWeekTab() {
   const [adMid, setAdMid] = useState<AdSlotData>(emptyAdSlot());
   const [adBottom, setAdBottom] = useState<AdSlotData>(emptyAdSlot());
   const [hydrated, setHydrated] = useState(false);
+  const [saveError, setSaveError] = useState<{ status: number | null; reason: string; raw: string } | null>(null);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     if (page && !hydrated) {
@@ -3345,13 +3418,39 @@ function ThisWeekTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [`/api/pages/${PAGE_SLUG}`] });
+      setSaveError(null);
+      setSavedAt(new Date());
       toast({ title: "Page saved" });
     },
-    onError: () => toast({ title: "Failed to save page", variant: "destructive" }),
+    onError: (err) => {
+      const info = describeApiError(err);
+      setSaveError(info);
+      toast({
+        title: `Save failed${info.status ? ` (${info.status})` : ""}`,
+        description: info.reason.slice(0, 220),
+        variant: "destructive",
+      });
+    },
   });
 
   if (isLoading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
+  if (loadError) {
+    const info = describeApiError(loadError);
+    return (
+      <div className="space-y-4">
+        <ErrorPanel
+          title="Couldn't load the This Week page settings"
+          status={info.status}
+          reason={info.reason}
+          raw={info.raw}
+          onClose={() => refetch()}
+        />
+        <Button onClick={() => refetch()} variant="outline" className="border-white/20">Retry</Button>
+      </div>
+    );
   }
 
   return (
@@ -3363,15 +3462,32 @@ function ThisWeekTab() {
             Edits the public page at <code className="text-white/80">/{PAGE_SLUG}</code>. Visitors must subscribe before viewing.
           </p>
         </div>
-        <Button
-          onClick={() => savePage.mutate()}
-          disabled={savePage.isPending}
-          className="bg-primary hover:bg-primary/90 font-semibold"
-          data-testid="button-save-this-week"
-        >
-          {savePage.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save changes"}
-        </Button>
+        <div className="flex items-center gap-3">
+          {savedAt && !saveError && (
+            <span className="text-xs text-green-400 hidden sm:inline" data-testid="this-week-save-stamp">
+              Saved {savedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+            </span>
+          )}
+          <Button
+            onClick={() => savePage.mutate()}
+            disabled={savePage.isPending}
+            className="bg-primary hover:bg-primary/90 font-semibold"
+            data-testid="button-save-this-week"
+          >
+            {savePage.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save changes"}
+          </Button>
+        </div>
       </div>
+
+      {saveError && (
+        <ErrorPanel
+          title="Save failed"
+          status={saveError.status}
+          reason={saveError.reason}
+          raw={saveError.raw}
+          onClose={() => setSaveError(null)}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: cover + content */}
