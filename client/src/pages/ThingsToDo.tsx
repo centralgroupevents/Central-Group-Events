@@ -245,11 +245,13 @@ export default function ThingsToDo() {
                 <div className="lg:sticky lg:top-24">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-white/40 mb-2 px-1">Sponsored</p>
                   {adSidebar.linkUrl ? (
-                    <a href={adSidebar.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={adSidebar.alt || "Sponsored"}>
-                      <img src={adSidebar.imageUrl} alt={adSidebar.alt || "Sponsored"} className="w-full h-auto rounded-2xl border border-white/10" loading="lazy" />
+                    <a href={adSidebar.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={adSidebar.alt || "Sponsored"} className="block aspect-[2/1] overflow-hidden rounded-2xl border border-white/10">
+                      <img src={adSidebar.imageUrl} alt={adSidebar.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
                     </a>
                   ) : (
-                    <img src={adSidebar.imageUrl} alt={adSidebar.alt || "Sponsored"} className="w-full h-auto rounded-2xl border border-white/10" loading="lazy" />
+                    <div className="aspect-[2/1] overflow-hidden rounded-2xl border border-white/10">
+                      <img src={adSidebar.imageUrl} alt={adSidebar.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
+                    </div>
                   )}
                 </div>
               </aside>

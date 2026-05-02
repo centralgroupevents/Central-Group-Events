@@ -3261,10 +3261,13 @@ function serializeAdSlot(s: AdSlotData): string | null {
   return JSON.stringify({ imageUrl: s.imageUrl.trim(), linkUrl: s.linkUrl.trim() || undefined, alt: s.alt.trim() || undefined });
 }
 
-function AdSlotEditor({ label, value, onChange }: { label: string; value: AdSlotData; onChange: (v: AdSlotData) => void }) {
+function AdSlotEditor({ label, value, onChange, hint }: { label: string; value: AdSlotData; onChange: (v: AdSlotData) => void; hint?: string }) {
   return (
     <div className="border border-white/10 rounded-2xl p-5 bg-white/[0.02] space-y-3">
-      <h4 className="font-semibold text-white">{label}</h4>
+      <div>
+        <h4 className="font-semibold text-white">{label}</h4>
+        {hint && <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>}
+      </div>
       <div className="space-y-1">
         <Label className="text-white/70 text-xs">Image</Label>
         <ImageUpload value={value.imageUrl} onChange={(url) => onChange({ ...value, imageUrl: url })} />
@@ -3526,10 +3529,10 @@ function ThisWeekTab() {
             <h3 className="font-bold text-white mb-1">Ad slots</h3>
             <p className="text-xs text-muted-foreground">Leave any slot empty to hide it. Image-only slots show without a click-through.</p>
           </div>
-          <AdSlotEditor label="Top banner" value={adTop} onChange={setAdTop} />
-          <AdSlotEditor label="Mid-list (in-feed)" value={adMid} onChange={setAdMid} />
-          <AdSlotEditor label="Sidebar (sticky on desktop)" value={adSidebar} onChange={setAdSidebar} />
-          <AdSlotEditor label="Bottom" value={adBottom} onChange={setAdBottom} />
+          <AdSlotEditor label="Top banner" value={adTop} onChange={setAdTop} hint="Wide banner above the page. Recommended 1600×400 (4:1) JPG/PNG." />
+          <AdSlotEditor label="Mid-list (in-feed)" value={adMid} onChange={setAdMid} hint="Appears as a row inside the events list. Recommended 1200×400 (3:1) JPG/PNG." />
+          <AdSlotEditor label="Sidebar (sticky on desktop)" value={adSidebar} onChange={setAdSidebar} hint="Horizontal rectangle, sticks alongside the events list. Recommended 600×300 (2:1) JPG/PNG." />
+          <AdSlotEditor label="Bottom" value={adBottom} onChange={setAdBottom} hint="Wide banner below the page. Recommended 1600×400 (4:1) JPG/PNG." />
         </div>
       </div>
     </div>
