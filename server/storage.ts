@@ -9,6 +9,7 @@ import {
   postViews,
   linkClicks,
   comments,
+  pages,
   type InsertSubscriber,
   type Subscriber,
   type InsertBooking,
@@ -22,6 +23,8 @@ import {
   type PostVersion,
   type Comment,
   type InsertComment,
+  type Page,
+  type InsertPage,
 } from "@shared/schema";
 import { eq, desc, sql, count, and, isNull, gte, inArray } from "drizzle-orm";
 import slugifyLib from "slugify";
@@ -68,6 +71,10 @@ export interface IStorage {
   deleteEvent(id: number): Promise<void>;
   bulkDeleteEvents(ids: number[]): Promise<void>;
   bulkImportEvents(rows: InsertEvent[]): Promise<{ imported: number; skipped: number }>;
+
+  // Pages
+  getPageBySlug(slug: string): Promise<Page | null>;
+  upsertPage(slug: string, data: Partial<InsertPage>): Promise<Page>;
 
   // Admin users
   createAdminUser(data: Partial<InsertAdminUser>): Promise<AdminUser>;
@@ -262,6 +269,30 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return { imported, skipped };
+  }
+
+  // ── Pages ─────────────────────────────────────────────────────────────
+
+  async getPageBySlug(slug: string): Promise<Page | null> {
+    const rows = await db.select().from(pages).where(eq(pages.slug, slug)).limit(1);
+    return rows[0] || null;
+  }
+
+  async upsertPage(slug: string, data: Partial<InsertPage>): Promise<Page> {
+    const existing = await this.getPageBySlug(slug);
+    if (existing) {
+      const [updated] = await db
+        .update(pages)
+        .set({ ...data, slug, updatedAt: new Date() })
+        .where(eq(pages.slug, slug))
+        .returning();
+      return updated;
+    }
+    const [created] = await db
+      .insert(pages)
+      .values({ slug, title: data.title ?? "", editorContent: data.editorContent ?? "", ...data })
+      .returning();
+    return created;
   }
 
   // ── Admin users ───────────────────────────────────────────────────────

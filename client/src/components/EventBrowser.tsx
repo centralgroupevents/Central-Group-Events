@@ -14,6 +14,8 @@ interface EventBrowserProps {
   showSeeMoreButton?: boolean;
   /** Click handler for the See Full List button. Defaults to navigating to /things-to-do-in-nj. */
   onSeeMore?: () => void;
+  /** When true, events with isFeatured=true float to the top with a Featured badge. */
+  pinFeatured?: boolean;
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -26,7 +28,7 @@ function getDayOfWeek(dateStr: string | null | undefined): string {
   return DAY_NAMES[date.getDay()] || "";
 }
 
-export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore }: EventBrowserProps) {
+export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, pinFeatured = false }: EventBrowserProps) {
   const [, navigate] = useLocation();
   const [activeRegion, setActiveRegion] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -68,8 +70,17 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore }:
     return true;
   });
 
-  const visibleEvents = maxItems ? filteredEvents.slice(0, maxItems) : filteredEvents;
-  const hasMore = maxItems !== undefined && filteredEvents.length > maxItems;
+  const sortedEvents = pinFeatured
+    ? [...filteredEvents].sort((a, b) => {
+        const af = (a as any).isFeatured ? 1 : 0;
+        const bf = (b as any).isFeatured ? 1 : 0;
+        if (af !== bf) return bf - af;
+        return a.date.localeCompare(b.date);
+      })
+    : filteredEvents;
+
+  const visibleEvents = maxItems ? sortedEvents.slice(0, maxItems) : sortedEvents;
+  const hasMore = maxItems !== undefined && sortedEvents.length > maxItems;
 
   const handleSeeMore = () => {
     if (onSeeMore) onSeeMore();
@@ -157,7 +168,14 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore }:
                     className="flex items-center justify-between gap-4 px-6 py-5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-base leading-snug truncate" data-testid={`text-event-title-${event.id}`}>{event.title}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-base leading-snug truncate" data-testid={`text-event-title-${event.id}`}>{event.title}</p>
+                        {pinFeatured && (event as any).isFeatured && (
+                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
+                            Featured
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
                         <MapPin className="w-3 h-3 shrink-0" />
                         {event.city ? `${event.city}, ${event.region.replace(" NJ", "")} NJ` : event.region}

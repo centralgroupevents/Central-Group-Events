@@ -51,7 +51,21 @@ export const events = pgTable("events", {
   influencer: text("influencer"),
   genre: text("genre"),
   instagramHandle: text("instagram_handle"),
+  isFeatured: boolean("is_featured").default(false),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const pages = pgTable("pages", {
+  id: serial("id").primaryKey(),
+  slug: text("slug").unique().notNull(),
+  title: text("title").notNull().default(""),
+  heroImageUrl: text("hero_image_url"),
+  editorContent: text("editor_content").notNull().default(""),
+  // Each ad slot stored as JSON-encoded text: { imageUrl, linkUrl, alt }.
+  adSlotTop: text("ad_slot_top"),
+  adSlotMid: text("ad_slot_mid"),
+  adSlotBottom: text("ad_slot_bottom"),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // ─── New tables ────────────────────────────────────────────────────────────
@@ -156,6 +170,13 @@ export const insertCommentSchema = createInsertSchema(comments).omit({ id: true,
   parentId: z.number().optional().nullable(),
 });
 
+export const insertPageSchema = createInsertSchema(pages).omit({ id: true, updatedAt: true }).extend({
+  heroImageUrl: z.string().optional().nullable(),
+  adSlotTop: z.string().optional().nullable(),
+  adSlotMid: z.string().optional().nullable(),
+  adSlotBottom: z.string().optional().nullable(),
+});
+
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type Subscriber = typeof newsletterSubscribers.$inferSelect;
@@ -166,6 +187,9 @@ export type InsertBooking = z.infer<typeof insertBookingSchema>;
 
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
+
+export type Page = typeof pages.$inferSelect;
+export type InsertPage = z.infer<typeof insertPageSchema>;
 
 export type AdminUser = typeof adminUsers.$inferSelect;
 export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;

@@ -188,7 +188,7 @@ export default function Home() {
                 data-testid="button-hero-newsletter"
                 onClick={() => {
                   if (heroSubscribed) {
-                    navigate("/blog");
+                    navigate("/things-to-do-in-nj");
                     return;
                   }
                   document.getElementById("newsletter")?.scrollIntoView({ behavior: "smooth" });

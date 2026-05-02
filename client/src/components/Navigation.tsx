@@ -60,7 +60,7 @@ export function Navigation() {
               {link.name}
             </a>
           ))}
-          <Link href="/blog" className="text-sm font-medium text-muted-foreground hover:text-white transition-colors">
+          <Link href="/things-to-do-in-nj" className="text-sm font-medium text-muted-foreground hover:text-white transition-colors">
             Newsletter
           </Link>
           <Link href="/faq" className="text-sm font-medium text-muted-foreground hover:text-white transition-colors">
@@ -131,7 +131,7 @@ export function Navigation() {
                 </a>
               ))}
               <Link
-                href="/blog"
+                href="/things-to-do-in-nj"
                 className="text-lg font-medium text-muted-foreground hover:text-white transition-colors"
                 onClick={() => setMobileMenuOpen(false)}
               >

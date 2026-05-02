@@ -120,6 +120,11 @@ export async function registerRoutes(
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://www.centralgroupevents.com/things-to-do-in-nj</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
+  </url>
+  <url>
     <loc>https://www.centralgroupevents.com/faq</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
@@ -708,6 +713,41 @@ export async function registerRoutes(
       res.json({ imported: result.imported, skipped: result.skipped + skipped });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Toggle the is_featured flag on an event (admin only).
+  app.patch("/api/events/:id/featured", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const isFeatured = !!req.body.isFeatured;
+      const updated = await storage.updateEvent(id, { isFeatured } as any);
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Pages ─────────────────────────────────────────────────────────────
+
+  app.get("/api/pages/:slug", async (req: Request, res: Response) => {
+    try {
+      const page = await storage.getPageBySlug(req.params.slug as string);
+      res.json(page);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/pages/:slug", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { insertPageSchema } = await import("@shared/schema");
+      const parsed = insertPageSchema.partial().parse(req.body);
+      const updated = await storage.upsertPage(req.params.slug as string, parsed);
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ message: err instanceof Error ? err.message : "Invalid request" });
     }
   });
 
