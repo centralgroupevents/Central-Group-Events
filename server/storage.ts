@@ -66,7 +66,7 @@ export interface IStorage {
   batchDeleteBookings(ids: number[]): Promise<void>;
 
   // Events
-  getEvents(region?: string): Promise<Event[]>;
+  getEvents(region?: string, includePast?: boolean): Promise<Event[]>;
   createEvent(event: InsertEvent): Promise<Event>;
   updateEvent(id: number, event: Partial<InsertEvent>): Promise<Event>;
   deleteEvent(id: number): Promise<void>;
@@ -230,20 +230,22 @@ export class DatabaseStorage implements IStorage {
 
   // ── Events ────────────────────────────────────────────────────────────
 
-  async getEvents(region?: string): Promise<Event[]> {
+  async getEvents(region?: string, includePast = false): Promise<Event[]> {
     const currentDate = sql`CURRENT_DATE::text`;
+    const dateFilter = includePast ? undefined : gte(events.date, currentDate);
     if (region && region !== "All") {
       const section = regionSection(region);
       if (section) {
         // Match any region whose value contains the section keyword
         // ("Central NJ", "central", "central jersey" all match "central").
-        return await db.select().from(events).where(and(
-          sql`LOWER(${events.region}) LIKE ${"%" + section + "%"}`,
-          gte(events.date, currentDate),
-        ));
+        const regionFilter = sql`LOWER(${events.region}) LIKE ${"%" + section + "%"}`;
+        const where = dateFilter ? and(regionFilter, dateFilter) : regionFilter;
+        return await db.select().from(events).where(where);
       }
     }
-    return await db.select().from(events).where(gte(events.date, currentDate));
+    return dateFilter
+      ? await db.select().from(events).where(dateFilter)
+      : await db.select().from(events);
   }
 
   async createEvent(event: InsertEvent): Promise<Event> {

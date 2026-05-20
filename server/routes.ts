@@ -618,7 +618,12 @@ export async function registerRoutes(
   app.get(api.events.list.path, async (req, res) => {
     try {
       const region = req.query.region as string;
-      const eventList = await storage.getEvents(region);
+      // `?all=1` returns past events too. Gated on admin auth so the public
+      // listing can't be used to scrape the full archive.
+      const wantsAll = req.query.all === "1" || req.query.all === "true";
+      const isAdmin = !!verifyAdminToken(req.cookies?.cge_admin_jwt);
+      const includePast = wantsAll && isAdmin;
+      const eventList = await storage.getEvents(region, includePast);
       res.status(200).json(eventList);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });

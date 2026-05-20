@@ -1791,6 +1791,36 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Accepts common date formats from CSV / Excel and returns YYYY-MM-DD,
 // the format the server stores and the formatter on the page expects.
 // Returns "" for unrecognized input so the server can reject the row.
+const MONTH_NAME_MAP: Record<string, number> = {
+  jan: 1, january: 1,
+  feb: 2, february: 2,
+  mar: 3, march: 3,
+  apr: 4, april: 4,
+  may: 5,
+  jun: 6, june: 6,
+  jul: 7, july: 7,
+  aug: 8, august: 8,
+  sep: 9, sept: 9, september: 9,
+  oct: 10, october: 10,
+  nov: 11, november: 11,
+  dec: 12, december: 12,
+};
+
+// When the input has no year, pick the year that puts the date closest to today.
+// If the candidate this-year date is more than 180 days in the past, assume the
+// user meant next year (e.g. uploading "15-Jan" in December → next January).
+function inferYearForMonthDay(month: number, day: number): number {
+  const now = new Date();
+  const year = now.getFullYear();
+  const candidate = new Date(year, month - 1, day);
+  const daysInPast = (now.getTime() - candidate.getTime()) / (1000 * 60 * 60 * 24);
+  return daysInPast > 180 ? year + 1 : year;
+}
+
+function buildIsoDate(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 function normalizeEventDate(input: string): string {
   if (!input) return "";
   const s = String(input).trim();
@@ -1802,7 +1832,7 @@ function normalizeEventDate(input: string): string {
   let m = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
   if (m) {
     const [, y, mo, d] = m;
-    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    return buildIsoDate(parseInt(y, 10), parseInt(mo, 10), parseInt(d, 10));
   }
 
   // M/D/YYYY, M-D-YYYY, M.D.YY, etc. (US-style; default for this site)
@@ -1810,7 +1840,41 @@ function normalizeEventDate(input: string): string {
   if (m) {
     let [, mo, d, y] = m;
     if (y.length === 2) y = (parseInt(y, 10) >= 70 ? "19" : "20") + y;
-    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    return buildIsoDate(parseInt(y, 10), parseInt(mo, 10), parseInt(d, 10));
+  }
+
+  // Numeric day + month name: "15-May", "15 May", "15/May"
+  m = s.match(/^(\d{1,2})[-/\s]+([A-Za-z]+)(?:[-/\s]+(\d{2,4}))?$/);
+  if (m) {
+    const day = parseInt(m[1], 10);
+    const month = MONTH_NAME_MAP[m[2].toLowerCase()];
+    if (month && day >= 1 && day <= 31) {
+      let year: number;
+      if (m[3]) {
+        year = parseInt(m[3], 10);
+        if (m[3].length === 2) year = (year >= 70 ? 1900 : 2000) + year;
+      } else {
+        year = inferYearForMonthDay(month, day);
+      }
+      return buildIsoDate(year, month, day);
+    }
+  }
+
+  // Month name + day: "May 15", "May-15", "May 15, 2026"
+  m = s.match(/^([A-Za-z]+)[-/\s,]+(\d{1,2})(?:[-/\s,]+(\d{2,4}))?$/);
+  if (m) {
+    const month = MONTH_NAME_MAP[m[1].toLowerCase()];
+    const day = parseInt(m[2], 10);
+    if (month && day >= 1 && day <= 31) {
+      let year: number;
+      if (m[3]) {
+        year = parseInt(m[3], 10);
+        if (m[3].length === 2) year = (year >= 70 ? 1900 : 2000) + year;
+      } else {
+        year = inferYearForMonthDay(month, day);
+      }
+      return buildIsoDate(year, month, day);
+    }
   }
 
   // Excel serial number (days since 1899-12-30, with Excel's 1900 leap-year quirk)
@@ -1820,15 +1884,20 @@ function normalizeEventDate(input: string): string {
       const ms = Math.round((serial - 25569) * 86400 * 1000);
       const d = new Date(ms);
       if (!isNaN(d.getTime())) {
-        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+        return buildIsoDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
       }
     }
   }
 
-  // Fallback: let JS Date try ("May 1, 2026", "1 May 2026", "Fri May 01 2026...", ISO timestamps)
+  // Final fallback: JS Date parser. Reject results that look like the V8 "year 2001"
+  // default that fires when an input has no year — we'd rather mark the row invalid
+  // than silently mangle the date.
   const parsed = new Date(s);
   if (!isNaN(parsed.getTime())) {
-    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+    const year = parsed.getFullYear();
+    if (year === 2001 && !/2001/.test(s)) return "";
+    if (year < 1970 || year > 2100) return "";
+    return buildIsoDate(year, parsed.getMonth() + 1, parsed.getDate());
   }
 
   return "";
@@ -1883,6 +1952,13 @@ export default function Admin() {
 
   const { data: events = [], isLoading } = useQuery<Event[]>({
     queryKey: ["/api/events"],
+    queryFn: async () => {
+      // Admins see all events (past + future) so they can verify what they
+      // uploaded. The server gates `?all=1` on the admin JWT cookie.
+      const res = await fetch("/api/events?all=1", { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      return res.json();
+    },
     enabled: !!user,
   });
 
@@ -2135,16 +2211,16 @@ export default function Admin() {
 
   const IMPORT_ALIASES: Record<string, string[]> = {
     name:            ["name", "title", "event", "event name"],
-    date:            ["date", "event date", "day", "event_date"],
+    date:            ["date", "event date", "event_date"],
     time:            ["time", "event time", "start time", "start_time"],
     venue:           ["venue", "location", "place"],
-    city:            ["city", "town"],
-    region:          ["region", "area"],
+    city:            ["city", "town", "area"],
+    region:          ["region"],
     organizer:       ["organizer", "host", "promoter"],
     influencer:      ["influencer"],
-    genre:           ["genre", "type", "music type"],
+    genre:           ["genre", "type", "music type", "category"],
     instagramHandle: ["instagram", "ig", "handle", "insta", "instagramhandle"],
-    ticketLink:      ["ticket", "link", "url", "tickets", "ticketlink"],
+    ticketLink:      ["ticket link", "ticketlink", "ticket", "tickets", "url", "link"],
   };
 
   function autoMatchHeader(headers: string[], cgeKey: string): string {
