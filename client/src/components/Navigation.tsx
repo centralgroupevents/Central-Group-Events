@@ -28,10 +28,15 @@ export function Navigation() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const anchorLinks = [
-    { name: "Services", href: isHomePage ? "#services" : "/#services" },
-    { name: "Events", href: isHomePage ? "#events" : "/#events" },
-    { name: "Pricing", href: isHomePage ? "#pricing" : "/#pricing" },
+  // `type: "anchor"` uses a plain <a> (for homepage section jumps),
+  // `type: "route"` uses wouter's <Link> (for client-side route nav).
+  const navLinks: { name: string; href: string; type: "anchor" | "route" }[] = [
+    { name: "Services", href: isHomePage ? "#services" : "/#services", type: "anchor" },
+    { name: "Events", href: isHomePage ? "#events" : "/#events", type: "anchor" },
+    { name: "Things to Do in NJ", href: "/things-to-do-in-nj", type: "route" },
+    { name: "Pricing", href: isHomePage ? "#pricing" : "/#pricing", type: "anchor" },
+    { name: "Newsletter", href: "/blog", type: "route" },
+    { name: "FAQ", href: "/faq", type: "route" },
   ];
 
   return (
@@ -51,21 +56,25 @@ export function Navigation() {
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-6">
-          {anchorLinks.map((link) => (
-            <a
-              key={link.name}
-              href={link.href}
-              className="text-sm font-medium text-muted-foreground hover:text-white transition-colors"
-            >
-              {link.name}
-            </a>
-          ))}
-          <Link href="/things-to-do-in-nj" className="text-sm font-medium text-muted-foreground hover:text-white transition-colors">
-            Newsletter
-          </Link>
-          <Link href="/faq" className="text-sm font-medium text-muted-foreground hover:text-white transition-colors">
-            FAQ
-          </Link>
+          {navLinks.map((link) =>
+            link.type === "anchor" ? (
+              <a
+                key={link.name}
+                href={link.href}
+                className="text-sm font-medium text-muted-foreground hover:text-white transition-colors"
+              >
+                {link.name}
+              </a>
+            ) : (
+              <Link
+                key={link.name}
+                href={link.href}
+                className="text-sm font-medium text-muted-foreground hover:text-white transition-colors"
+              >
+                {link.name}
+              </Link>
+            ),
+          )}
           <a
             href="https://calendly.com/centralgroupevents/30min"
             target="_blank"
@@ -120,30 +129,27 @@ export function Navigation() {
             className="md:hidden glass-panel border-t border-white/5"
           >
             <div className="px-4 py-6 flex flex-col gap-4">
-              {anchorLinks.map((link) => (
-                <a
-                  key={link.name}
-                  href={link.href}
-                  className="text-lg font-medium text-muted-foreground hover:text-white transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  {link.name}
-                </a>
-              ))}
-              <Link
-                href="/things-to-do-in-nj"
-                className="text-lg font-medium text-muted-foreground hover:text-white transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                Newsletter
-              </Link>
-              <Link
-                href="/faq"
-                className="text-lg font-medium text-muted-foreground hover:text-white transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                FAQ
-              </Link>
+              {navLinks.map((link) =>
+                link.type === "anchor" ? (
+                  <a
+                    key={link.name}
+                    href={link.href}
+                    className="text-lg font-medium text-muted-foreground hover:text-white transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {link.name}
+                  </a>
+                ) : (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    className="text-lg font-medium text-muted-foreground hover:text-white transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {link.name}
+                  </Link>
+                ),
+              )}
               <a
                 href="https://calendly.com/centralgroupevents/30min"
                 target="_blank"

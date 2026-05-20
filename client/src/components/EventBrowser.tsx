@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Loader2, Search, MapPin, Calendar } from "lucide-react";
 import { useLocation } from "wouter";
@@ -55,6 +55,27 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
     }
     return out.sort((a, b) => a.localeCompare(b));
   }, [allEvents]);
+
+  // Only show days in the filter dropdown that actually have events.
+  // Order: Mon → Sun (workweek-first), regardless of upload order.
+  const availableDays = useMemo(() => {
+    const calendarOrder = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const present = new Set<string>();
+    for (const e of allEvents) {
+      const d = getDayOfWeek(e.date);
+      if (d) present.add(d);
+    }
+    return calendarOrder.filter((d) => present.has(d));
+  }, [allEvents]);
+
+  // If the user had a day selected and then events changed so that day no
+  // longer has any matches, snap back to "All Days" instead of showing an
+  // empty list with a now-invisible filter chip.
+  useEffect(() => {
+    if (dayOfWeek !== "All Days" && !availableDays.includes(dayOfWeek)) {
+      setDayOfWeek("All Days");
+    }
+  }, [dayOfWeek, availableDays]);
 
   const filteredEvents = allEvents.filter((e) => {
     if (searchQuery.trim()) {
@@ -130,7 +151,7 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-secondary border-white/10 text-white">
-                {["All Days", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                {["All Days", ...availableDays].map((d) => (
                   <SelectItem key={d} value={d}>{d}</SelectItem>
                 ))}
               </SelectContent>
