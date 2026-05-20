@@ -41,14 +41,12 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
   const [eventType, setEventType] = useState("All Types");
   const { data: events, isLoading } = useEvents(activeRegion);
 
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const upcomingEvents = (events || []).filter((e) => e.date >= todayStr);
+  const allEvents = events || [];
 
   const availableEventTypes = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const e of upcomingEvents) {
+    for (const e of allEvents) {
       const g = (e.genre || "").trim();
       if (g && !seen.has(g.toLowerCase())) {
         seen.add(g.toLowerCase());
@@ -56,9 +54,9 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
       }
     }
     return out.sort((a, b) => a.localeCompare(b));
-  }, [upcomingEvents]);
+  }, [allEvents]);
 
-  const filteredEvents = upcomingEvents.filter((e) => {
+  const filteredEvents = allEvents.filter((e) => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchesSearch =
@@ -234,12 +232,12 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
             <div className="flex flex-col items-center justify-center h-64 text-center glass-panel rounded-3xl border-dashed">
               <Calendar className="w-12 h-12 text-muted-foreground mb-4" />
               <h4 className="text-xl font-bold mb-2">
-                {searchQuery ? "No events match your search" : "No upcoming events"}
+                {searchQuery ? "No events match your search" : "No events to show"}
               </h4>
               <p className="text-muted-foreground max-w-md">
                 {searchQuery
                   ? `Try a different name or city, or clear the search to see all events.`
-                  : "No upcoming events in this region. Check back soon or submit your event!"}
+                  : "No events in this region. Check back soon or submit your event!"}
               </p>
             </div>
           )}
