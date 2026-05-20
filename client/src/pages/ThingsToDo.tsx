@@ -235,18 +235,29 @@ export default function ThingsToDo() {
 
         {/* Events list with optional sticky sidebar ad. Mid ad renders inline inside the list. */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="flex flex-col lg:flex-row lg:items-start gap-8">
+          {/* `items-stretch` (default) is required for the sidebar `position: sticky`
+              to behave correctly — flex `items-start` would shrink the aside to its
+              natural height and the sticky child would scroll out of view with it. */}
+          <div className="flex flex-col lg:flex-row gap-8">
             <div className="flex-1 min-w-0">
               <EventBrowser
                 pinFeatured
                 inlineAd={
                   adMid && adMid.imageUrl ? (
                     adMid.linkUrl ? (
-                      <a href={adMid.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={adMid.alt || "Sponsored"}>
-                        <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-auto rounded-xl" loading="lazy" />
+                      <a
+                        href={adMid.linkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer sponsored"
+                        aria-label={adMid.alt || "Sponsored"}
+                        className="block aspect-[2/1] overflow-hidden rounded-xl border border-white/10"
+                      >
+                        <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
                       </a>
                     ) : (
-                      <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-auto rounded-xl" loading="lazy" />
+                      <div className="aspect-[2/1] overflow-hidden rounded-xl border border-white/10">
+                        <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
+                      </div>
                     )
                   ) : undefined
                 }
