@@ -2257,7 +2257,13 @@ export default function Admin() {
     try {
       const res = await apiRequest("POST", "/api/events/bulk-import", mapped);
       const data = await res.json();
-      setImportResult(data);
+      // Tolerate the old `{imported, skipped}` server response shape during a deploy
+      // window where the server might still be running pre-update code.
+      setImportResult({
+        imported: data.imported ?? 0,
+        duplicates: Array.isArray(data.duplicates) ? data.duplicates : [],
+        invalid: Array.isArray(data.invalid) ? data.invalid : [],
+      });
       qc.invalidateQueries({ queryKey: ["/api/events"] });
     } catch {
       toast({ title: "Import failed", variant: "destructive" });
