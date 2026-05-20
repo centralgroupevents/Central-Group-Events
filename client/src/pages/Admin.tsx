@@ -1851,7 +1851,11 @@ export default function Admin() {
   const [importRawRows, setImportRawRows] = useState<string[][]>([]);
   const [importMapping, setImportMapping] = useState<Record<string, string>>({});
   const [importErrors, setImportErrors] = useState<string[]>([]);
-  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; invalidFormat?: number } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    imported: number;
+    duplicates: { title: string; existingId: number; existingDate: string }[];
+    invalid: { rowIndex: number; title: string; reason: string }[];
+  } | null>(null);
   const [pasteText, setPasteText] = useState("");
   const [genreIsOther, setGenreIsOther] = useState(false);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
@@ -2253,7 +2257,7 @@ export default function Admin() {
     try {
       const res = await apiRequest("POST", "/api/events/bulk-import", mapped);
       const data = await res.json();
-      setImportResult(data as { imported: number; skipped: number });
+      setImportResult(data);
       qc.invalidateQueries({ queryKey: ["/api/events"] });
     } catch {
       toast({ title: "Import failed", variant: "destructive" });
@@ -2787,9 +2791,70 @@ export default function Admin() {
                     <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 flex items-center gap-3">
                       <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
                       <p className="text-green-400 text-sm font-medium">
-                        {importResult.imported} event{importResult.imported !== 1 ? "s" : ""} imported, {importResult.skipped} duplicate{importResult.skipped !== 1 ? "s" : ""} skipped
+                        {importResult.imported} event{importResult.imported !== 1 ? "s" : ""} imported
+                        {importResult.duplicates.length > 0 && `, ${importResult.duplicates.length} duplicate${importResult.duplicates.length !== 1 ? "s" : ""} skipped`}
+                        {importResult.invalid.length > 0 && `, ${importResult.invalid.length} invalid row${importResult.invalid.length !== 1 ? "s" : ""} skipped`}
                       </p>
                     </div>
+
+                    {importResult.duplicates.length > 0 && (
+                      <div className="border border-yellow-500/30 bg-yellow-500/5 rounded-lg overflow-hidden">
+                        <div className="px-4 py-2 bg-yellow-500/10 border-b border-yellow-500/20">
+                          <p className="text-yellow-300 text-xs font-semibold uppercase tracking-wider">
+                            Duplicates skipped — matched an existing event with the same title + date
+                          </p>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-black/30 sticky top-0">
+                              <tr className="text-white/60 text-xs">
+                                <th className="text-left px-4 py-2 font-medium">Title</th>
+                                <th className="text-left px-4 py-2 font-medium">Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {importResult.duplicates.map((d, i) => (
+                                <tr key={i} className="border-t border-white/5 text-white/80">
+                                  <td className="px-4 py-2">{d.title}</td>
+                                  <td className="px-4 py-2 text-white/60">{d.existingDate}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {importResult.invalid.length > 0 && (
+                      <div className="border border-red-500/30 bg-red-500/5 rounded-lg overflow-hidden">
+                        <div className="px-4 py-2 bg-red-500/10 border-b border-red-500/20">
+                          <p className="text-red-300 text-xs font-semibold uppercase tracking-wider">
+                            Invalid rows skipped — fix and re-upload these
+                          </p>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-black/30 sticky top-0">
+                              <tr className="text-white/60 text-xs">
+                                <th className="text-left px-4 py-2 font-medium w-12">Row</th>
+                                <th className="text-left px-4 py-2 font-medium">Title</th>
+                                <th className="text-left px-4 py-2 font-medium">Reason</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {importResult.invalid.map((r, i) => (
+                                <tr key={i} className="border-t border-white/5 text-white/80">
+                                  <td className="px-4 py-2 text-white/60 font-mono text-xs">{r.rowIndex + 2}</td>
+                                  <td className="px-4 py-2">{r.title}</td>
+                                  <td className="px-4 py-2 text-red-300/90 text-xs">{r.reason}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
                     <Button variant="outline" onClick={() => { setShowImportModal(false); resetImportModal(); }} className="border-white/20 text-white/70">
                       Close
                     </Button>

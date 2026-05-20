@@ -71,7 +71,9 @@ export interface IStorage {
   updateEvent(id: number, event: Partial<InsertEvent>): Promise<Event>;
   deleteEvent(id: number): Promise<void>;
   bulkDeleteEvents(ids: number[]): Promise<void>;
-  bulkImportEvents(rows: InsertEvent[]): Promise<{ imported: number; skipped: number }>;
+  bulkImportEvents(
+    rows: InsertEvent[],
+  ): Promise<{ imported: number; duplicates: { title: string; existingId: number; existingDate: string }[] }>;
 
   // Pages
   getPageBySlug(slug: string): Promise<Page | null>;
@@ -265,22 +267,27 @@ export class DatabaseStorage implements IStorage {
     await db.delete(events).where(inArray(events.id, ids));
   }
 
-  async bulkImportEvents(rows: InsertEvent[]): Promise<{ imported: number; skipped: number }> {
+  async bulkImportEvents(
+    rows: InsertEvent[],
+  ): Promise<{ imported: number; duplicates: { title: string; existingId: number; existingDate: string }[] }> {
     let imported = 0;
-    let skipped = 0;
+    const duplicates: { title: string; existingId: number; existingDate: string }[] = [];
     for (const row of rows) {
-      const existing = await db.select({ id: events.id }).from(events).where(
-        eq(events.title, row.title)
-      ).limit(1);
+      // Match on title + date so two events with the same name on different dates aren't treated as dupes.
+      const existing = await db
+        .select({ id: events.id, date: events.date })
+        .from(events)
+        .where(and(eq(events.title, row.title), eq(events.date, row.date)))
+        .limit(1);
       if (existing.length > 0) {
-        skipped++;
+        duplicates.push({ title: row.title, existingId: existing[0].id, existingDate: existing[0].date });
       } else {
         const normalized = { ...row, region: normalizeRegion(row.region) || row.region };
         await db.insert(events).values(normalized);
         imported++;
       }
     }
-    return { imported, skipped };
+    return { imported, duplicates };
   }
 
   // ── Pages ─────────────────────────────────────────────────────────────

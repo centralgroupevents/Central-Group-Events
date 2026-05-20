@@ -9,6 +9,7 @@ import { RichTextViewer } from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getQueryFn } from "@/lib/queryClient";
 import type { Page } from "@shared/schema";
 
 const SLUG = "things-to-do-in-nj";
@@ -151,7 +152,15 @@ export default function ThingsToDo() {
   const { data: subVerify, isLoading: verifyLoading } = useQuery<{ access: boolean }>({
     queryKey: ["/api/subscriber/verify"],
   });
-  const hasAccess = !!subVerify?.access;
+  // Admins bypass the email gate so they can preview what they've published
+  // (saved sponsored slots, hero image, etc.) without having to subscribe.
+  const { data: adminMe } = useQuery<{ email: string; role: string } | null>({
+    queryKey: ["/api/admin/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    retry: false,
+  });
+  const isAdmin = !!adminMe?.email;
+  const hasAccess = !!subVerify?.access || isAdmin;
 
   const adTop = parseAdSlot(page?.adSlotTop);
   const adMid = parseAdSlot(page?.adSlotMid);
@@ -180,7 +189,11 @@ export default function ThingsToDo() {
             <Loader2 className="w-10 h-10 animate-spin text-primary" />
           </div>
         ) : !hasAccess ? (
-          <EmailGate heroTitle={heroTitle} description={description} />
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            {/* Show the top sponsored slot above the gate so sponsors still get impressions */}
+            <AdBanner slot={adTop} label="Top" />
+            <EmailGate heroTitle={heroTitle} description={description} />
+          </div>
         ) : (
         <>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">

@@ -685,12 +685,30 @@ export async function registerRoutes(
       const rawRows = req.body as Record<string, string>[];
       if (!Array.isArray(rawRows)) return res.status(400).json({ message: "Expected an array of event rows" });
       const validRows: any[] = [];
-      let skipped = rawRows.length;
-      for (const row of rawRows) {
+      const invalid: { rowIndex: number; title: string; reason: string }[] = [];
+      for (let i = 0; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        const title = (row.name || row.title || "").trim();
+        const date = (row.date || "").trim();
+        if (!title) {
+          invalid.push({ rowIndex: i, title: "(no name)", reason: "Missing event name" });
+          continue;
+        }
+        if (!date) {
+          invalid.push({ rowIndex: i, title, reason: "Missing date" });
+          continue;
+        }
+        // Events are filtered by `gte(events.date, CURRENT_DATE::text)` on read, so a non-ISO
+        // date string would silently fail that lexical comparison and the event would never
+        // appear. Reject anything that isn't YYYY-MM-DD up front so the user sees why.
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          invalid.push({ rowIndex: i, title, reason: `Unrecognized date format: "${row.date}". Expected YYYY-MM-DD or a value the importer can normalize (e.g. 5/19/2026).` });
+          continue;
+        }
         try {
           const parsed = insertEventSchema.parse({
-            title: row.name || row.title || "",
-            date: row.date || "",
+            title,
+            date,
             region: row.region || "Central NJ",
             eventTime: row.time || row.eventTime || null,
             venue: row.venue || null,
@@ -704,13 +722,17 @@ export async function registerRoutes(
             imageUrl: "",
           });
           validRows.push(parsed);
-        } catch (_) {
-          // keep skipped count
+        } catch (err) {
+          const reason = err instanceof z.ZodError ? err.errors[0].message : "Could not validate row";
+          invalid.push({ rowIndex: i, title, reason });
         }
       }
-      skipped = rawRows.length - validRows.length;
       const result = await storage.bulkImportEvents(validRows);
-      res.json({ imported: result.imported, skipped: result.skipped + skipped });
+      res.json({
+        imported: result.imported,
+        duplicates: result.duplicates,
+        invalid,
+      });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }
