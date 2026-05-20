@@ -203,8 +203,14 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
                       <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
                         <MapPin className="w-3 h-3 shrink-0" />
                         {(() => {
-                          const region = normalizeRegion(event.region) || event.region;
-                          return event.city ? `${event.city}, ${region.replace(" NJ", "")} NJ` : region;
+                          const parts = [event.venue, event.city]
+                            .map((p) => (p || "").trim())
+                            .filter(Boolean);
+                          // Region is intentionally not shown — it's used only as
+                          // a backend filter via the region tabs above.
+                          return parts.length > 0
+                            ? parts.join(", ")
+                            : normalizeRegion(event.region) || event.region;
                         })()}
                       </p>
                     </div>
