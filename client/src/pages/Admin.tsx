@@ -3383,10 +3383,10 @@ export default function Admin() {
 
 const PAGE_SLUG = "things-to-do-in-nj";
 
-type AdSlotData = { imageUrl: string; linkUrl: string; alt: string };
+type AdSlotData = { imageUrl: string; linkUrl: string; alt: string; caption: string };
 
 function emptyAdSlot(): AdSlotData {
-  return { imageUrl: "", linkUrl: "", alt: "" };
+  return { imageUrl: "", linkUrl: "", alt: "", caption: "" };
 }
 
 function parseAdSlot(raw: string | null | undefined): AdSlotData {
@@ -3397,6 +3397,7 @@ function parseAdSlot(raw: string | null | undefined): AdSlotData {
       imageUrl: p.imageUrl || "",
       linkUrl: p.linkUrl || "",
       alt: p.alt || "",
+      caption: p.caption || "",
     };
   } catch {
     return emptyAdSlot();
@@ -3405,7 +3406,12 @@ function parseAdSlot(raw: string | null | undefined): AdSlotData {
 
 function serializeAdSlot(s: AdSlotData): string | null {
   if (!s.imageUrl.trim()) return null;
-  return JSON.stringify({ imageUrl: s.imageUrl.trim(), linkUrl: s.linkUrl.trim() || undefined, alt: s.alt.trim() || undefined });
+  return JSON.stringify({
+    imageUrl: s.imageUrl.trim(),
+    linkUrl: s.linkUrl.trim() || undefined,
+    alt: s.alt.trim() || undefined,
+    caption: s.caption.trim() || undefined,
+  });
 }
 
 function AdSlotEditor({ label, value, onChange, hint }: { label: string; value: AdSlotData; onChange: (v: AdSlotData) => void; hint?: string }) {
@@ -3434,6 +3440,15 @@ function AdSlotEditor({ label, value, onChange, hint }: { label: string; value: 
           value={value.alt}
           onChange={(e) => onChange({ ...value, alt: e.target.value })}
           placeholder="What the ad is about"
+          className="bg-black/40 border-white/10"
+        />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-white/70 text-xs">Caption (optional)</Label>
+        <Input
+          value={value.caption}
+          onChange={(e) => onChange({ ...value, caption: e.target.value })}
+          placeholder="Short text shown under the ad for context"
           className="bg-black/40 border-white/10"
         />
       </div>

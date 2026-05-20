@@ -18,6 +18,7 @@ interface AdSlot {
   imageUrl?: string;
   linkUrl?: string;
   alt?: string;
+  caption?: string;
 }
 
 function parseAdSlot(raw: string | null | undefined): AdSlot | null {
@@ -31,25 +32,35 @@ function parseAdSlot(raw: string | null | undefined): AdSlot | null {
   }
 }
 
+function AdCaption({ caption }: { caption: string | undefined }) {
+  if (!caption || !caption.trim()) return null;
+  return (
+    <p className="text-xs text-white/60 mt-2 px-1 leading-relaxed">{caption}</p>
+  );
+}
+
 function AdBanner({ slot, label }: { slot: AdSlot | null; label: string }) {
   if (!slot || !slot.imageUrl) return null;
-  const img = (
-    <img
-      src={slot.imageUrl}
-      alt={slot.alt || label}
-      className="w-full h-auto rounded-2xl border border-white/10"
-      loading="lazy"
-    />
+  const frame = (
+    <div className="aspect-[2/1] overflow-hidden rounded-2xl border border-white/10">
+      <img
+        src={slot.imageUrl}
+        alt={slot.alt || label}
+        className="w-full h-full object-cover"
+        loading="lazy"
+      />
+    </div>
   );
   return (
     <div className="my-10" data-testid={`ad-slot-${label.toLowerCase()}`}>
       {slot.linkUrl ? (
         <a href={slot.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={slot.alt || label}>
-          {img}
+          {frame}
         </a>
       ) : (
-        img
+        frame
       )}
+      <AdCaption caption={slot.caption} />
     </div>
   );
 }
@@ -244,21 +255,24 @@ export default function ThingsToDo() {
                 pinFeatured
                 inlineAd={
                   adMid && adMid.imageUrl ? (
-                    adMid.linkUrl ? (
-                      <a
-                        href={adMid.linkUrl}
-                        target="_blank"
-                        rel="noopener noreferrer sponsored"
-                        aria-label={adMid.alt || "Sponsored"}
-                        className="block aspect-[2/1] overflow-hidden rounded-xl border border-white/10"
-                      >
-                        <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
-                      </a>
-                    ) : (
-                      <div className="aspect-[2/1] overflow-hidden rounded-xl border border-white/10">
-                        <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
-                      </div>
-                    )
+                    <div>
+                      {adMid.linkUrl ? (
+                        <a
+                          href={adMid.linkUrl}
+                          target="_blank"
+                          rel="noopener noreferrer sponsored"
+                          aria-label={adMid.alt || "Sponsored"}
+                          className="block aspect-[2/1] overflow-hidden rounded-xl border border-white/10"
+                        >
+                          <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
+                        </a>
+                      ) : (
+                        <div className="aspect-[2/1] overflow-hidden rounded-xl border border-white/10">
+                          <img src={adMid.imageUrl} alt={adMid.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
+                        </div>
+                      )}
+                      <AdCaption caption={adMid.caption} />
+                    </div>
                   ) : undefined
                 }
               />
@@ -277,6 +291,7 @@ export default function ThingsToDo() {
                       <img src={adSidebar.imageUrl} alt={adSidebar.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
                     </div>
                   )}
+                  <AdCaption caption={adSidebar.caption} />
                 </div>
               </aside>
             )}
