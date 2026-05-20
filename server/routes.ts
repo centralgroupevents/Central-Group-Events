@@ -615,24 +615,16 @@ export async function registerRoutes(
   });
 
   // ── Existing event routes ────────────────────────────────────────────
+  // Public and admin both see everything the admin has uploaded. Admins manage
+  // visibility by deleting events they no longer want shown — the server does
+  // not apply a date filter. Keep no-cache so refetches reflect new uploads
+  // and deletions immediately.
   app.get(api.events.list.path, async (req, res) => {
     try {
       const region = req.query.region as string;
-      // `?all=1` returns past events too. Gated on admin auth so the public
-      // listing can't be used to scrape the full archive.
-      const wantsAll = req.query.all === "1" || req.query.all === "true";
-      const adminPayload = await verifyAdminToken(req.cookies?.cge_admin_jwt);
-      const isAdmin = !!adminPayload;
-      const includePast = wantsAll && isAdmin;
-      const eventList = await storage.getEvents(region, includePast);
-      // Don't let the browser/proxy cache this — the admin "include past" view
-      // changes whenever events are added or deleted and we want refetches to
-      // always hit the database rather than a 304 served from cache.
+      const eventList = await storage.getEvents(region, true);
       res.setHeader("Cache-Control", "no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
-      console.log(
-        `[events.list] wantsAll=${wantsAll} isAdmin=${isAdmin} includePast=${includePast} count=${eventList.length}`,
-      );
       res.status(200).json(eventList);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
