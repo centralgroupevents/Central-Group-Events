@@ -73,7 +73,7 @@ const PACKAGES = [
     label: "Growth",
     price: "$150",
     badge: "Most Popular",
-    features: ["Everything in Starter", "Instagram reel feature", "Meta ad campaign", "SMS blast to subscribers"],
+    features: ["Everything in Starter", "Instagram reel feature", "Premium newsletter placement", "SMS blast to subscribers"],
     testId: "card-package-growth",
   },
   {
