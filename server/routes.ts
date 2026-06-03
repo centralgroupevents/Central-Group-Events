@@ -44,6 +44,10 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
 const formLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -584,6 +588,22 @@ export async function registerRoutes(
       }
       await storage.batchDeleteBookings(ids);
       res.json({ message: "Deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/bookings/batch/status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids, status } = req.body;
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === "number")) {
+        return res.status(400).json({ message: "ids must be an array of numbers" });
+      }
+      if (typeof status !== "string" || !status.trim()) {
+        return res.status(400).json({ message: "status is required" });
+      }
+      const count = await storage.bulkUpdateBookingStatus(ids, status);
+      res.json({ updated: count });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }
@@ -1317,8 +1337,139 @@ export async function registerRoutes(
   // ── Analytics route ───────────────────────────────────────────────────
   app.get("/api/analytics", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const data = await storage.getAnalytics();
+      const raw = req.query.days;
+      const parsed = typeof raw === "string" ? parseInt(raw, 10) : NaN;
+      const days = Number.isFinite(parsed) && parsed > 0 && parsed <= 365 ? parsed : undefined;
+      const data = await storage.getAnalytics(days);
       res.json(data);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Cron-triggered email digests (called by external scheduler) ─────
+  // Both endpoints require a bearer token matching CRON_SECRET. Configure
+  // cron-job.org (or similar) to POST these on a schedule.
+  function checkCronAuth(req: Request, res: Response): boolean {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) {
+      res.status(500).json({ message: "CRON_SECRET not configured" });
+      return false;
+    }
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    if (token !== secret) {
+      res.status(401).json({ message: "Unauthorized" });
+      return false;
+    }
+    return true;
+  }
+
+  app.post("/api/cron/daily-stuck-leads", async (req: Request, res: Response) => {
+    if (!checkCronAuth(req, res)) return;
+    try {
+      const stuck = await storage.getStuckBookings(24);
+      if (stuck.length === 0) {
+        return res.json({ sent: false, reason: "no stuck leads" });
+      }
+      const rows = stuck.map((b) => {
+        const lastChange = b.contactedAt ?? b.createdAt;
+        const hoursStuck = lastChange ? Math.floor((Date.now() - new Date(lastChange).getTime()) / (60 * 60 * 1000)) : 0;
+        const days = Math.floor(hoursStuck / 24);
+        const hours = hoursStuck % 24;
+        const ageLabel = days > 0 ? `${days}d ${hours}h` : `${hours}h`;
+        return `
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee">${escapeHtml(b.contactName || "—")}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee">${escapeHtml(b.email)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee">${escapeHtml(b.mode || "Standard")}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee">${escapeHtml(b.status || "New")}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;color:#c2410c;font-weight:600">${ageLabel}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee">${escapeHtml(b.eventName || "—")}</td>
+          </tr>`;
+      }).join("");
+      await transporter.sendMail({
+        from: `"CGE Website" <${process.env.GMAIL_USER}>`,
+        to: "centralgroupevents@gmail.com",
+        subject: `⏰ ${stuck.length} lead${stuck.length !== 1 ? "s" : ""} need follow-up`,
+        html: `
+          <div style="font-family:Arial,Helvetica,sans-serif;max-width:680px">
+            <h2 style="margin:0 0 8px">Stuck leads — ${stuck.length}</h2>
+            <p style="color:#555;margin:0 0 20px">These bookings are <strong>New</strong> or <strong>Contacted</strong> and haven't had a status change in over 24 hours.</p>
+            <table style="border-collapse:collapse;width:100%;font-size:14px">
+              <thead>
+                <tr style="background:#f5f5f5;text-align:left">
+                  <th style="padding:8px 12px">Contact</th>
+                  <th style="padding:8px 12px">Email</th>
+                  <th style="padding:8px 12px">Package</th>
+                  <th style="padding:8px 12px">Status</th>
+                  <th style="padding:8px 12px">Stuck</th>
+                  <th style="padding:8px 12px">Event</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+            <p style="margin-top:24px"><a href="https://centralgroupevents.com/admin" style="color:#9333ea;font-weight:600">Open admin dashboard →</a></p>
+          </div>`,
+      });
+      res.json({ sent: true, count: stuck.length });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/cron/weekly-events-digest", async (req: Request, res: Response) => {
+    if (!checkCronAuth(req, res)) return;
+    try {
+      const all = await storage.getEvents(undefined, false);
+      const now = new Date();
+      const horizon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const upcoming = all
+        .filter((e) => {
+          if (!e.date) return false;
+          const d = new Date(e.date + "T00:00:00");
+          return d >= new Date(now.toISOString().slice(0, 10) + "T00:00:00") && d <= horizon;
+        })
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+      const subject = upcoming.length === 0
+        ? `📅 No events on the calendar for next week`
+        : `📅 ${upcoming.length} event${upcoming.length !== 1 ? "s" : ""} this week`;
+
+      const body = upcoming.length === 0
+        ? `<p style="color:#555">Nothing is scheduled for the next 7 days. Now's a good time to import or feature new events.</p>`
+        : (() => {
+            const byDay = new Map<string, typeof upcoming>();
+            for (const e of upcoming) {
+              const arr = byDay.get(e.date) || [];
+              arr.push(e);
+              byDay.set(e.date, arr);
+            }
+            return Array.from(byDay.entries()).map(([date, items]) => {
+              const dayLabel = new Date(date + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+              const list = items.map((e) => `
+                <li style="margin:4px 0">
+                  <strong>${escapeHtml(e.title)}</strong>
+                  ${e.eventTime ? ` <span style="color:#777">at ${escapeHtml(e.eventTime)}</span>` : ""}
+                  ${e.venue ? ` — ${escapeHtml(e.venue)}` : ""}
+                  ${e.city ? `, ${escapeHtml(e.city)}` : ""}
+                </li>`).join("");
+              return `<h3 style="margin:20px 0 6px;color:#9333ea">${dayLabel}</h3><ul style="margin:0;padding-left:20px;font-size:14px">${list}</ul>`;
+            }).join("");
+          })();
+
+      await transporter.sendMail({
+        from: `"CGE Website" <${process.env.GMAIL_USER}>`,
+        to: "centralgroupevents@gmail.com",
+        subject,
+        html: `
+          <div style="font-family:Arial,Helvetica,sans-serif;max-width:680px">
+            <h2 style="margin:0 0 12px">This week on CGE</h2>
+            ${body}
+            <p style="margin-top:24px"><a href="https://centralgroupevents.com" style="color:#9333ea;font-weight:600">View calendar →</a></p>
+          </div>`,
+      });
+      res.json({ sent: true, count: upcoming.length });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }

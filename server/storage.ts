@@ -26,9 +26,16 @@ import {
   type Page,
   type InsertPage,
 } from "@shared/schema";
-import { eq, desc, sql, count, and, isNull, gte, inArray } from "drizzle-orm";
+import { eq, desc, sql, count, and, isNull, gte, lt, inArray } from "drizzle-orm";
 import slugifyLib from "slugify";
 import { regionSection, normalizeRegion } from "@shared/region";
+
+function stageTimestampField(status: string): "contactedAt" | "paidAt" | "completedAt" | null {
+  if (status === "Contacted") return "contactedAt";
+  if (status === "Paid") return "paidAt";
+  if (status === "Completed") return "completedAt";
+  return null;
+}
 
 // ─── Slug helper ──────────────────────────────────────────────────────────
 
@@ -62,8 +69,10 @@ export interface IStorage {
   createBooking(booking: InsertBooking): Promise<Booking>;
   getBookings(): Promise<Booking[]>;
   updateBookingStatus(id: number, status: string): Promise<Booking | undefined>;
+  bulkUpdateBookingStatus(ids: number[], status: string): Promise<number>;
   updateBookingNotes(id: number, adminNotes: string): Promise<Booking | undefined>;
   batchDeleteBookings(ids: number[]): Promise<void>;
+  getStuckBookings(hoursOld: number): Promise<Booking[]>;
 
   // Events
   getEvents(region?: string, includePast?: boolean): Promise<Event[]>;
@@ -119,11 +128,23 @@ export interface IStorage {
   createComment(data: InsertComment): Promise<Comment>;
 
   // Analytics
-  getAnalytics(): Promise<{
+  getAnalytics(days?: number): Promise<{
     totalSubscribers: number;
     postViews: { postId: number; title: string; views: number }[];
     linkClicks: { url: string; count: number; sourcePage: string | null }[];
     memberSources: { referrer: string; count: number }[];
+    window: {
+      days: number | null;
+      subscribers: number;
+      postViews: number;
+      linkClicks: number;
+      prior: { subscribers: number; postViews: number; linkClicks: number };
+    };
+    daily: {
+      subscribers: { date: string; count: number }[];
+      postViews: { date: string; count: number }[];
+      linkClicks: { date: string; count: number }[];
+    };
   }>;
 }
 
@@ -207,12 +228,47 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateBookingStatus(id: number, status: string): Promise<Booking | undefined> {
+    const patch: Record<string, unknown> = { status };
+    const stamp = stageTimestampField(status);
+    if (stamp) patch[stamp] = new Date();
     const [updated] = await db
       .update(promotionBookings)
-      .set({ status })
+      .set(patch)
       .where(eq(promotionBookings.id, id))
       .returning();
     return updated;
+  }
+
+  async bulkUpdateBookingStatus(ids: number[], status: string): Promise<number> {
+    if (ids.length === 0) return 0;
+    const patch: Record<string, unknown> = { status };
+    const stamp = stageTimestampField(status);
+    if (stamp) patch[stamp] = new Date();
+    const updated = await db
+      .update(promotionBookings)
+      .set(patch)
+      .where(inArray(promotionBookings.id, ids))
+      .returning({ id: promotionBookings.id });
+    return updated.length;
+  }
+
+  async getStuckBookings(hoursOld: number): Promise<Booking[]> {
+    // "Stuck" = non-terminal status (New or Contacted) whose most recent stage
+    // timestamp is older than `hoursOld`. We compute last-change as the latest of
+    // (createdAt, contactedAt, paidAt) — uses createdAt when stage timestamps are null
+    // (legacy rows or status == New).
+    const cutoff = new Date(Date.now() - hoursOld * 60 * 60 * 1000);
+    const rows = await db
+      .select()
+      .from(promotionBookings)
+      .where(
+        and(
+          inArray(promotionBookings.status, ["New", "Contacted"]),
+          sql`COALESCE(${promotionBookings.contactedAt}, ${promotionBookings.createdAt}) < ${cutoff}`,
+        ),
+      )
+      .orderBy(promotionBookings.createdAt);
+    return rows;
   }
 
   async updateBookingNotes(id: number, adminNotes: string): Promise<Booking | undefined> {
@@ -272,24 +328,40 @@ export class DatabaseStorage implements IStorage {
   async bulkImportEvents(
     rows: InsertEvent[],
   ): Promise<{ imported: number; duplicates: { title: string; existingId: number; existingDate: string }[] }> {
-    let imported = 0;
-    const duplicates: { title: string; existingId: number; existingDate: string }[] = [];
-    for (const row of rows) {
-      // Match on title + date so two events with the same name on different dates aren't treated as dupes.
-      const existing = await db
-        .select({ id: events.id, date: events.date })
-        .from(events)
-        .where(and(eq(events.title, row.title), eq(events.date, row.date)))
-        .limit(1);
-      if (existing.length > 0) {
-        duplicates.push({ title: row.title, existingId: existing[0].id, existingDate: existing[0].date });
-      } else {
-        const normalized = { ...row, region: normalizeRegion(row.region) || row.region };
-        await db.insert(events).values(normalized);
-        imported++;
-      }
+    if (rows.length === 0) return { imported: 0, duplicates: [] };
+
+    // Single SELECT for all titles in the batch, then dedupe (title, date) in memory.
+    // Replaces an N+1 loop that timed out on 100+ row imports.
+    const uniqueTitles = Array.from(new Set(rows.map((r) => r.title)));
+    const existingMatches = await db
+      .select({ id: events.id, title: events.title, date: events.date })
+      .from(events)
+      .where(inArray(events.title, uniqueTitles));
+
+    const existingByKey = new Map<string, { id: number; date: string }>();
+    for (const e of existingMatches) {
+      existingByKey.set(`${e.title}|${e.date}`, { id: e.id, date: e.date });
     }
-    return { imported, duplicates };
+
+    const duplicates: { title: string; existingId: number; existingDate: string }[] = [];
+    const toInsert: InsertEvent[] = [];
+    const seenInBatch = new Set<string>();
+    for (const row of rows) {
+      const key = `${row.title}|${row.date}`;
+      const dbHit = existingByKey.get(key);
+      if (dbHit) {
+        duplicates.push({ title: row.title, existingId: dbHit.id, existingDate: dbHit.date });
+        continue;
+      }
+      if (seenInBatch.has(key)) continue;
+      seenInBatch.add(key);
+      toInsert.push({ ...row, region: normalizeRegion(row.region) || row.region });
+    }
+
+    if (toInsert.length > 0) {
+      await db.insert(events).values(toInsert);
+    }
+    return { imported: toInsert.length, duplicates };
   }
 
   // ── Pages ─────────────────────────────────────────────────────────────
@@ -522,7 +594,7 @@ export class DatabaseStorage implements IStorage {
 
   // ── Analytics ─────────────────────────────────────────────────────────
 
-  async getAnalytics() {
+  async getAnalytics(days?: number) {
     const [{ total }] = await db
       .select({ total: count() })
       .from(newsletterSubscribers);
@@ -557,6 +629,65 @@ export class DatabaseStorage implements IStorage {
       .groupBy(newsletterSubscribers.referrer)
       .orderBy(desc(count()));
 
+    // Window-scoped totals + prior-period comparison for % change.
+    const now = new Date();
+    const windowStart = days ? new Date(now.getTime() - days * 86_400_000) : null;
+    const priorStart = days ? new Date(now.getTime() - 2 * days * 86_400_000) : null;
+
+    const countSince = async <T extends { createdAt?: any; viewedAt?: any; clickedAt?: any }>(
+      table: any,
+      col: any,
+      from: Date | null,
+      to: Date | null,
+    ) => {
+      if (!from) {
+        const [r] = await db.select({ c: count() }).from(table);
+        return Number(r.c);
+      }
+      const conds = to ? and(gte(col, from), lt(col, to)) : gte(col, from);
+      const [r] = await db.select({ c: count() }).from(table).where(conds);
+      return Number(r.c);
+    };
+
+    const [
+      windowSubs,
+      windowViews,
+      windowClicks,
+      priorSubs,
+      priorViews,
+      priorClicks,
+    ] = await Promise.all([
+      countSince(newsletterSubscribers, newsletterSubscribers.createdAt, windowStart, null),
+      countSince(postViews, postViews.viewedAt, windowStart, null),
+      countSince(linkClicks, linkClicks.clickedAt, windowStart, null),
+      days ? countSince(newsletterSubscribers, newsletterSubscribers.createdAt, priorStart, windowStart) : Promise.resolve(0),
+      days ? countSince(postViews, postViews.viewedAt, priorStart, windowStart) : Promise.resolve(0),
+      days ? countSince(linkClicks, linkClicks.clickedAt, priorStart, windowStart) : Promise.resolve(0),
+    ]);
+
+    // Daily series for sparklines — always last min(days, 90) days, default 30 for "All".
+    const sparkDays = days ?? 30;
+    const sparkStart = new Date(now.getTime() - sparkDays * 86_400_000);
+
+    const dailyFor = async (table: any, col: any) => {
+      const rows = await db
+        .select({
+          date: sql<string>`DATE_TRUNC('day', ${col})::date::text`,
+          count: count(),
+        })
+        .from(table)
+        .where(gte(col, sparkStart))
+        .groupBy(sql`DATE_TRUNC('day', ${col})`)
+        .orderBy(sql`DATE_TRUNC('day', ${col})`);
+      return rows.map((r) => ({ date: r.date, count: Number(r.count) }));
+    };
+
+    const [dailySubs, dailyViews, dailyClicks] = await Promise.all([
+      dailyFor(newsletterSubscribers, newsletterSubscribers.createdAt),
+      dailyFor(postViews, postViews.viewedAt),
+      dailyFor(linkClicks, linkClicks.clickedAt),
+    ]);
+
     return {
       totalSubscribers: Number(total),
       postViews: viewRows.map((r) => ({
@@ -573,6 +704,18 @@ export class DatabaseStorage implements IStorage {
         referrer: r.referrer ?? "direct",
         count: Number(r.count),
       })),
+      window: {
+        days: days ?? null,
+        subscribers: windowSubs,
+        postViews: windowViews,
+        linkClicks: windowClicks,
+        prior: { subscribers: priorSubs, postViews: priorViews, linkClicks: priorClicks },
+      },
+      daily: {
+        subscribers: dailySubs,
+        postViews: dailyViews,
+        linkClicks: dailyClicks,
+      },
     };
   }
 }
