@@ -44,9 +44,13 @@ import {
   Search,
   Megaphone,
   Star,
+  Phone,
+  MessageCircle,
+  Instagram,
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 import { SEO } from "@/components/SEO";
+import { LineChart, Line, ResponsiveContainer } from "recharts";
 
 type AdminUser = { email: string; role: string };
 
@@ -141,7 +145,76 @@ type AnalyticsData = {
   postViews: { postId: number; title: string; views: number }[];
   linkClicks: { url: string; count: number; sourcePage: string | null }[];
   memberSources: { referrer: string; count: number }[];
+  window: {
+    days: number | null;
+    subscribers: number;
+    postViews: number;
+    linkClicks: number;
+    prior: { subscribers: number; postViews: number; linkClicks: number };
+  };
+  daily: {
+    subscribers: { date: string; count: number }[];
+    postViews: { date: string; count: number }[];
+    linkClicks: { date: string; count: number }[];
+  };
 };
+
+const ANALYTICS_RANGES = [
+  { label: "7d",  days: 7 },
+  { label: "30d", days: 30 },
+  { label: "90d", days: 90 },
+  { label: "All", days: null as number | null },
+] as const;
+
+function fillDailySeries(rows: { date: string; count: number }[], days: number): { date: string; count: number }[] {
+  const byDate = new Map(rows.map((r) => [r.date, r.count]));
+  const out: { date: string; count: number }[] = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    out.push({ date: key, count: byDate.get(key) ?? 0 });
+  }
+  return out;
+}
+
+function percentChange(current: number, prior: number): { pct: number; direction: "up" | "down" | "flat" } | null {
+  if (prior === 0) {
+    if (current === 0) return { pct: 0, direction: "flat" };
+    return null;
+  }
+  const pct = ((current - prior) / prior) * 100;
+  if (Math.abs(pct) < 0.5) return { pct: 0, direction: "flat" };
+  return { pct, direction: pct > 0 ? "up" : "down" };
+}
+
+function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = [headers.map(escape).join(","), ...rows.map((r) => r.map(escape).join(","))].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function Sparkline({ data, color = "hsl(280 62% 48%)" }: { data: { date: string; count: number }[]; color?: string }) {
+  if (!data.length || data.every((d) => d.count === 0)) {
+    return <div className="h-10 flex items-end text-[10px] text-muted-foreground/60">no activity</div>;
+  }
+  return (
+    <div className="h-10 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 2, right: 0, bottom: 2, left: 0 }}>
+          <Line type="monotone" dataKey="count" stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 type AdminMember = {
   id: number;
@@ -320,13 +393,6 @@ function ImageUpload({ value, onChange }: { value: string; onChange: (url: strin
             )}
           </span>
         </label>
-        {value && (
-          <img
-            src={value}
-            alt="Preview"
-            className="h-9 w-16 object-cover rounded border border-white/10"
-          />
-        )}
       </div>
       {uploadError && <p className="text-red-400 text-xs">{uploadError}</p>}
       <Input
@@ -336,6 +402,16 @@ function ImageUpload({ value, onChange }: { value: string; onChange: (url: strin
         className="bg-black/40 border-white/10 h-11 text-sm"
         data-testid="input-image-url"
       />
+      {value && (
+        <div className="rounded-lg border border-white/10 overflow-hidden bg-black/40">
+          <img
+            src={value}
+            alt="Cover preview"
+            className="w-full max-h-48 object-cover"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1160,7 +1236,15 @@ function BlogPostsTab() {
             <DialogHeader>
               <DialogTitle>Preview — {postForm.title || "Untitled"}</DialogTitle>
             </DialogHeader>
-            <div className="py-4">
+            <div className="py-4 space-y-4">
+              {postForm.coverImageUrl && (
+                <img
+                  src={postForm.coverImageUrl}
+                  alt={postForm.title || "Cover"}
+                  className="w-full rounded-lg border border-white/10 max-h-80 object-cover"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
+              )}
               <RichTextViewer content={previewContent ?? ""} />
             </div>
           </DialogContent>
@@ -1351,55 +1435,132 @@ function BlogPostsTab() {
 /*  ANALYTICS TAB                                             */
 /* ─────────────────────────────────────────────────────────── */
 function AnalyticsTab() {
+  const [rangeDays, setRangeDays] = useState<number | null>(30);
   const { data, isLoading } = useQuery<AnalyticsData>({
-    queryKey: ["/api/analytics"],
+    queryKey: ["/api/analytics", rangeDays],
+    queryFn: async () => {
+      const url = rangeDays ? `/api/analytics?days=${rangeDays}` : "/api/analytics";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
   });
+
+  const isAll = rangeDays === null;
+  const rangeLabel = isAll ? "All time" : `Last ${rangeDays}d`;
+  const sparkSpan = rangeDays ?? 30;
+
+  // Stat values: window-scoped for a finite range; lifetime when "All".
+  const subsValue = isAll ? (data?.totalSubscribers ?? 0) : (data?.window?.subscribers ?? 0);
+  const viewsLifetime = data?.postViews?.reduce((s, p) => s + p.views, 0) ?? 0;
+  const viewsValue = isAll ? viewsLifetime : (data?.window?.postViews ?? 0);
+  const clicksLifetime = data?.linkClicks?.reduce((s, c) => s + c.count, 0) ?? 0;
+  const clicksValue = isAll ? clicksLifetime : (data?.window?.linkClicks ?? 0);
+
+  const subsChange = isAll ? null : percentChange(data?.window?.subscribers ?? 0, data?.window?.prior?.subscribers ?? 0);
+  const viewsChange = isAll ? null : percentChange(data?.window?.postViews ?? 0, data?.window?.prior?.postViews ?? 0);
+  const clicksChange = isAll ? null : percentChange(data?.window?.linkClicks ?? 0, data?.window?.prior?.linkClicks ?? 0);
+
+  const subsSpark = fillDailySeries(data?.daily?.subscribers ?? [], sparkSpan);
+  const viewsSpark = fillDailySeries(data?.daily?.postViews ?? [], sparkSpan);
+  const clicksSpark = fillDailySeries(data?.daily?.linkClicks ?? [], sparkSpan);
+
+  function renderChange(change: ReturnType<typeof percentChange>) {
+    if (change === null) {
+      return <span className="text-[11px] text-muted-foreground">no prior data</span>;
+    }
+    const sign = change.direction === "up" ? "+" : change.direction === "down" ? "" : "";
+    const color = change.direction === "up" ? "text-green-400" : change.direction === "down" ? "text-red-400" : "text-muted-foreground";
+    return (
+      <span className={`text-[11px] font-medium ${color}`}>
+        {sign}{change.pct.toFixed(change.direction === "flat" ? 0 : 1)}% vs prior {rangeDays}d
+      </span>
+    );
+  }
 
   return (
     <div className="space-y-8">
-      {/* Subscriber stat card */}
+      {/* Range tabs */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-1">
+          {ANALYTICS_RANGES.map((r) => {
+            const active = rangeDays === r.days;
+            return (
+              <button
+                key={r.label}
+                onClick={() => setRangeDays(r.days)}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${active ? "bg-primary text-white" : "text-white/60 hover:text-white"}`}
+                data-testid={`analytics-range-${r.label}`}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">{rangeLabel}</p>
+      </div>
+
+      {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 sm:col-span-1">
-          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Total Subscribers</p>
-          {isLoading ? (
-            <Skeleton className="h-9 w-20 mt-1" />
-          ) : (
-            <p className="text-3xl font-black text-white">{(data?.totalSubscribers ?? 0).toLocaleString()}</p>
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 space-y-2">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Subscribers</p>
+          {isLoading ? <Skeleton className="h-9 w-20 mt-1" /> : (
+            <>
+              <p className="text-3xl font-black text-white" data-testid="stat-subscribers">{subsValue.toLocaleString()}</p>
+              {renderChange(subsChange)}
+            </>
           )}
+          <Sparkline data={subsSpark} />
         </div>
-        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 sm:col-span-1">
-          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Total Post Views</p>
-          {isLoading ? (
-            <Skeleton className="h-9 w-20 mt-1" />
-          ) : (
-            <p className="text-3xl font-black text-white">
-              {(data?.postViews?.reduce((s, p) => s + p.views, 0) ?? 0).toLocaleString()}
-            </p>
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 space-y-2">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Post Views</p>
+          {isLoading ? <Skeleton className="h-9 w-20 mt-1" /> : (
+            <>
+              <p className="text-3xl font-black text-white" data-testid="stat-post-views">{viewsValue.toLocaleString()}</p>
+              {renderChange(viewsChange)}
+            </>
           )}
+          <Sparkline data={viewsSpark} />
         </div>
-        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 sm:col-span-1">
-          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Outbound Clicks</p>
-          {isLoading ? (
-            <Skeleton className="h-9 w-20 mt-1" />
-          ) : (
-            <p className="text-3xl font-black text-white">
-              {(data?.linkClicks?.reduce((s, c) => s + c.count, 0) ?? 0).toLocaleString()}
-            </p>
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-5 space-y-2">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Outbound Clicks</p>
+          {isLoading ? <Skeleton className="h-9 w-20 mt-1" /> : (
+            <>
+              <p className="text-3xl font-black text-white" data-testid="stat-outbound-clicks">{clicksValue.toLocaleString()}</p>
+              {renderChange(clicksChange)}
+            </>
           )}
+          <Sparkline data={clicksSpark} />
         </div>
       </div>
 
       {/* Post Views table */}
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-white/10">
-          <h3 className="font-bold text-white">Post Views</h3>
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-white">Post Views</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Lifetime totals per post</p>
+          </div>
+          {!!data?.postViews?.length && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-white/20 text-white/70 h-8"
+              onClick={() => downloadCsv("post-views.csv", ["Post", "Views"], data.postViews.map((p) => [p.title, p.views]))}
+              data-testid="button-export-post-views"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
+            </Button>
+          )}
         </div>
         {isLoading ? (
           <div className="p-6 space-y-3">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
           </div>
         ) : !data?.postViews?.length ? (
-          <div className="py-10 text-center text-muted-foreground text-sm">No view data yet.</div>
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+            No post views yet. Views are tracked when readers open published blog posts.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1424,15 +1585,35 @@ function AnalyticsTab() {
 
       {/* Top Outbound Links table */}
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-white/10">
-          <h3 className="font-bold text-white">Top Outbound Links</h3>
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-white">Top Outbound Links</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Lifetime clicks per destination URL</p>
+          </div>
+          {!!data?.linkClicks?.length && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-white/20 text-white/70 h-8"
+              onClick={() => downloadCsv(
+                "outbound-links.csv",
+                ["URL", "Source Page", "Clicks"],
+                data.linkClicks.map((c) => [decodeURIComponent(c.url), c.sourcePage ?? "", c.count]),
+              )}
+              data-testid="button-export-outbound-links"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
+            </Button>
+          )}
         </div>
         {isLoading ? (
           <div className="p-6 space-y-3">
             {[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
           </div>
         ) : !data?.linkClicks?.length ? (
-          <div className="py-10 text-center text-muted-foreground text-sm">No click data yet.</div>
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+            No outbound clicks yet. Clicks are tracked when readers click links inside published posts.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -1821,6 +2002,50 @@ function buildIsoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+const DAY_OF_WEEK_OFFSET: Record<string, number> = {
+  mon: 0, monday: 0,
+  tue: 1, tues: 1, tuesday: 1,
+  wed: 2, weds: 2, wednesday: 2,
+  thu: 3, thur: 3, thurs: 3, thursday: 3,
+  fri: 4, friday: 4,
+  sat: 5, saturday: 5,
+  sun: 6, sunday: 6,
+};
+
+function resolveDayToIsoDate(day: string, weekStartIso: string): string {
+  const key = day.trim().toLowerCase().replace(/[.,]/g, "");
+  const offset = DAY_OF_WEEK_OFFSET[key];
+  if (offset === undefined) return "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStartIso)) return "";
+  const [y, m, d] = weekStartIso.split("-").map(Number);
+  const anchor = new Date(y, m - 1, d);
+  if (isNaN(anchor.getTime())) return "";
+  anchor.setDate(anchor.getDate() + offset);
+  return buildIsoDate(anchor.getFullYear(), anchor.getMonth() + 1, anchor.getDate());
+}
+
+function packageDealValue(mode: string | null | undefined): { label: string; numeric: number } {
+  switch ((mode || "").toLowerCase()) {
+    case "basic":   return { label: "FREE",   numeric: 0 };
+    case "starter": return { label: "$70",    numeric: 70 };
+    case "growth":  return { label: "$150",   numeric: 150 };
+    case "custom":  return { label: "$300+",  numeric: 300 };
+    default:        return { label: "—",      numeric: 0 };
+  }
+}
+
+function phoneDigits(phone: string): string {
+  return phone.replace(/[^\d]/g, "");
+}
+
+function getUpcomingMondayIso(): string {
+  const today = new Date();
+  const dow = today.getDay();
+  const daysUntilMon = dow === 1 ? 0 : (8 - dow) % 7;
+  today.setDate(today.getDate() + daysUntilMon);
+  return buildIsoDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
+}
+
 function normalizeEventDate(input: string): string {
   if (!input) return "";
   const s = String(input).trim();
@@ -1926,6 +2151,7 @@ export default function Admin() {
     invalid: { rowIndex: number; title: string; reason: string }[];
   } | null>(null);
   const [pasteText, setPasteText] = useState("");
+  const [weekAnchor, setWeekAnchor] = useState<string>(getUpcomingMondayIso());
   const [genreIsOther, setGenreIsOther] = useState(false);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -2013,6 +2239,19 @@ export default function Admin() {
       toast({ title: "Bookings deleted" });
     },
     onError: () => toast({ title: "Failed to delete bookings", variant: "destructive" }),
+  });
+
+  const bulkUpdateBookingStatusMutation = useMutation({
+    mutationFn: async ({ ids, status }: { ids: number[]; status: string }) => {
+      const res = await apiRequest("PATCH", "/api/admin/bookings/batch/status", { ids, status });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
+      setSelectedBookingIds(new Set());
+      toast({ title: `Updated ${data.updated} booking${data.updated !== 1 ? "s" : ""}` });
+    },
+    onError: () => toast({ title: "Failed to update bookings", variant: "destructive" }),
   });
 
   const [bookingNotesDraft, setBookingNotesDraft] = useState<Record<number, string>>({});
@@ -2197,7 +2436,8 @@ export default function Admin() {
 
   const CGE_IMPORT_FIELDS: { key: string; label: string; required: boolean }[] = [
     { key: "name",            label: "Name",             required: true },
-    { key: "date",            label: "Date",             required: true },
+    { key: "date",            label: "Date",             required: false },
+    { key: "day",             label: "Day of Week",      required: false },
     { key: "time",            label: "Time",             required: false },
     { key: "venue",           label: "Venue",            required: false },
     { key: "city",            label: "City",             required: false },
@@ -2212,6 +2452,7 @@ export default function Admin() {
   const IMPORT_ALIASES: Record<string, string[]> = {
     name:            ["name", "title", "event", "event name"],
     date:            ["date", "event date", "event_date"],
+    day:             ["day", "weekday", "day of week", "dow"],
     time:            ["time", "event time", "start time", "start_time"],
     venue:           ["venue", "location", "place"],
     city:            ["city", "town", "area"],
@@ -2327,7 +2568,12 @@ export default function Admin() {
           obj[key] = colIdx >= 0 ? (row[colIdx] || "") : "";
         }
       }
-      if (obj.date) obj.date = normalizeEventDate(obj.date);
+      if (obj.date) {
+        obj.date = normalizeEventDate(obj.date);
+      } else if (obj.day) {
+        obj.date = resolveDayToIsoDate(obj.day, weekAnchor);
+      }
+      delete obj.day;
       return obj;
     });
     try {
@@ -2820,6 +3066,44 @@ export default function Admin() {
                       </table>
                     </div>
 
+                    {/* Week-anchor picker — shown when day is mapped but date isn't */}
+                    {importMapping["day"] && !importMapping["date"] && (
+                      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <Label className="text-xs text-white/80 sm:w-32 shrink-0">Week starting</Label>
+                          <Input
+                            type="date"
+                            value={weekAnchor}
+                            onChange={(e) => setWeekAnchor(e.target.value)}
+                            className="h-8 bg-black/40 border-white/10 text-xs"
+                            data-testid="input-week-anchor"
+                          />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-snug">
+                          Your file has weekday names instead of dates. Pick the Monday of the week these events fall in — we'll convert Mon/Tue/…/Sun into real dates.
+                        </p>
+                        {(() => {
+                          const dayColIdx = importRawHeaders.indexOf(importMapping["day"]);
+                          if (dayColIdx < 0) return null;
+                          const preview = importRawRows.slice(0, 5).map((r, i) => {
+                            const dayVal = r[dayColIdx] || "";
+                            const resolved = resolveDayToIsoDate(dayVal, weekAnchor);
+                            return { i, dayVal, resolved };
+                          });
+                          return (
+                            <div className="text-[11px] text-white/70 space-y-0.5 pt-1">
+                              <p className="text-muted-foreground">Resolved dates (first 5 rows):</p>
+                              {preview.map(({ i, dayVal, resolved }) => (
+                                <p key={i} className="font-mono">
+                                  <span className="text-white/50">Row {i + 1}:</span> {dayVal || "—"} → <span className={resolved ? "text-primary" : "text-red-400"}>{resolved || "could not resolve"}</span>
+                                </p>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {/* 3-row data preview */}
                     {importRawRows.length > 0 && (
                       <div className="space-y-1">
@@ -2859,7 +3143,7 @@ export default function Admin() {
                       <Button
                         onClick={submitMappedImport}
                         className="bg-primary hover:bg-primary/90 font-semibold"
-                        disabled={!importMapping["name"] || !importMapping["date"]}
+                        disabled={!importMapping["name"] || (!importMapping["date"] && !importMapping["day"])}
                         data-testid="button-confirm-import"
                       >
                         Import {importRawRows.length} Row{importRawRows.length !== 1 ? "s" : ""}
@@ -3073,7 +3357,28 @@ export default function Admin() {
                   <div className="flex items-center gap-2">
                     {selectedBookingIds.size > 0 && (
                       <>
-                        <span className="text-sm text-red-300 font-medium">{selectedBookingIds.size} booking{selectedBookingIds.size !== 1 ? "s" : ""} selected</span>
+                        <span className="text-sm text-white/70 font-medium">{selectedBookingIds.size} selected</span>
+                        <Select
+                          value=""
+                          onValueChange={(val) => {
+                            if (!val) return;
+                            bulkUpdateBookingStatusMutation.mutate({
+                              ids: Array.from(selectedBookingIds),
+                              status: val,
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-[180px] bg-secondary/40 border-white/20 text-xs text-white/80" data-testid="select-bulk-status">
+                            <SelectValue placeholder="Mark all as…" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-secondary border-white/10 text-white">
+                            <SelectItem value="New">New</SelectItem>
+                            <SelectItem value="Contacted">Contacted</SelectItem>
+                            <SelectItem value="Paid">Paid</SelectItem>
+                            <SelectItem value="Completed">Completed</SelectItem>
+                            <SelectItem value="Cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Button
                           variant="outline"
                           size="sm"
@@ -3081,7 +3386,7 @@ export default function Admin() {
                           className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50"
                           data-testid="button-delete-selected-bookings"
                         >
-                          <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Selected ({selectedBookingIds.size})
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete ({selectedBookingIds.size})
                         </Button>
                         <Button
                           variant="outline"
@@ -3125,10 +3430,12 @@ export default function Admin() {
                           </th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Package</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Deal Value</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Contact</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Email</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Event Name</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Event Date</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Budget</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">City / Region</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">
                             <button
@@ -3197,7 +3504,48 @@ export default function Admin() {
                                     {booking.mode || "Standard"}
                                   </span>
                                 </td>
-                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" data-testid={`text-contact-${booking.id}`}>{booking.contactName || "—"}</td>
+                                <td className="px-4 py-4 text-right whitespace-nowrap font-semibold text-white" data-testid={`text-dealvalue-${booking.id}`}>
+                                  {packageDealValue(booking.mode).label}
+                                </td>
+                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" onClick={(e) => e.stopPropagation()} data-testid={`text-contact-${booking.id}`}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-white/80">{booking.contactName || "—"}</span>
+                                    {booking.phone && (
+                                      <>
+                                        <a
+                                          href={`tel:${booking.phone}`}
+                                          title={`Call ${booking.phone}`}
+                                          data-testid={`button-call-${booking.id}`}
+                                          className="text-muted-foreground hover:text-primary transition-colors"
+                                        >
+                                          <Phone className="w-3.5 h-3.5" />
+                                        </a>
+                                        <a
+                                          href={`https://wa.me/${phoneDigits(booking.phone)}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title={`WhatsApp ${booking.phone}`}
+                                          data-testid={`button-whatsapp-${booking.id}`}
+                                          className="text-muted-foreground hover:text-green-400 transition-colors"
+                                        >
+                                          <MessageCircle className="w-3.5 h-3.5" />
+                                        </a>
+                                      </>
+                                    )}
+                                    {booking.instagramHandle && (
+                                      <a
+                                        href={`https://instagram.com/${booking.instagramHandle.replace("@","")}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title={`@${booking.instagramHandle.replace("@","")}`}
+                                        data-testid={`button-ig-${booking.id}`}
+                                        className="text-muted-foreground hover:text-pink-400 transition-colors"
+                                      >
+                                        <Instagram className="w-3.5 h-3.5" />
+                                      </a>
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="px-4 py-4 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
                                   <div className="flex items-center gap-2 whitespace-nowrap">
                                     <a href={`mailto:${booking.email}`} className="text-primary hover:underline">{booking.email}</a>
@@ -3220,6 +3568,9 @@ export default function Admin() {
                                     ? new Date(booking.eventDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                                     : "—"}
                                 </td>
+                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" data-testid={`text-budget-${booking.id}`}>
+                                  {booking.budgetRange || "—"}
+                                </td>
                                 <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">
                                   {booking.city ? `${booking.city}, ` : ""}
                                   <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{booking.region}</span>
@@ -3228,7 +3579,7 @@ export default function Admin() {
                               </tr>
                               {isExpanded && (
                                 <tr key={`${booking.id}-detail`} className="border-b border-white/5 bg-white/[0.03]">
-                                  <td colSpan={10} className="px-6 py-5">
+                                  <td colSpan={12} className="px-6 py-5">
                                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
                                       <div>
                                         <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Contact Name</p>
