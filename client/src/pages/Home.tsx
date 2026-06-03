@@ -412,18 +412,18 @@ export default function Home() {
                         <span className="text-muted-foreground text-sm font-medium uppercase tracking-wider">Feature</span>
                       </th>
                       {/* Basic */}
-                      <th className="px-4 py-6 text-center">
+                      <th className="px-4 pt-10 pb-6 text-center">
                         <div className="text-white font-black text-lg">Basic</div>
                         <div className="text-3xl font-black text-white mt-1">FREE</div>
                       </th>
                       {/* Starter */}
-                      <th className="px-4 py-6 text-center">
+                      <th className="px-4 pt-10 pb-6 text-center">
                         <div className="text-white font-black text-lg">Starter</div>
                         <div className="text-3xl font-black text-white mt-1">$70<span className="text-sm text-muted-foreground font-normal"> / event</span></div>
                       </th>
                       {/* Growth */}
-                      <th className="relative px-4 py-6 text-center bg-primary/10 border-x border-primary/20">
-                        <div className="absolute inset-x-0 -top-3 flex justify-center pointer-events-none">
+                      <th className="relative px-4 pt-10 pb-6 text-center bg-primary/10 border-x border-primary/20">
+                        <div className="absolute inset-x-0 top-3 flex justify-center pointer-events-none">
                           <div className="inline-flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold tracking-widest uppercase px-3 py-0.5 shadow-lg">
                             Most Popular
                           </div>
@@ -432,7 +432,7 @@ export default function Home() {
                         <div className="text-3xl font-black text-white mt-1">$150<span className="text-sm text-white/50 font-normal"> / event</span></div>
                       </th>
                       {/* Custom */}
-                      <th className="px-4 py-6 text-center">
+                      <th className="px-4 pt-10 pb-6 text-center">
                         <div className="text-white font-black text-lg">Custom</div>
                         <div className="text-3xl font-black text-white mt-1">$300+<span className="text-sm text-muted-foreground font-normal"> / event</span></div>
                       </th>
@@ -480,7 +480,7 @@ export default function Home() {
                     <tr className="border-b border-white/5 bg-white/[0.02]">
                       <td className="px-6 py-4 text-sm text-white/80">SMS Marketing</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
@@ -507,7 +507,7 @@ export default function Home() {
                     <tr className="border-b border-white/5 bg-white/[0.02]">
                       <td className="px-6 py-4 text-sm text-white/80">Influencer Reach</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
                     </tr>
@@ -516,7 +516,7 @@ export default function Home() {
                     <tr>
                       <td className="px-6 py-4 text-sm text-white/80">Ad Credit</td>
                       <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
+                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
                       <td className="px-4 py-4 text-center"><span className="text-sm font-bold text-white">$100</span></td>
                     </tr>
