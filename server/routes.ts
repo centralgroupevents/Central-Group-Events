@@ -1317,7 +1317,10 @@ export async function registerRoutes(
   // ── Analytics route ───────────────────────────────────────────────────
   app.get("/api/analytics", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const data = await storage.getAnalytics();
+      const raw = req.query.days;
+      const parsed = typeof raw === "string" ? parseInt(raw, 10) : NaN;
+      const days = Number.isFinite(parsed) && parsed > 0 && parsed <= 365 ? parsed : undefined;
+      const data = await storage.getAnalytics(days);
       res.json(data);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
