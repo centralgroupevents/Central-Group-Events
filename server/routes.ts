@@ -44,6 +44,10 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
 const formLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -584,6 +588,22 @@ export async function registerRoutes(
       }
       await storage.batchDeleteBookings(ids);
       res.json({ message: "Deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/bookings/batch/status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids, status } = req.body;
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === "number")) {
+        return res.status(400).json({ message: "ids must be an array of numbers" });
+      }
+      if (typeof status !== "string" || !status.trim()) {
+        return res.status(400).json({ message: "status is required" });
+      }
+      const count = await storage.bulkUpdateBookingStatus(ids, status);
+      res.json({ updated: count });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }

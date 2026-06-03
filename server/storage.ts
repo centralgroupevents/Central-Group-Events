@@ -31,6 +31,13 @@ import { eq, desc, sql, count, and, isNull, gte, lt, inArray } from "drizzle-orm
 import slugifyLib from "slugify";
 import { regionSection, normalizeRegion } from "@shared/region";
 
+function stageTimestampField(status: string): "contactedAt" | "paidAt" | "completedAt" | null {
+  if (status === "Contacted") return "contactedAt";
+  if (status === "Paid") return "paidAt";
+  if (status === "Completed") return "completedAt";
+  return null;
+}
+
 // ─── Slug helper ──────────────────────────────────────────────────────────
 
 async function makeUniqueSlug(title: string, excludeId?: number): Promise<string> {
@@ -63,8 +70,10 @@ export interface IStorage {
   createBooking(booking: InsertBooking): Promise<Booking>;
   getBookings(): Promise<Booking[]>;
   updateBookingStatus(id: number, status: string): Promise<Booking | undefined>;
+  bulkUpdateBookingStatus(ids: number[], status: string): Promise<number>;
   updateBookingNotes(id: number, adminNotes: string): Promise<Booking | undefined>;
   batchDeleteBookings(ids: number[]): Promise<void>;
+  getStuckBookings(hoursOld: number): Promise<Booking[]>;
 
   // Events
   getEvents(region?: string, includePast?: boolean): Promise<Event[]>;
@@ -230,12 +239,47 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateBookingStatus(id: number, status: string): Promise<Booking | undefined> {
+    const patch: Record<string, unknown> = { status };
+    const stamp = stageTimestampField(status);
+    if (stamp) patch[stamp] = new Date();
     const [updated] = await db
       .update(promotionBookings)
-      .set({ status })
+      .set(patch)
       .where(eq(promotionBookings.id, id))
       .returning();
     return updated;
+  }
+
+  async bulkUpdateBookingStatus(ids: number[], status: string): Promise<number> {
+    if (ids.length === 0) return 0;
+    const patch: Record<string, unknown> = { status };
+    const stamp = stageTimestampField(status);
+    if (stamp) patch[stamp] = new Date();
+    const updated = await db
+      .update(promotionBookings)
+      .set(patch)
+      .where(inArray(promotionBookings.id, ids))
+      .returning({ id: promotionBookings.id });
+    return updated.length;
+  }
+
+  async getStuckBookings(hoursOld: number): Promise<Booking[]> {
+    // "Stuck" = non-terminal status (New or Contacted) whose most recent stage
+    // timestamp is older than `hoursOld`. We compute last-change as the latest of
+    // (createdAt, contactedAt, paidAt) — uses createdAt when stage timestamps are null
+    // (legacy rows or status == New).
+    const cutoff = new Date(Date.now() - hoursOld * 60 * 60 * 1000);
+    const rows = await db
+      .select()
+      .from(promotionBookings)
+      .where(
+        and(
+          inArray(promotionBookings.status, ["New", "Contacted"]),
+          sql`COALESCE(${promotionBookings.contactedAt}, ${promotionBookings.createdAt}) < ${cutoff}`,
+        ),
+      )
+      .orderBy(promotionBookings.createdAt);
+    return rows;
   }
 
   async updateBookingNotes(id: number, adminNotes: string): Promise<Booking | undefined> {

@@ -44,6 +44,9 @@ import {
   Search,
   Megaphone,
   Star,
+  Phone,
+  MessageCircle,
+  Instagram,
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 import { SEO } from "@/components/SEO";
@@ -2449,6 +2452,19 @@ export default function Admin() {
     onError: () => toast({ title: "Failed to delete bookings", variant: "destructive" }),
   });
 
+  const bulkUpdateBookingStatusMutation = useMutation({
+    mutationFn: async ({ ids, status }: { ids: number[]; status: string }) => {
+      const res = await apiRequest("PATCH", "/api/admin/bookings/batch/status", { ids, status });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/bookings"] });
+      setSelectedBookingIds(new Set());
+      toast({ title: `Updated ${data.updated} booking${data.updated !== 1 ? "s" : ""}` });
+    },
+    onError: () => toast({ title: "Failed to update bookings", variant: "destructive" }),
+  });
+
   const [bookingNotesDraft, setBookingNotesDraft] = useState<Record<number, string>>({});
 
   const createMutation = useMutation({
@@ -3552,7 +3568,28 @@ export default function Admin() {
                   <div className="flex items-center gap-2">
                     {selectedBookingIds.size > 0 && (
                       <>
-                        <span className="text-sm text-red-300 font-medium">{selectedBookingIds.size} booking{selectedBookingIds.size !== 1 ? "s" : ""} selected</span>
+                        <span className="text-sm text-white/70 font-medium">{selectedBookingIds.size} selected</span>
+                        <Select
+                          value=""
+                          onValueChange={(val) => {
+                            if (!val) return;
+                            bulkUpdateBookingStatusMutation.mutate({
+                              ids: Array.from(selectedBookingIds),
+                              status: val,
+                            });
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-[180px] bg-secondary/40 border-white/20 text-xs text-white/80" data-testid="select-bulk-status">
+                            <SelectValue placeholder="Mark all as…" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-secondary border-white/10 text-white">
+                            <SelectItem value="New">New</SelectItem>
+                            <SelectItem value="Contacted">Contacted</SelectItem>
+                            <SelectItem value="Paid">Paid</SelectItem>
+                            <SelectItem value="Completed">Completed</SelectItem>
+                            <SelectItem value="Cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Button
                           variant="outline"
                           size="sm"
@@ -3560,7 +3597,7 @@ export default function Admin() {
                           className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50"
                           data-testid="button-delete-selected-bookings"
                         >
-                          <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Selected ({selectedBookingIds.size})
+                          <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete ({selectedBookingIds.size})
                         </Button>
                         <Button
                           variant="outline"
@@ -3604,10 +3641,12 @@ export default function Admin() {
                           </th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Package</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Deal Value</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Contact</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Email</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Event Name</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Event Date</th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Budget</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">City / Region</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">
                             <button
@@ -3676,7 +3715,48 @@ export default function Admin() {
                                     {booking.mode || "Standard"}
                                   </span>
                                 </td>
-                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" data-testid={`text-contact-${booking.id}`}>{booking.contactName || "—"}</td>
+                                <td className="px-4 py-4 text-right whitespace-nowrap font-semibold text-white" data-testid={`text-dealvalue-${booking.id}`}>
+                                  {packageDealValue(booking.mode).label}
+                                </td>
+                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" onClick={(e) => e.stopPropagation()} data-testid={`text-contact-${booking.id}`}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-white/80">{booking.contactName || "—"}</span>
+                                    {booking.phone && (
+                                      <>
+                                        <a
+                                          href={`tel:${booking.phone}`}
+                                          title={`Call ${booking.phone}`}
+                                          data-testid={`button-call-${booking.id}`}
+                                          className="text-muted-foreground hover:text-primary transition-colors"
+                                        >
+                                          <Phone className="w-3.5 h-3.5" />
+                                        </a>
+                                        <a
+                                          href={`https://wa.me/${phoneDigits(booking.phone)}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title={`WhatsApp ${booking.phone}`}
+                                          data-testid={`button-whatsapp-${booking.id}`}
+                                          className="text-muted-foreground hover:text-green-400 transition-colors"
+                                        >
+                                          <MessageCircle className="w-3.5 h-3.5" />
+                                        </a>
+                                      </>
+                                    )}
+                                    {booking.instagramHandle && (
+                                      <a
+                                        href={`https://instagram.com/${booking.instagramHandle.replace("@","")}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title={`@${booking.instagramHandle.replace("@","")}`}
+                                        data-testid={`button-ig-${booking.id}`}
+                                        className="text-muted-foreground hover:text-pink-400 transition-colors"
+                                      >
+                                        <Instagram className="w-3.5 h-3.5" />
+                                      </a>
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="px-4 py-4 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
                                   <div className="flex items-center gap-2 whitespace-nowrap">
                                     <a href={`mailto:${booking.email}`} className="text-primary hover:underline">{booking.email}</a>
@@ -3699,6 +3779,9 @@ export default function Admin() {
                                     ? new Date(booking.eventDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                                     : "—"}
                                 </td>
+                                <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" data-testid={`text-budget-${booking.id}`}>
+                                  {booking.budgetRange || "—"}
+                                </td>
                                 <td className="px-4 py-4 text-muted-foreground whitespace-nowrap">
                                   {booking.city ? `${booking.city}, ` : ""}
                                   <span className="inline-block px-2 py-0.5 rounded-full text-xs border border-primary/30 text-primary bg-primary/10">{booking.region}</span>
@@ -3707,7 +3790,7 @@ export default function Admin() {
                               </tr>
                               {isExpanded && (
                                 <tr key={`${booking.id}-detail`} className="border-b border-white/5 bg-white/[0.03]">
-                                  <td colSpan={10} className="px-6 py-5">
+                                  <td colSpan={12} className="px-6 py-5">
                                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
                                       <div>
                                         <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Contact Name</p>
