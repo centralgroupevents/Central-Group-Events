@@ -1,7 +1,7 @@
 import { Helmet } from "react-helmet-async";
 import { useEvents } from "@/hooks/use-landing";
 
-const SITE = "https://www.centralgroupevents.com";
+const SITE = "https://centralgroupevents.com";
 
 interface Props {
   /** Cap the number of events emitted. Defaults to no cap. */

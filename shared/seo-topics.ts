@@ -124,7 +124,7 @@ function cityFaqs(city: CityProfile): { q: string; a: string }[] {
     },
     {
       q: `Where can I find a weekly schedule of ${city.name} events?`,
-      a: `Central Group Events publishes a curated weekly schedule covering ${city.name} and the rest of New Jersey. Visit https://www.centralgroupevents.com/things-to-do-in-nj or subscribe to the weekly newsletter for the full list.`,
+      a: `Central Group Events publishes a curated weekly schedule covering ${city.name} and the rest of New Jersey. Visit https://centralgroupevents.com/things-to-do-in-nj or subscribe to the weekly newsletter for the full list.`,
     },
   ];
 }

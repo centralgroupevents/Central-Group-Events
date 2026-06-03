@@ -184,14 +184,14 @@ export default function ThingsToDo() {
       <SEO
         title={heroTitle}
         description={description}
-        canonical={`https://www.centralgroupevents.com/${SLUG}`}
+        canonical={`https://centralgroupevents.com/${SLUG}`}
         keywords="things to do in nj, things to do in new jersey, events in nj, fun things to do nj, weekend events nj, nj nightlife, nj brunch"
         jsonLd={{
           "@context": "https://schema.org",
           "@type": "BreadcrumbList",
           "itemListElement": [
-            { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.centralgroupevents.com/" },
-            { "@type": "ListItem", "position": 2, "name": "Things to Do in NJ", "item": `https://www.centralgroupevents.com/${SLUG}` },
+            { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://centralgroupevents.com/" },
+            { "@type": "ListItem", "position": 2, "name": "Things to Do in NJ", "item": `https://centralgroupevents.com/${SLUG}` },
           ],
         }}
       />

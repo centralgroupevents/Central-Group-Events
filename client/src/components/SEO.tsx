@@ -1,6 +1,6 @@
 import { Helmet } from "react-helmet-async";
 
-const DEFAULT_IMAGE = "https://www.centralgroupevents.com/og-image.jpg";
+const DEFAULT_IMAGE = "https://centralgroupevents.com/og-image.jpg";
 const SITE_NAME = "Central Group Events";
 
 interface SEOProps {

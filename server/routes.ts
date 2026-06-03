@@ -109,7 +109,7 @@ export async function registerRoutes(
         .map(
           (p) => `
   <url>
-    <loc>https://www.centralgroupevents.com/blog/${p.slug}</loc>
+    <loc>https://centralgroupevents.com/blog/${p.slug}</loc>
     <lastmod>${p.publishedAt ? new Date(p.publishedAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -124,7 +124,7 @@ export async function registerRoutes(
         .map(
           (t) => `
   <url>
-    <loc>https://www.centralgroupevents.com/${t.slug}</loc>
+    <loc>https://centralgroupevents.com/${t.slug}</loc>
     <changefreq>weekly</changefreq>
     <priority>${t.pageType === "tentpole" ? "0.9" : t.alwaysIndex ? "0.8" : "0.7"}</priority>
   </url>`,
@@ -134,22 +134,22 @@ export async function registerRoutes(
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://www.centralgroupevents.com</loc>
+    <loc>https://centralgroupevents.com</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://www.centralgroupevents.com/blog</loc>
+    <loc>https://centralgroupevents.com/blog</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://www.centralgroupevents.com/things-to-do-in-nj</loc>
+    <loc>https://centralgroupevents.com/things-to-do-in-nj</loc>
     <changefreq>daily</changefreq>
     <priority>0.95</priority>
   </url>
   <url>
-    <loc>https://www.centralgroupevents.com/faq</loc>
+    <loc>https://centralgroupevents.com/faq</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>${topicEntries}${postEntries}
@@ -169,7 +169,7 @@ export async function registerRoutes(
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.status(200).send(
-      `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /booking-confirmation\nDisallow: /welcome\nSitemap: https://www.centralgroupevents.com/sitemap.xml`
+      `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /booking-confirmation\nDisallow: /welcome\nSitemap: https://centralgroupevents.com/sitemap.xml`
     );
   });
 
@@ -189,13 +189,13 @@ Central Group Events (CGE) is a New Jersey event promotion agency. We promote 10
 All of New Jersey — Newark, Jersey City, Hoboken, Paterson, Elizabeth, Montclair, Trenton, New Brunswick, Edison, Atlantic City, Cherry Hill, Camden, and surrounding areas.
 
 ## Important URLs
-- [Homepage](https://www.centralgroupevents.com/): event discovery + pricing
-- [Things to Do in NJ This Week](https://www.centralgroupevents.com/things-to-do-in-nj): curated weekly event listings
-- [Blog / Newsletter](https://www.centralgroupevents.com/blog): weekly NJ event roundups
-- [Book Event Promotion](https://www.centralgroupevents.com/book): submit and pay for event promotion
-- [FAQ](https://www.centralgroupevents.com/faq): pricing, lead times, regions covered
-- [Sitemap](https://www.centralgroupevents.com/sitemap.xml): all indexable URLs
-- [Full LLM context](https://www.centralgroupevents.com/llms-full.txt): expanded details for AI agents
+- [Homepage](https://centralgroupevents.com/): event discovery + pricing
+- [Things to Do in NJ This Week](https://centralgroupevents.com/things-to-do-in-nj): curated weekly event listings
+- [Blog / Newsletter](https://centralgroupevents.com/blog): weekly NJ event roundups
+- [Book Event Promotion](https://centralgroupevents.com/book): submit and pay for event promotion
+- [FAQ](https://centralgroupevents.com/faq): pricing, lead times, regions covered
+- [Sitemap](https://centralgroupevents.com/sitemap.xml): all indexable URLs
+- [Full LLM context](https://centralgroupevents.com/llms-full.txt): expanded details for AI agents
 
 ## Contact
 Email: centralgroupevents@gmail.com
@@ -211,7 +211,7 @@ Instagram: @centralgroupevents
       const recent = posts.slice(0, 10);
       const blogList = recent.map((p) => {
         const date = p.publishedAt ? new Date(p.publishedAt).toISOString().split("T")[0] : "";
-        return `- [${p.title}](https://www.centralgroupevents.com/blog/${p.slug}) — ${date}${p.excerpt ? `: ${p.excerpt}` : ""}`;
+        return `- [${p.title}](https://centralgroupevents.com/blog/${p.slug}) — ${date}${p.excerpt ? `: ${p.excerpt}` : ""}`;
       }).join("\n");
 
       const faqText = [
@@ -284,7 +284,7 @@ ${blogList || "_No recent posts yet._"}
 - Email: centralgroupevents@gmail.com
 - Instagram: https://www.instagram.com/centralgroupevents/
 - TikTok: https://www.tiktok.com/@centralgroupevents
-- Booking: https://www.centralgroupevents.com/book
+- Booking: https://centralgroupevents.com/book
 `,
       );
     } catch {
@@ -297,7 +297,7 @@ ${blogList || "_No recent posts yet._"}
     try {
       const posts = await storage.getPublishedPosts();
       const items = posts.slice(0, 20).map((p) => {
-        const url = `https://www.centralgroupevents.com/blog/${p.slug}`;
+        const url = `https://centralgroupevents.com/blog/${p.slug}`;
         const pubDate = p.publishedAt ? new Date(p.publishedAt).toUTCString() : new Date().toUTCString();
         const escapeXml = (s: string | null | undefined) =>
           (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
@@ -315,8 +315,8 @@ ${blogList || "_No recent posts yet._"}
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Central Group Events Blog</title>
-    <link>https://www.centralgroupevents.com/blog</link>
-    <atom:link href="https://www.centralgroupevents.com/blog/rss.xml" rel="self" type="application/rss+xml" />
+    <link>https://centralgroupevents.com/blog</link>
+    <atom:link href="https://centralgroupevents.com/blog/rss.xml" rel="self" type="application/rss+xml" />
     <description>Weekly NJ event roundups and nightlife guides from Central Group Events.</description>
     <language>en-us</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>${items}
@@ -539,7 +539,7 @@ ${blogList || "_No recent posts yet._"}
               <div style="max-width:600px;margin:0 auto;background:#111111;border-radius:12px;overflow:hidden;">
                 <!-- Header -->
                 <div style="background:#0a0a0a;padding:32px;text-align:center;border-bottom:1px solid #222;">
-                  <img src="https://www.centralgroupevents.com/favicon.png" alt="Central Group Events" style="height:64px;width:auto;" />
+                  <img src="https://centralgroupevents.com/favicon.png" alt="Central Group Events" style="height:64px;width:auto;" />
                 </div>
                 <!-- Body -->
                 <div style="padding:40px 32px;">

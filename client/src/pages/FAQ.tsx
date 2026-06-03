@@ -66,7 +66,7 @@ export default function FAQ() {
         title="FAQ — Central Group Events"
         description="Frequently asked questions about Central Group Events. Learn how to submit your event, get promoted, and join the NJ event community."
         keywords="CGE FAQ, how to submit event NJ, event promotion New Jersey, Central Group Events"
-        canonical="https://www.centralgroupevents.com/faq"
+        canonical="https://centralgroupevents.com/faq"
         jsonLd={[
           {
             "@context": "https://schema.org",
@@ -84,8 +84,8 @@ export default function FAQ() {
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.centralgroupevents.com/" },
-              { "@type": "ListItem", "position": 2, "name": "FAQ", "item": "https://www.centralgroupevents.com/faq" },
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://centralgroupevents.com/" },
+              { "@type": "ListItem", "position": 2, "name": "FAQ", "item": "https://centralgroupevents.com/faq" },
             ],
           },
         ]}

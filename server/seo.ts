@@ -14,7 +14,7 @@
 import { storage } from "./storage";
 import { getTopicConfig, countMatchingEvents } from "@shared/seo-topics";
 
-const SITE = "https://www.centralgroupevents.com";
+const SITE = "https://centralgroupevents.com";
 const DEFAULT_IMAGE = `${SITE}/og-image.jpg`;
 const SITE_NAME = "Central Group Events";
 

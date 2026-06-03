@@ -16,7 +16,7 @@ import {
 } from "@shared/seo-topics";
 import NotFound from "@/pages/not-found";
 
-const SITE = "https://www.centralgroupevents.com";
+const SITE = "https://centralgroupevents.com";
 
 export default function TopicLanding() {
   // Catch-all /:slug — only matches when no earlier route does.

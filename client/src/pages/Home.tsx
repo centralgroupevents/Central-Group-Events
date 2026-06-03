@@ -97,20 +97,20 @@ export default function Home() {
         title="Central Group Events — NJ's #1 Event Hub"
         description="Discover the best events in New Jersey every week. North, Central, and South NJ nightlife, brunch spots, live music, R&B nights, and more. Submit or promote your event with CGE."
         keywords="events in NJ, things to do in New Jersey, NJ nightlife, New Jersey events this weekend, events near me NJ, Newark events, Jersey City events, North NJ events, Central NJ events, South NJ events, NJ brunch, NJ live music, NJ R&B night, event promotion New Jersey"
-        canonical="https://www.centralgroupevents.com"
+        canonical="https://centralgroupevents.com"
         jsonLd={[
           {
             "@context": "https://schema.org",
             "@type": "ProfessionalService",
-            "@id": "https://www.centralgroupevents.com/#organization",
+            "@id": "https://centralgroupevents.com/#organization",
             "name": "Central Group Events",
             "alternateName": "CGE",
-            "url": "https://www.centralgroupevents.com",
+            "url": "https://centralgroupevents.com",
             "logo": {
               "@type": "ImageObject",
-              "url": "https://www.centralgroupevents.com/favicon.png",
+              "url": "https://centralgroupevents.com/favicon.png",
             },
-            "image": "https://www.centralgroupevents.com/og-image.jpg",
+            "image": "https://centralgroupevents.com/og-image.jpg",
             "description":
               "New Jersey's #1 event discovery and promotion platform covering North, Central, and South NJ. We promote 100+ events weekly through newsletter, reels, paid ads, SMS blasts, and influencer campaigns.",
             "email": "centralgroupevents@gmail.com",
@@ -144,7 +144,7 @@ export default function Home() {
                   "price": "0",
                   "priceCurrency": "USD",
                   "description": "Free event calendar listing",
-                  "url": "https://www.centralgroupevents.com/book?package=basic",
+                  "url": "https://centralgroupevents.com/book?package=basic",
                 },
                 {
                   "@type": "Offer",
@@ -153,7 +153,7 @@ export default function Home() {
                   "priceCurrency": "USD",
                   "description":
                     "Event calendar listing, Instagram story feature, newsletter mention, and Facebook post",
-                  "url": "https://www.centralgroupevents.com/book?package=starter",
+                  "url": "https://centralgroupevents.com/book?package=starter",
                 },
                 {
                   "@type": "Offer",
@@ -162,7 +162,7 @@ export default function Home() {
                   "priceCurrency": "USD",
                   "description":
                     "Everything in Starter plus Instagram reel feature, premium newsletter placement, and SMS blast to subscribers",
-                  "url": "https://www.centralgroupevents.com/book?package=growth",
+                  "url": "https://centralgroupevents.com/book?package=growth",
                 },
                 {
                   "@type": "Offer",
@@ -171,7 +171,7 @@ export default function Home() {
                   "priceCurrency": "USD",
                   "description":
                     "Everything in Growth plus influencer reposts, strategy call, and custom campaign timeline",
-                  "url": "https://www.centralgroupevents.com/book?package=custom",
+                  "url": "https://centralgroupevents.com/book?package=custom",
                 },
               ],
             },
@@ -179,11 +179,11 @@ export default function Home() {
           {
             "@context": "https://schema.org",
             "@type": "WebSite",
-            "@id": "https://www.centralgroupevents.com/#website",
-            "url": "https://www.centralgroupevents.com",
+            "@id": "https://centralgroupevents.com/#website",
+            "url": "https://centralgroupevents.com",
             "name": "Central Group Events",
             "description": "NJ events discovery and event promotion",
-            "publisher": { "@id": "https://www.centralgroupevents.com/#organization" },
+            "publisher": { "@id": "https://centralgroupevents.com/#organization" },
           },
         ]}
       />
