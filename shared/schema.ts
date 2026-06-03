@@ -16,6 +16,7 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
 
 export const promotionBookings = pgTable("promotion_bookings", {
   id: serial("id").primaryKey(),
+  referenceId: text("reference_id").unique(),
   mode: text("mode"),
   eventName: text("event_name"),
   venueName: text("venue_name").notNull(),
@@ -147,7 +148,7 @@ export const insertSubscriberSchema = createInsertSchema(newsletterSubscribers).
   referrer: z.string().optional(),
   hasAccess: z.boolean().optional(),
 });
-export const insertBookingSchema = createInsertSchema(promotionBookings).omit({ id: true, createdAt: true, adminNotes: true }).extend({
+export const insertBookingSchema = createInsertSchema(promotionBookings).omit({ id: true, createdAt: true, adminNotes: true, referenceId: true }).extend({
   email: z.string().email(),
   mode: z.string().optional(),
   eventName: z.string().optional(),

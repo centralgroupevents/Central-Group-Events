@@ -255,8 +255,8 @@ export async function registerRoutes(
     }
     try {
       const input = api.bookings.create.input.parse(req.body);
-      await storage.createBooking(input);
-      res.status(201).json({ message: "Booking request submitted successfully! We'll be in touch." });
+      const booking = await storage.createBooking(input);
+      res.status(201).json({ message: "Booking request submitted successfully! We'll be in touch.", referenceId: booking.referenceId });
       // Auto-subscribe the booker to the newsletter (non-blocking, ON CONFLICT DO NOTHING via upsert)
       storage.upsertSubscriber(
         input.email.toLowerCase().trim(),

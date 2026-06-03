@@ -3639,6 +3639,7 @@ export default function Admin() {
                               className="rounded border-white/20 bg-black/40"
                             />
                           </th>
+                          <th className="px-4 py-3 font-medium whitespace-nowrap">Ref #</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap">Package</th>
                           <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Deal Value</th>
@@ -3689,6 +3690,15 @@ export default function Admin() {
                                     }}
                                     className="rounded border-white/20 bg-black/40"
                                   />
+                                </td>
+                                <td className="px-4 py-4 whitespace-nowrap" data-testid={`text-reference-${booking.id}`}>
+                                  {booking.referenceId ? (
+                                    <span className="font-mono text-xs font-semibold text-primary/80 bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md">
+                                      {booking.referenceId}
+                                    </span>
+                                  ) : (
+                                    <span className="text-white/20 text-xs">—</span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                                   <Select
@@ -3790,7 +3800,7 @@ export default function Admin() {
                               </tr>
                               {isExpanded && (
                                 <tr key={`${booking.id}-detail`} className="border-b border-white/5 bg-white/[0.03]">
-                                  <td colSpan={12} className="px-6 py-5">
+                                  <td colSpan={13} className="px-6 py-5">
                                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
                                       <div>
                                         <p className="text-muted-foreground text-xs uppercase tracking-wide mb-1">Contact Name</p>
