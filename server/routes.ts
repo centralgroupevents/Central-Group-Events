@@ -1301,14 +1301,35 @@ export async function registerRoutes(
     try {
       const url = req.query.url as string;
       const postIdRaw = req.query.postId as string;
+      const eventIdRaw = req.query.eventId as string;
       if (!url || !url.startsWith("http")) {
         return res.status(400).json({ message: "Invalid URL" });
       }
       const postId = postIdRaw ? parseInt(postIdRaw, 10) : undefined;
+      const eventId = eventIdRaw ? parseInt(eventIdRaw, 10) : undefined;
       const referer = (req.headers.referer || req.headers.referrer) as string | undefined;
       const sourcePage = referer && referer.trim() ? referer.trim() : undefined;
-      storage.recordClick(url, isNaN(postId as number) ? undefined : postId, sourcePage).catch(() => {});
+      storage.recordClick(
+        url,
+        isNaN(postId as number) ? undefined : postId,
+        sourcePage,
+        isNaN(eventId as number) ? undefined : eventId,
+      ).catch(() => {});
       res.redirect(302, url);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/funnel/track", async (req: Request, res: Response) => {
+    try {
+      const { step, sessionId, metadata } = req.body as { step?: string; sessionId?: string; metadata?: unknown };
+      if (typeof step !== "string" || !step.trim() || step.length > 100) {
+        return res.status(400).json({ message: "step is required" });
+      }
+      const meta = metadata !== undefined ? JSON.stringify(metadata).slice(0, 1000) : undefined;
+      storage.recordFunnelStep(step, typeof sessionId === "string" ? sessionId.slice(0, 100) : undefined, meta).catch(() => {});
+      res.status(204).send();
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }
@@ -1322,6 +1343,24 @@ export async function registerRoutes(
       const days = Number.isFinite(parsed) && parsed > 0 && parsed <= 365 ? parsed : undefined;
       const data = await storage.getAnalytics(days);
       res.json(data);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/analytics/events", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const raw = req.query.days;
+      const parsed = typeof raw === "string" ? parseInt(raw, 10) : NaN;
+      const days = Number.isFinite(parsed) && parsed > 0 && parsed <= 365 ? parsed : undefined;
+      const [events, regions, cities, sources, funnel] = await Promise.all([
+        storage.getEventPerformance(days, 20),
+        storage.getTopRegions(days),
+        storage.getTopCities(days, 10),
+        storage.getTrafficSources(days),
+        storage.getBookingFunnel(days),
+      ]);
+      res.json({ events, regions, cities, sources, funnel });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }

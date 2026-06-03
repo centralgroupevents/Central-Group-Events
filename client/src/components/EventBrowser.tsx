@@ -225,7 +225,11 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
                         asChild
                         data-testid={`button-tickets-${event.id}`}
                       >
-                        <a href={event.ticketLink || "#"} target="_blank" rel="noopener noreferrer">
+                        <a
+                          href={event.ticketLink ? `/go?url=${encodeURIComponent(event.ticketLink)}&eventId=${event.id}` : "#"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
                           Learn more
                         </a>
                       </Button>

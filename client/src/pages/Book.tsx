@@ -196,8 +196,25 @@ export default function Book() {
   const [direction, setDirection] = useState<1 | -1>(1);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const hasSavedRef = useRef(false);
+  const sessionIdRef = useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36),
+  );
 
   const { step, subStep } = stepState;
+
+  // Fire a funnel event whenever the user reaches a new top-level step.
+  // Steps map to STEPS labels: 0=Package, 1=Event Details, 2=Logistics, 3=Contact Info, 4=Terms, 5=Payment.
+  useEffect(() => {
+    const label = STEPS[step] ?? `step-${step}`;
+    fetch("/api/funnel/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step: label, sessionId: sessionIdRef.current }),
+      keepalive: true,
+    }).catch(() => {});
+  }, [step]);
 
   // ── Progress helpers ──────────────────────────────────────────────────────
 
@@ -382,7 +399,15 @@ export default function Book() {
     };
 
     apiRequest("POST", "/api/bookings", payload)
-      .then(() => setSaveStatus("saved"))
+      .then(() => {
+        setSaveStatus("saved");
+        fetch("/api/funnel/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ step: "Submitted", sessionId: sessionIdRef.current, metadata: { mode: data.mode } }),
+          keepalive: true,
+        }).catch(() => {});
+      })
       .catch((err) => {
         setSaveStatus("error");
         toast({
