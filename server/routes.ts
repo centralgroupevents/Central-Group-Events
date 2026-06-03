@@ -153,6 +153,163 @@ export async function registerRoutes(
     );
   });
 
+  // ── /llms.txt — concise overview for AI crawlers (Anthropic-proposed convention)
+  app.get("/llms.txt", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.status(200).send(
+`# Central Group Events
+
+> New Jersey's #1 event discovery and promotion platform. We cover North, Central, and South NJ with curated weekly event listings, paid event promotion across newsletter, Instagram reels, paid ads, SMS blasts, and influencer campaigns.
+
+## About
+Central Group Events (CGE) is a New Jersey event promotion agency. We promote 100+ events weekly. Pricing tiers: Basic (free calendar listing), Starter ($70/event), Growth ($150/event with premium newsletter placement + SMS blast), and Custom ($300+/event with influencer reposts).
+
+## Service area
+All of New Jersey — Newark, Jersey City, Hoboken, Paterson, Elizabeth, Montclair, Trenton, New Brunswick, Edison, Atlantic City, Cherry Hill, Camden, and surrounding areas.
+
+## Important URLs
+- [Homepage](https://www.centralgroupevents.com/): event discovery + pricing
+- [Things to Do in NJ This Week](https://www.centralgroupevents.com/things-to-do-in-nj): curated weekly event listings
+- [Blog / Newsletter](https://www.centralgroupevents.com/blog): weekly NJ event roundups
+- [Book Event Promotion](https://www.centralgroupevents.com/book): submit and pay for event promotion
+- [FAQ](https://www.centralgroupevents.com/faq): pricing, lead times, regions covered
+- [Sitemap](https://www.centralgroupevents.com/sitemap.xml): all indexable URLs
+- [Full LLM context](https://www.centralgroupevents.com/llms-full.txt): expanded details for AI agents
+
+## Contact
+Email: centralgroupevents@gmail.com
+Instagram: @centralgroupevents
+`,
+    );
+  });
+
+  // ── /llms-full.txt — expanded context including FAQs and recent blog posts
+  app.get("/llms-full.txt", async (_req: Request, res: Response) => {
+    try {
+      const posts = await storage.getPublishedPosts();
+      const recent = posts.slice(0, 10);
+      const blogList = recent.map((p) => {
+        const date = p.publishedAt ? new Date(p.publishedAt).toISOString().split("T")[0] : "";
+        return `- [${p.title}](https://www.centralgroupevents.com/blog/${p.slug}) — ${date}${p.excerpt ? `: ${p.excerpt}` : ""}`;
+      }).join("\n");
+
+      const faqText = [
+        ["How do I submit my event?", "Use the Book Promotion form on our homepage or visit /book to pick a package and submit your details."],
+        ["What does NJ event promotion cost?", "Basic (free calendar listing), Starter ($70/event), Growth ($150/event with reels, premium newsletter placement, and SMS blast), Custom ($300+/event for influencer reposts and dedicated campaign timelines)."],
+        ["How far in advance should I book event promotion?", "At least 7 days before your event. For time-sensitive events (holidays, special weekends), 2 weeks in advance is recommended."],
+        ["Which New Jersey regions do you cover?", "All of New Jersey — North NJ (Newark, Jersey City, Hoboken, Paterson, Elizabeth, Montclair), Central NJ (Trenton, New Brunswick, Edison, Plainfield), and South NJ (Atlantic City, Cherry Hill, Camden)."],
+        ["What kinds of events do you promote?", "Club nights, concerts, day parties, brunches, festivals, comedy shows, pop-ups, networking events, and lounge events. Any public, attendee-facing event in New Jersey."],
+        ["Do you do influencer promotion?", "Yes — included in our Custom package. We have a network of NJ-based content creators who repost and feature events to their audiences."],
+        ["When does my event get posted after I book?", "Our team confirms scheduling and invoicing within 24 hours. Content goes live on your agreed posting date, typically the week of your event."],
+        ["Is the newsletter free?", "Yes, completely free. Weekly NJ events roundup with no spam."],
+      ].map(([q, a]) => `### ${q}\n${a}`).join("\n\n");
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.status(200).send(
+`# Central Group Events — Full Context for AI Agents
+
+> Comprehensive context about CGE, our services, our content, and recent publications. This file is intended for LLM crawlers and agents that want richer information than what's in /llms.txt.
+
+## What we do
+Central Group Events (CGE) is a curated New Jersey event promotion agency operating since 2026. We act as a hub for NJ social, nightlife, brunch, day-party, concert, festival, and community events. We help event organizers reach audiences through:
+
+- Weekly curated newsletter (free to subscribers)
+- Instagram reels and stories
+- Premium newsletter placement
+- SMS blasts to engaged subscribers
+- Targeted Meta ad campaigns
+- Influencer reposts via our content creator network
+- Calendar listings in our public event hub
+
+## Service packages
+
+### Basic — Free
+Event calendar listing only. Best for organizers who want exposure without paying for promotion.
+
+### Starter — $70 per event
+- Event calendar listing
+- Instagram story feature
+- Newsletter mention
+- Facebook post
+
+### Growth — $150 per event ("Most Popular")
+- Everything in Starter
+- Instagram reel feature
+- Premium newsletter placement
+- SMS blast to engaged subscribers
+
+### Custom — $300+ per event
+- Everything in Growth
+- Influencer reposts
+- Strategy call included
+- Custom campaign timeline
+
+## Service area
+North NJ: Newark, Jersey City, Hoboken, Paterson, Elizabeth, Montclair, Bloomfield, Edgewater.
+Central NJ: Trenton, New Brunswick, Edison, Plainfield, Hamilton, Iselin, Somerville.
+South NJ: Atlantic City, Cherry Hill, Camden, Mt. Laurel.
+
+## Frequently asked questions
+
+${faqText}
+
+## Recent posts on our blog
+
+${blogList || "_No recent posts yet._"}
+
+## Contact
+
+- Email: centralgroupevents@gmail.com
+- Instagram: https://www.instagram.com/centralgroupevents/
+- TikTok: https://www.tiktok.com/@centralgroupevents
+- Booking: https://www.centralgroupevents.com/book
+`,
+      );
+    } catch {
+      res.status(500).send("Error generating /llms-full.txt");
+    }
+  });
+
+  // ── /blog/rss.xml — RSS 2.0 feed of published posts
+  app.get("/blog/rss.xml", async (_req: Request, res: Response) => {
+    try {
+      const posts = await storage.getPublishedPosts();
+      const items = posts.slice(0, 20).map((p) => {
+        const url = `https://www.centralgroupevents.com/blog/${p.slug}`;
+        const pubDate = p.publishedAt ? new Date(p.publishedAt).toUTCString() : new Date().toUTCString();
+        const escapeXml = (s: string | null | undefined) =>
+          (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+        return `
+    <item>
+      <title>${escapeXml(p.title)}</title>
+      <link>${url}</link>
+      <guid isPermaLink="true">${url}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <description>${escapeXml(p.excerpt || "")}</description>
+    </item>`;
+      }).join("");
+
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Central Group Events Blog</title>
+    <link>https://www.centralgroupevents.com/blog</link>
+    <atom:link href="https://www.centralgroupevents.com/blog/rss.xml" rel="self" type="application/rss+xml" />
+    <description>Weekly NJ event roundups and nightlife guides from Central Group Events.</description>
+    <language>en-us</language>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>${items}
+  </channel>
+</rss>`;
+      res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.status(200).send(xml);
+    } catch {
+      res.status(500).send("Error generating RSS feed");
+    }
+  });
+
   // ── Existing newsletter subscriber route ─────────────────────────────
   app.post(api.subscribers.create.path, formLimiter, async (req, res) => {
     try {
