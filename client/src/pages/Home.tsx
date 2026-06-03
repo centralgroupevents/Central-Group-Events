@@ -20,6 +20,7 @@ import { useSubscribeNewsletter } from "@/hooks/use-landing";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { EventBrowser } from "@/components/EventBrowser";
+import { EventsJsonLd } from "@/components/EventsJsonLd";
 import { SubscribeModal } from "@/components/SubscribeModal";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
@@ -186,6 +187,7 @@ export default function Home() {
           },
         ]}
       />
+      <EventsJsonLd maxItems={10} />
       <Navigation />
 
       {/* HERO SECTION */}

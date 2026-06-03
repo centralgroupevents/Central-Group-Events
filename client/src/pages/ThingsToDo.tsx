@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { EventBrowser } from "@/components/EventBrowser";
+import { EventsJsonLd } from "@/components/EventsJsonLd";
 import { RichTextViewer } from "@/components/RichTextEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -194,6 +195,7 @@ export default function ThingsToDo() {
           ],
         }}
       />
+      <EventsJsonLd maxItems={hasAccess ? 30 : 5} />
       <Navigation />
 
       <section className="pt-32 pb-20 relative overflow-clip">
