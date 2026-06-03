@@ -2227,6 +2227,20 @@ function buildIsoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+function packageDealValue(mode: string | null | undefined): { label: string; numeric: number } {
+  switch ((mode || "").toLowerCase()) {
+    case "basic":   return { label: "FREE",   numeric: 0 };
+    case "starter": return { label: "$70",    numeric: 70 };
+    case "growth":  return { label: "$150",   numeric: 150 };
+    case "custom":  return { label: "$300+",  numeric: 300 };
+    default:        return { label: "—",      numeric: 0 };
+  }
+}
+
+function phoneDigits(phone: string): string {
+  return phone.replace(/[^\d]/g, "");
+}
+
 const DAY_OF_WEEK_OFFSET: Record<string, number> = {
   mon: 0, monday: 0,
   tue: 1, tues: 1, tuesday: 1,
