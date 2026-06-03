@@ -37,8 +37,16 @@ export interface TopicConfig {
   alwaysIndex?: boolean;
 }
 
+// Cities that should always be indexed (regardless of weekly event count).
+// Every city with a hand-written customIntro belongs here — otherwise the
+// editorial intro is invisible to Google during sparse weeks.
 const TIER_1_CITY_SLUGS = new Set([
+  // Original Tier 1
   "newark", "jersey-city", "hoboken", "trenton", "atlantic-city", "east-rutherford",
+  // Cities added with editorial intros (PR 19)
+  "asbury-park", "morristown", "princeton", "red-bank", "long-branch",
+  "wildwood", "cape-may", "ocean-city", "holmdel", "sayreville",
+  "belmar", "seaside-heights", "point-pleasant-beach",
 ]);
 
 interface CityProfile {
