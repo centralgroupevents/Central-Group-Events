@@ -16,6 +16,7 @@ import Welcome from "@/pages/Welcome";
 import AcceptInvite from "@/pages/AcceptInvite";
 import Book from "@/pages/Book";
 import ThingsToDo from "@/pages/ThingsToDo";
+import TopicLanding from "@/pages/TopicLanding";
 
 function Router() {
   return (
@@ -32,6 +33,10 @@ function Router() {
       <Route path="/faq" component={FAQ} />
       <Route path="/welcome" component={Welcome} />
       <Route path="/admin/accept-invite" component={AcceptInvite} />
+      {/* Programmatic topic landing pages (city, type, time, combos, tentpole).
+          TopicLanding looks up the slug in shared/seo-topics; falls back to NotFound
+          if the slug isn't a known topic. */}
+      <Route path="/:slug" component={TopicLanding} />
       <Route component={NotFound} />
     </Switch>
   );

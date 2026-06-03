@@ -21,6 +21,12 @@ interface EventBrowserProps {
   inlineAd?: ReactNode;
   /** Zero-indexed position to insert the inlineAd. Defaults to after the 5th visible row. */
   inlineAdAfterIndex?: number;
+  /** When set, only events matching this city render and the city is locked (filter UI hidden). */
+  lockedCity?: string;
+  /** When set, only events whose genre matches one of these values render. Case-insensitive. */
+  lockedGenre?: string[];
+  /** When set, only events on these days of week render (e.g. ["Fri", "Sat", "Sun"]). */
+  lockedDays?: string[];
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -33,7 +39,7 @@ function getDayOfWeek(dateStr: string | null | undefined): string {
   return DAY_NAMES[date.getDay()] || "";
 }
 
-export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, pinFeatured = false, inlineAd, inlineAdAfterIndex = 4 }: EventBrowserProps) {
+export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, pinFeatured = false, inlineAd, inlineAdAfterIndex = 4, lockedCity, lockedGenre, lockedDays }: EventBrowserProps) {
   const [, navigate] = useLocation();
   const [activeRegion, setActiveRegion] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -77,7 +83,18 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
     }
   }, [dayOfWeek, availableDays]);
 
+  const lockedGenreLower = lockedGenre?.map((g) => g.toLowerCase());
+
   const filteredEvents = allEvents.filter((e) => {
+    if (lockedCity && (e.city || "").trim().toLowerCase() !== lockedCity.trim().toLowerCase()) return false;
+    if (lockedGenreLower && lockedGenreLower.length > 0) {
+      const genre = (e.genre || "").trim().toLowerCase();
+      if (!lockedGenreLower.some((g) => genre.includes(g))) return false;
+    }
+    if (lockedDays && lockedDays.length > 0) {
+      const day = getDayOfWeek(e.date);
+      if (!day || !lockedDays.includes(day)) return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchesSearch =

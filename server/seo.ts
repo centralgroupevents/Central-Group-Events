@@ -12,6 +12,7 @@
 // fetch the post by slug for an accurate title and Article schema.
 
 import { storage } from "./storage";
+import { getTopicConfig, countMatchingEvents } from "@shared/seo-topics";
 
 const SITE = "https://www.centralgroupevents.com";
 const DEFAULT_IMAGE = `${SITE}/og-image.jpg`;
@@ -206,6 +207,57 @@ export async function getMetaForRoute(rawPath: string): Promise<SeoMeta> {
     } catch {
       // fall through to default
     }
+  }
+
+  // Programmatic topic landing pages (city, type, city-type combos, time, tentpole).
+  // Each topic is configured in shared/seo-topics.ts. Slug = the path minus leading /.
+  const topicSlug = path.replace(/^\//, "");
+  const topic = getTopicConfig(topicSlug);
+  if (topic) {
+    const canonical = `${SITE}/${topic.slug}`;
+    let noindex = false;
+    if (!topic.alwaysIndex) {
+      try {
+        const events = await storage.getEvents(undefined, false);
+        const matching = countMatchingEvents(events, topic.filter);
+        if (matching < 3) noindex = true;
+      } catch {
+        // If the count query fails, default to indexing (less destructive).
+      }
+    }
+
+    const breadcrumbJsonLd = {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": `${SITE}/` },
+        { "@type": "ListItem", "position": 2, "name": "Things to Do in NJ", "item": `${SITE}/things-to-do-in-nj` },
+        { "@type": "ListItem", "position": 3, "name": topic.h1, "item": canonical },
+      ],
+    };
+    const faqJsonLd = topic.faqItems && topic.faqItems.length > 0
+      ? {
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          "mainEntity": topic.faqItems.map((item) => ({
+            "@type": "Question",
+            "name": item.q,
+            "acceptedAnswer": { "@type": "Answer", "text": item.a },
+          })),
+        }
+      : null;
+    const jsonLd: object[] = [breadcrumbJsonLd];
+    if (faqJsonLd) jsonLd.push(faqJsonLd);
+
+    return {
+      title: topic.metaTitle,
+      description: topic.metaDescription,
+      canonical,
+      image: DEFAULT_IMAGE,
+      type: "website",
+      noindex,
+      jsonLd,
+    };
   }
 
   // Default: serve homepage meta but mark canonical to the actual path so we

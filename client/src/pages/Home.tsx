@@ -744,7 +744,61 @@ export default function Home() {
 
       {/* FOOTER */}
       <footer className="py-12 border-t border-white/5 bg-black">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+          {/* Popular pages — internal linking grid to topic landings.
+              Strong topical-authority signal and helps Google/AI crawlers
+              discover the programmatic city + type pages. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 pb-10 border-b border-white/5">
+            <div>
+              <h3 className="text-xs uppercase tracking-widest font-bold text-white/40 mb-3">Popular cities</h3>
+              <ul className="space-y-2 text-sm">
+                {[
+                  { slug: "things-to-do-in-newark", name: "Newark" },
+                  { slug: "things-to-do-in-jersey-city", name: "Jersey City" },
+                  { slug: "things-to-do-in-hoboken", name: "Hoboken" },
+                  { slug: "things-to-do-in-trenton", name: "Trenton" },
+                  { slug: "things-to-do-in-atlantic-city", name: "Atlantic City" },
+                  { slug: "things-to-do-in-east-rutherford", name: "East Rutherford" },
+                ].map((c) => (
+                  <li key={c.slug}>
+                    <a href={`/${c.slug}`} className="text-muted-foreground hover:text-primary transition-colors" data-testid={`footer-city-${c.slug}`}>
+                      Things to do in {c.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-xs uppercase tracking-widest font-bold text-white/40 mb-3">By event type</h3>
+              <ul className="space-y-2 text-sm">
+                {[
+                  { slug: "brunches-in-nj", label: "Brunches in NJ" },
+                  { slug: "day-parties-in-nj", label: "Day Parties in NJ" },
+                  { slug: "concerts-in-nj", label: "Concerts in NJ" },
+                  { slug: "comedy-shows-in-nj", label: "Comedy Shows in NJ" },
+                  { slug: "nightlife-in-nj", label: "Nightlife in NJ" },
+                  { slug: "live-music-in-nj", label: "Live Music in NJ" },
+                ].map((t) => (
+                  <li key={t.slug}>
+                    <a href={`/${t.slug}`} className="text-muted-foreground hover:text-primary transition-colors" data-testid={`footer-type-${t.slug}`}>
+                      {t.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-xs uppercase tracking-widest font-bold text-white/40 mb-3">This week</h3>
+              <ul className="space-y-2 text-sm">
+                <li><a href="/things-to-do-in-nj-this-weekend" className="text-muted-foreground hover:text-primary transition-colors">Things to do in NJ this weekend</a></li>
+                <li><a href="/things-to-do-in-nj-tonight" className="text-muted-foreground hover:text-primary transition-colors">Things to do in NJ tonight</a></li>
+                <li><a href="/free-things-to-do-in-nj" className="text-muted-foreground hover:text-primary transition-colors">Free things to do in NJ</a></li>
+                <li><a href="/world-cup-2026-nj-guide" className="text-muted-foreground hover:text-primary transition-colors">World Cup 2026 NJ Guide</a></li>
+                <li><a href="/blog" className="text-muted-foreground hover:text-primary transition-colors">Weekly Newsletter</a></li>
+                <li><a href="/faq" className="text-muted-foreground hover:text-primary transition-colors">FAQ</a></li>
+              </ul>
+            </div>
+          </div>
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center">
               <img

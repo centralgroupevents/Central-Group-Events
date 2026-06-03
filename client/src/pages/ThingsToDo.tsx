@@ -312,6 +312,71 @@ export default function ThingsToDo() {
           {/* Bottom ad slot */}
           <AdBanner slot={adBottom} label="Bottom" />
         </div>
+
+        {/* Browse-by sections — internal links to all topic landing pages.
+            Topical-authority signal for Google, navigation aid for users. */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-12 space-y-12 border-t border-white/5 mt-12">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Browse by city</h2>
+            <p className="text-muted-foreground text-sm mb-6">Jump straight to the events happening in any New Jersey city.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {[
+                "newark","jersey-city","hoboken","trenton","atlantic-city",
+                "east-rutherford","montclair","new-brunswick","edison","cherry-hill",
+                "bloomfield","camden","paterson","elizabeth","passaic",
+                "plainfield","westfield","englewood","hamilton","iselin",
+                "linden","madison","roselle-park","somerville","west-orange","edgewater",
+              ].map((slug) => {
+                const name = slug.split("-").map((s) => s[0].toUpperCase() + s.slice(1)).join(" ");
+                return (
+                  <a
+                    key={slug}
+                    href={`/things-to-do-in-${slug}`}
+                    className="text-sm text-white/70 hover:text-primary transition-colors py-1.5"
+                    data-testid={`browse-city-${slug}`}
+                  >
+                    Things to do in {name} →
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Browse by event type</h2>
+            <p className="text-muted-foreground text-sm mb-6">Filter the NJ events scene by what you're in the mood for.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {[
+                { slug: "brunches-in-nj", label: "Brunches in NJ" },
+                { slug: "day-parties-in-nj", label: "Day Parties in NJ" },
+                { slug: "concerts-in-nj", label: "Concerts in NJ" },
+                { slug: "comedy-shows-in-nj", label: "Comedy Shows in NJ" },
+                { slug: "happy-hours-in-nj", label: "Happy Hours in NJ" },
+                { slug: "live-music-in-nj", label: "Live Music in NJ" },
+                { slug: "nightlife-in-nj", label: "Nightlife in NJ" },
+                { slug: "festivals-in-nj", label: "Festivals in NJ" },
+              ].map((t) => (
+                <a
+                  key={t.slug}
+                  href={`/${t.slug}`}
+                  className="text-sm text-white/70 hover:text-primary transition-colors py-1.5"
+                  data-testid={`browse-type-${t.slug}`}
+                >
+                  {t.label} →
+                </a>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Plan around your week</h2>
+            <p className="text-muted-foreground text-sm mb-6">Time-targeted lists for casual scrolling.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
+              <a href="/things-to-do-in-nj-this-weekend" className="text-sm text-white/70 hover:text-primary transition-colors py-1.5">Things to do in NJ this weekend →</a>
+              <a href="/things-to-do-in-nj-tonight" className="text-sm text-white/70 hover:text-primary transition-colors py-1.5">Things to do in NJ tonight →</a>
+              <a href="/free-things-to-do-in-nj" className="text-sm text-white/70 hover:text-primary transition-colors py-1.5">Free things to do in NJ →</a>
+              <a href="/world-cup-2026-nj-guide" className="text-sm text-white/70 hover:text-primary transition-colors py-1.5">World Cup 2026 NJ Guide →</a>
+            </div>
+          </div>
+        </div>
         </>
         )}
       </section>

@@ -99,7 +99,12 @@ export async function registerRoutes(
   app.get("/sitemap.xml", async (_req: Request, res: Response) => {
     console.log("[sitemap] GET /sitemap.xml hit");
     try {
-      const publishedPosts = await storage.getPublishedPosts();
+      const { getAllTopics, countMatchingEvents } = await import("@shared/seo-topics");
+      const [publishedPosts, allEvents] = await Promise.all([
+        storage.getPublishedPosts(),
+        storage.getEvents(undefined, false),
+      ]);
+
       const postEntries = publishedPosts
         .map(
           (p) => `
@@ -108,9 +113,24 @@ export async function registerRoutes(
     <lastmod>${p.publishedAt ? new Date(p.publishedAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
-  </url>`
+  </url>`,
         )
         .join("");
+
+      // Topic landing pages — Tier 2 pages are only included if they have at least
+      // 3 matching events this week (otherwise they're noindex anyway).
+      const topicEntries = getAllTopics()
+        .filter((t) => t.alwaysIndex || countMatchingEvents(allEvents, t.filter) >= 3)
+        .map(
+          (t) => `
+  <url>
+    <loc>https://www.centralgroupevents.com/${t.slug}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>${t.pageType === "tentpole" ? "0.9" : t.alwaysIndex ? "0.8" : "0.7"}</priority>
+  </url>`,
+        )
+        .join("");
+
       const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -132,9 +152,9 @@ export async function registerRoutes(
     <loc>https://www.centralgroupevents.com/faq</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
-  </url>${postEntries}
+  </url>${topicEntries}${postEntries}
 </urlset>`;
-      console.log(`[sitemap] returning ${publishedPosts.length} blog entries`);
+      console.log(`[sitemap] returning ${publishedPosts.length} blog entries + topic landings`);
       res.setHeader("Content-Type", "application/xml; charset=utf-8");
       res.setHeader("Cache-Control", "public, max-age=3600");
       res.status(200).send(xml);
