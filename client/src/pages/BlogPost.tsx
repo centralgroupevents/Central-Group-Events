@@ -226,17 +226,23 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
             image={post.coverImageUrl || undefined}
             type="article"
             publishedAt={post.publishedAt}
+            jsonLd={{
+              "@context": "https://schema.org",
+              "@type": "Article",
+              "headline": post.title,
+              "description": post.excerpt,
+              "image": post.coverImageUrl,
+              "datePublished": post.publishedAt,
+              "mainEntityOfPage": `https://www.centralgroupevents.com/blog/${slug}`,
+              "author": { "@type": "Organization", "name": "Central Group Events" },
+              "publisher": {
+                "@type": "Organization",
+                "name": "Central Group Events",
+                "url": "https://www.centralgroupevents.com",
+                "logo": { "@type": "ImageObject", "url": "https://www.centralgroupevents.com/favicon.png" },
+              },
+            }}
           />
-          <script type="application/ld+json">{JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "Article",
-            "headline": post.title,
-            "description": post.excerpt,
-            "image": post.coverImageUrl,
-            "datePublished": post.publishedAt,
-            "author": { "@type": "Organization", "name": "Central Group Events" },
-            "publisher": { "@type": "Organization", "name": "Central Group Events", "url": "https://www.centralgroupevents.com" }
-          })}</script>
         </>
       )}
       <Navigation />

@@ -12,6 +12,7 @@ interface SEOProps {
   type?: "website" | "article";
   publishedAt?: string | null;
   noindex?: boolean;
+  jsonLd?: object | object[];
 }
 
 export function SEO({
@@ -23,9 +24,11 @@ export function SEO({
   type = "website",
   publishedAt,
   noindex = false,
+  jsonLd,
 }: SEOProps) {
   const ogImage = image || DEFAULT_IMAGE;
   const fullTitle = `${title} | ${SITE_NAME}`;
+  const schemas = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 
   return (
     <Helmet>
@@ -56,6 +59,11 @@ export function SEO({
       {type === "article" && (
         <meta property="article:author" content={SITE_NAME} />
       )}
+
+      {/* Structured data (JSON-LD) — must live inside <Helmet> to be injected into <head> */}
+      {schemas.map((schema, i) => (
+        <script key={i} type="application/ld+json">{JSON.stringify(schema)}</script>
+      ))}
     </Helmet>
   );
 }

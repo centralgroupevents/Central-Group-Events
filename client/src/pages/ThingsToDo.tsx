@@ -65,7 +65,7 @@ function AdBanner({ slot, label }: { slot: AdSlot | null; label: string }) {
   );
 }
 
-function EmailGate({ heroTitle, description }: { heroTitle: string; description: string }) {
+function UnlockPrompt() {
   const qc = useQueryClient();
   const [email, setEmail] = useState("");
   const [region, setRegion] = useState("");
@@ -108,15 +108,14 @@ function EmailGate({ heroTitle, description }: { heroTitle: string; description:
   }
 
   return (
-    <div className="max-w-md mx-auto px-4 sm:px-6 mt-20 mb-32" data-testid="things-to-do-gate">
-      <div className="bg-white/[0.03] border border-white/10 rounded-3xl p-8 backdrop-blur-md text-center space-y-5 shadow-2xl">
-        <div className="space-y-2">
-          <h2 className="text-2xl font-black text-white">{heroTitle}</h2>
-          <p className="text-sm text-muted-foreground">{description}</p>
+    <div className="max-w-md mx-auto my-10" data-testid="things-to-do-unlock-prompt">
+      <div className="bg-primary/10 border border-primary/30 rounded-3xl p-8 backdrop-blur-md text-center space-y-5 shadow-2xl">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-black text-white">Want the full list?</h2>
+          <p className="text-sm text-muted-foreground">
+            Drop your email to unlock the rest of this week's events — plus our weekly NJ newsletter. Free, no spam.
+          </p>
         </div>
-        <p className="text-sm text-white/80">
-          Get the free weekly list — drop your email to unlock the full schedule.
-        </p>
         <form onSubmit={handleSubmit} className="space-y-3 text-left">
           <Input
             type="email"
@@ -124,7 +123,6 @@ function EmailGate({ heroTitle, description }: { heroTitle: string; description:
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            autoFocus
             className="bg-black/40 border-white/10 h-11 text-white rounded-xl"
             data-testid="input-things-to-do-email"
           />
@@ -146,10 +144,9 @@ function EmailGate({ heroTitle, description }: { heroTitle: string; description:
             className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl"
             data-testid="button-things-to-do-subscribe"
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Unlock the list"}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Unlock the full list"}
           </Button>
         </form>
-        <p className="text-xs text-muted-foreground">Free every week. No spam.</p>
       </div>
     </div>
   );
@@ -199,12 +196,6 @@ export default function ThingsToDo() {
           <div className="flex justify-center items-center min-h-[60vh]">
             <Loader2 className="w-10 h-10 animate-spin text-primary" />
           </div>
-        ) : !hasAccess ? (
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            {/* Show the top sponsored slot above the gate so sponsors still get impressions */}
-            <AdBanner slot={adTop} label="Top" />
-            <EmailGate heroTitle={heroTitle} description={description} />
-          </div>
         ) : (
         <>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -253,6 +244,7 @@ export default function ThingsToDo() {
             <div className="flex-1 min-w-0">
               <EventBrowser
                 pinFeatured
+                maxItems={hasAccess ? undefined : 5}
                 inlineAd={
                   adMid && adMid.imageUrl ? (
                     <div>
@@ -297,6 +289,14 @@ export default function ThingsToDo() {
             )}
           </div>
         </div>
+
+        {/* Inline unlock prompt — replaces the old hard email gate so 5 teaser events
+            are crawl-able and visible to first-time visitors. */}
+        {!hasAccess && (
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <UnlockPrompt />
+          </div>
+        )}
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           {/* Bottom ad slot */}
