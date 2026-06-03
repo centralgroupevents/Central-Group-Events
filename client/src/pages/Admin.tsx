@@ -198,7 +198,7 @@ function downloadCsv(filename: string, headers: string[], rows: (string | number
   URL.revokeObjectURL(url);
 }
 
-function Sparkline({ data, color = "var(--primary)" }: { data: { date: string; count: number }[]; color?: string }) {
+function Sparkline({ data, color = "hsl(280 62% 48%)" }: { data: { date: string; count: number }[]; color?: string }) {
   if (!data.length || data.every((d) => d.count === 0)) {
     return <div className="h-10 flex items-end text-[10px] text-muted-foreground/60">no activity</div>;
   }
@@ -1448,19 +1448,19 @@ function AnalyticsTab() {
   const sparkSpan = rangeDays ?? 30;
 
   // Stat values: window-scoped for a finite range; lifetime when "All".
-  const subsValue = isAll ? (data?.totalSubscribers ?? 0) : (data?.window.subscribers ?? 0);
+  const subsValue = isAll ? (data?.totalSubscribers ?? 0) : (data?.window?.subscribers ?? 0);
   const viewsLifetime = data?.postViews?.reduce((s, p) => s + p.views, 0) ?? 0;
-  const viewsValue = isAll ? viewsLifetime : (data?.window.postViews ?? 0);
+  const viewsValue = isAll ? viewsLifetime : (data?.window?.postViews ?? 0);
   const clicksLifetime = data?.linkClicks?.reduce((s, c) => s + c.count, 0) ?? 0;
-  const clicksValue = isAll ? clicksLifetime : (data?.window.linkClicks ?? 0);
+  const clicksValue = isAll ? clicksLifetime : (data?.window?.linkClicks ?? 0);
 
-  const subsChange = isAll ? null : percentChange(data?.window.subscribers ?? 0, data?.window.prior.subscribers ?? 0);
-  const viewsChange = isAll ? null : percentChange(data?.window.postViews ?? 0, data?.window.prior.postViews ?? 0);
-  const clicksChange = isAll ? null : percentChange(data?.window.linkClicks ?? 0, data?.window.prior.linkClicks ?? 0);
+  const subsChange = isAll ? null : percentChange(data?.window?.subscribers ?? 0, data?.window?.prior?.subscribers ?? 0);
+  const viewsChange = isAll ? null : percentChange(data?.window?.postViews ?? 0, data?.window?.prior?.postViews ?? 0);
+  const clicksChange = isAll ? null : percentChange(data?.window?.linkClicks ?? 0, data?.window?.prior?.linkClicks ?? 0);
 
-  const subsSpark = fillDailySeries(data?.daily.subscribers ?? [], sparkSpan);
-  const viewsSpark = fillDailySeries(data?.daily.postViews ?? [], sparkSpan);
-  const clicksSpark = fillDailySeries(data?.daily.linkClicks ?? [], sparkSpan);
+  const subsSpark = fillDailySeries(data?.daily?.subscribers ?? [], sparkSpan);
+  const viewsSpark = fillDailySeries(data?.daily?.postViews ?? [], sparkSpan);
+  const clicksSpark = fillDailySeries(data?.daily?.linkClicks ?? [], sparkSpan);
 
   function renderChange(change: ReturnType<typeof percentChange>) {
     if (change === null) {
