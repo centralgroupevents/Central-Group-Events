@@ -266,7 +266,14 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
         {/* Cover image */}
         {post.coverImageUrl && (
           <div className="h-64 md:h-80 rounded-2xl overflow-hidden mb-8">
-            <img src={post.coverImageUrl} alt={post.title} className="w-full h-full object-cover" />
+            <img
+              src={post.coverImageUrl}
+              alt={post.title}
+              className="w-full h-full object-cover"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+            />
           </div>
         )}
 
