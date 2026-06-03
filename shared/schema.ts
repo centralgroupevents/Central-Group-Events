@@ -33,6 +33,9 @@ export const promotionBookings = pgTable("promotion_bookings", {
   readyToMoveForward: text("ready_to_move_forward"),
   status: text("status").default("New"),
   adminNotes: text("admin_notes"),
+  contactedAt: timestamp("contacted_at"),
+  paidAt: timestamp("paid_at"),
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
