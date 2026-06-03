@@ -357,30 +357,6 @@ export default function Book() {
     hasSavedRef.current = true;
     setSaveStatus("saving");
 
-    // Persist summary so confirmation page can read it
-    try {
-      sessionStorage.setItem(
-        "cge_booking_summary",
-        JSON.stringify({
-          mode: data.mode,
-          budgetRange: data.budgetRange,
-          eventName: data.eventName,
-          eventType: data.eventType,
-          eventTypeOther: data.eventTypeOther,
-          eventDate: data.eventDate,
-          eventTime: data.eventTime,
-          venueName: data.venueName,
-          city: data.city,
-          region: data.region,
-          contactName: data.contactName,
-          email: data.email,
-          instagramHandle: data.instagramHandle,
-        })
-      );
-    } catch {
-      // ignore storage errors
-    }
-
     const payload = {
       mode: data.mode,
       budgetRange: data.budgetRange,
@@ -399,12 +375,42 @@ export default function Book() {
     };
 
     apiRequest("POST", "/api/bookings", payload)
-      .then(() => {
+      .then(async (res) => {
+        let referenceId: string | undefined;
+        try {
+          const json = await res.json();
+          referenceId = json.referenceId;
+        } catch {
+          // ignore parse errors
+        }
+        try {
+          sessionStorage.setItem(
+            "cge_booking_summary",
+            JSON.stringify({
+              referenceId,
+              mode: data.mode,
+              budgetRange: data.budgetRange,
+              eventName: data.eventName,
+              eventType: data.eventType,
+              eventTypeOther: data.eventTypeOther,
+              eventDate: data.eventDate,
+              eventTime: data.eventTime,
+              venueName: data.venueName,
+              city: data.city,
+              region: data.region,
+              contactName: data.contactName,
+              email: data.email,
+              instagramHandle: data.instagramHandle,
+            })
+          );
+        } catch {
+          // ignore storage errors
+        }
         setSaveStatus("saved");
         fetch("/api/funnel/track", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ step: "Submitted", sessionId: sessionIdRef.current, metadata: { mode: data.mode } }),
+          body: JSON.stringify({ step: "Submitted", sessionId: sessionIdRef.current, metadata: { mode: data.mode, referenceId } }),
           keepalive: true,
         }).catch(() => {});
       })
@@ -1022,11 +1028,13 @@ export default function Book() {
               </Button>
               <Button
                 onClick={() => navigate("/booking-confirmation")}
+                disabled={saveStatus === "saving"}
                 data-testid="button-view-confirmation"
-                className="bg-primary hover:bg-primary/90 text-white font-semibold px-8 rounded-xl w-full sm:w-auto"
+                className="bg-primary hover:bg-primary/90 text-white font-semibold px-8 rounded-xl w-full sm:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Done — View Confirmation
-                <ChevronRight className="w-4 h-4 ml-1" />
+                {saveStatus === "saving" ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</>
+                ) : <>Done — View Confirmation <ChevronRight className="w-4 h-4 ml-1" /></>}
               </Button>
             </div>
           )}
