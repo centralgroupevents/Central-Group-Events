@@ -159,6 +159,19 @@ type AnalyticsData = {
   };
 };
 
+type EventAnalyticsData = {
+  events: { eventId: number; title: string; date: string; region: string; city: string | null; clicks: number }[];
+  regions: { region: string; clicks: number; events: number }[];
+  cities: { city: string; region: string; clicks: number }[];
+  sources: {
+    subscriberSources: { referrer: string; count: number }[];
+    clickSourcePages: { sourcePage: string; count: number }[];
+  };
+  funnel: { step: string; sessions: number }[];
+};
+
+const FUNNEL_STEPS_ORDER = ["Package", "Event Details", "Logistics", "Contact Info", "Terms", "Payment", "Submitted"];
+
 const ANALYTICS_RANGES = [
   { label: "7d",  days: 7 },
   { label: "30d", days: 30 },
@@ -1446,6 +1459,16 @@ function AnalyticsTab() {
     },
   });
 
+  const { data: eventData } = useQuery<EventAnalyticsData>({
+    queryKey: ["/api/analytics/events", rangeDays],
+    queryFn: async () => {
+      const url = rangeDays ? `/api/analytics/events?days=${rangeDays}` : "/api/analytics/events";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
   const isAll = rangeDays === null;
   const rangeLabel = isAll ? "All time" : `Last ${rangeDays}d`;
   const sparkSpan = rangeDays ?? 30;
@@ -1671,6 +1694,208 @@ function AnalyticsTab() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Event Performance ─── */}
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-white">Top Events by Ticket Clicks</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Events ranked by clicks on their "Learn more" link {rangeLabel.toLowerCase()}</p>
+          </div>
+          {!!eventData?.events?.length && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-white/20 text-white/70 h-8"
+              onClick={() => downloadCsv(
+                "event-performance.csv",
+                ["Event", "Date", "Region", "City", "Clicks"],
+                eventData.events.map((e) => [e.title, e.date, e.region, e.city ?? "", e.clicks]),
+              )}
+              data-testid="button-export-event-performance"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
+            </Button>
+          )}
+        </div>
+        {!eventData?.events?.length ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+            No event ticket clicks yet. Clicks are tracked when visitors click the "Learn more" button on an event card.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left">
+                  <th className="px-6 py-3 font-medium">Event</th>
+                  <th className="px-4 py-3 font-medium">Date</th>
+                  <th className="px-4 py-3 font-medium">Location</th>
+                  <th className="px-4 py-3 font-medium text-right">Clicks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eventData.events.map((e, i) => (
+                  <tr key={e.eventId} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                    <td className="px-6 py-3 font-medium text-white max-w-xs truncate">{e.title}</td>
+                    <td className="px-4 py-3 text-white/70 whitespace-nowrap">
+                      {new Date(e.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </td>
+                    <td className="px-4 py-3 text-white/70">{[e.city, e.region].filter(Boolean).join(", ")}</td>
+                    <td className="px-4 py-3 text-right text-white font-semibold">{e.clicks.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Top Regions + Top Cities side-by-side ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-white/10">
+            <h3 className="font-bold text-white">Top Regions</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Where the clicks are happening</p>
+          </div>
+          {!eventData?.regions?.length ? (
+            <div className="py-8 px-6 text-center text-muted-foreground text-sm">
+              No regional data yet. Populates as visitors click "Learn more" on events.
+            </div>
+          ) : (
+            <div className="divide-y divide-white/5">
+              {(() => {
+                const maxClicks = Math.max(...eventData.regions.map((r) => r.clicks), 1);
+                return eventData.regions.map((r) => (
+                  <div key={r.region} className="px-6 py-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white font-medium">{r.region}</span>
+                      <span className="text-white/60 text-xs">
+                        <span className="text-white font-semibold">{r.clicks.toLocaleString()}</span> click{r.clicks !== 1 ? "s" : ""} · {r.events} event{r.events !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="mt-2 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full" style={{ width: `${(r.clicks / maxClicks) * 100}%` }} />
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+        </div>
+        <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-white/10">
+            <h3 className="font-bold text-white">Top Cities</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Top 10 by event ticket clicks</p>
+          </div>
+          {!eventData?.cities?.length ? (
+            <div className="py-8 px-6 text-center text-muted-foreground text-sm">
+              No city data yet.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <tbody>
+                {eventData.cities.map((c, i) => (
+                  <tr key={`${c.city}-${i}`} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                    <td className="px-6 py-3 text-white">{c.city}<span className="text-white/40 text-xs ml-1.5">{c.region}</span></td>
+                    <td className="px-4 py-3 text-right text-white/80 font-semibold">{c.clicks.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Traffic Sources ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-white/10">
+            <h3 className="font-bold text-white">Subscriber Sources</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Where new subscribers came from</p>
+          </div>
+          {!eventData?.sources?.subscriberSources?.length ? (
+            <div className="py-8 px-6 text-center text-muted-foreground text-sm">No subscriber sources yet.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <tbody>
+                {eventData.sources.subscriberSources.map((s, i) => (
+                  <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                    <td className="px-6 py-3 text-white">{s.referrer || "direct"}</td>
+                    <td className="px-4 py-3 text-right text-white/80 font-semibold">{s.count.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-white/10">
+            <h3 className="font-bold text-white">Click Source Pages</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Pages that drove the most outbound clicks</p>
+          </div>
+          {!eventData?.sources?.clickSourcePages?.length ? (
+            <div className="py-8 px-6 text-center text-muted-foreground text-sm">No source page data yet.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <tbody>
+                {eventData.sources.clickSourcePages.map((s, i) => (
+                  <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                    <td className="px-6 py-3 text-white/80 text-xs truncate max-w-xs" title={s.sourcePage}>
+                      {s.sourcePage.replace(/^https?:\/\/[^/]+/, "") || "/"}
+                    </td>
+                    <td className="px-4 py-3 text-right text-white/80 font-semibold">{s.count.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* ─── Booking Funnel ─── */}
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-white/10">
+          <h3 className="font-bold text-white">Booking Wizard Funnel</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Unique sessions that reached each step of /book {rangeLabel.toLowerCase()}</p>
+        </div>
+        {!eventData?.funnel?.length ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+            No funnel data yet. Sessions are tracked as visitors progress through the booking wizard at /book.
+          </div>
+        ) : (
+          <div className="px-6 py-4 space-y-2">
+            {(() => {
+              const byStep = new Map(eventData.funnel.map((f) => [f.step, f.sessions]));
+              const ordered = FUNNEL_STEPS_ORDER.map((step) => ({ step, sessions: byStep.get(step) ?? 0 }));
+              const top = ordered[0]?.sessions ?? 1;
+              return ordered.map((row, i) => {
+                const prev = i > 0 ? ordered[i - 1].sessions : null;
+                const dropoff = prev && prev > 0 ? Math.round(((prev - row.sessions) / prev) * 100) : null;
+                const widthPct = top > 0 ? (row.sessions / top) * 100 : 0;
+                return (
+                  <div key={row.step}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-white font-medium w-32 shrink-0">{row.step}</span>
+                      <span className="text-white/60 text-xs flex items-center gap-2">
+                        <span className="text-white font-semibold">{row.sessions.toLocaleString()}</span>
+                        {dropoff !== null && dropoff > 0 && (
+                          <span className="text-red-400 text-[11px]">−{dropoff}%</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${row.step === "Submitted" ? "bg-green-500" : "bg-primary"}`}
+                        style={{ width: `${widthPct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         )}
       </div>
@@ -2022,20 +2247,6 @@ function resolveDayToIsoDate(day: string, weekStartIso: string): string {
   if (isNaN(anchor.getTime())) return "";
   anchor.setDate(anchor.getDate() + offset);
   return buildIsoDate(anchor.getFullYear(), anchor.getMonth() + 1, anchor.getDate());
-}
-
-function packageDealValue(mode: string | null | undefined): { label: string; numeric: number } {
-  switch ((mode || "").toLowerCase()) {
-    case "basic":   return { label: "FREE",   numeric: 0 };
-    case "starter": return { label: "$70",    numeric: 70 };
-    case "growth":  return { label: "$150",   numeric: 150 };
-    case "custom":  return { label: "$300+",  numeric: 300 };
-    default:        return { label: "—",      numeric: 0 };
-  }
-}
-
-function phoneDigits(phone: string): string {
-  return phone.replace(/[^\d]/g, "");
 }
 
 function getUpcomingMondayIso(): string {

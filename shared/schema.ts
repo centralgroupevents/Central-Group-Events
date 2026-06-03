@@ -117,9 +117,18 @@ export const postViews = pgTable("post_views", {
 export const linkClicks = pgTable("link_clicks", {
   id: serial("id").primaryKey(),
   postId: integer("post_id").references(() => posts.id),
+  eventId: integer("event_id").references(() => events.id),
   url: text("url").notNull(),
   sourcePage: text("source_page"),
   clickedAt: timestamp("clicked_at").defaultNow(),
+});
+
+export const funnelEvents = pgTable("funnel_events", {
+  id: serial("id").primaryKey(),
+  step: text("step").notNull(),
+  sessionId: text("session_id"),
+  metadata: text("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const comments = pgTable("comments", {
@@ -169,6 +178,7 @@ export const insertPostSchema = createInsertSchema(posts).omit({ id: true, creat
 export const insertPostVersionSchema = createInsertSchema(postVersions).omit({ id: true, savedAt: true });
 export const insertPostViewSchema = createInsertSchema(postViews).omit({ id: true, viewedAt: true });
 export const insertLinkClickSchema = createInsertSchema(linkClicks).omit({ id: true, clickedAt: true });
+export const insertFunnelEventSchema = createInsertSchema(funnelEvents).omit({ id: true, createdAt: true });
 export const insertCommentSchema = createInsertSchema(comments).omit({ id: true, createdAt: true }).extend({
   body: z.string().min(1, "Comment cannot be empty").max(2000),
   parentId: z.number().optional().nullable(),
@@ -210,6 +220,9 @@ export type InsertPostView = z.infer<typeof insertPostViewSchema>;
 
 export type LinkClick = typeof linkClicks.$inferSelect;
 export type InsertLinkClick = z.infer<typeof insertLinkClickSchema>;
+
+export type FunnelEvent = typeof funnelEvents.$inferSelect;
+export type InsertFunnelEvent = z.infer<typeof insertFunnelEventSchema>;
 
 export type Comment = typeof comments.$inferSelect;
 export type InsertComment = z.infer<typeof insertCommentSchema>;
