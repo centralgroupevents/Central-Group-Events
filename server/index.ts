@@ -17,7 +17,25 @@ declare module "http" {
 
 app.use(
   helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === "production",
+    contentSecurityPolicy:
+      process.env.NODE_ENV === "production"
+        ? {
+            useDefaults: true,
+            directives: {
+              "img-src": [
+                "'self'",
+                "data:",
+                "https://res.cloudinary.com",
+                "https://*.cloudinary.com",
+                "https://images.unsplash.com",
+                "https://storage.googleapis.com",
+                "https://avatars.githubusercontent.com",
+              ],
+              "script-src": ["'self'", "https://replit-cdn.com"],
+              "connect-src": ["'self'", "https://res.cloudinary.com"],
+            },
+          }
+        : false,
   })
 );
 
