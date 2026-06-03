@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SEO } from "@/components/SEO";
 
 interface BookingSummary {
+  referenceId?: string;
   mode: string;
   budgetRange: string;
   eventName: string;
@@ -120,8 +121,17 @@ export default function BookingConfirmation() {
               ? `Thanks, ${booking.contactName}! Your booking has been submitted.`
               : "Thank you! Your booking has been submitted."}
           </p>
+          {booking?.referenceId && (
+            <div
+              className="inline-flex items-center gap-2 mt-4 px-5 py-2.5 rounded-full bg-primary/10 border border-primary/30"
+              data-testid="booking-reference-id"
+            >
+              <span className="text-xs text-white/50 uppercase tracking-widest font-semibold">Booking Ref</span>
+              <span className="text-primary font-black text-lg tracking-wide">{booking.referenceId}</span>
+            </div>
+          )}
           {booking?.email && (
-            <p className="text-sm text-white/40 mt-2">
+            <p className="text-sm text-white/40 mt-3">
               We'll reach out at <span className="text-white/70">{booking.email}</span>
             </p>
           )}
