@@ -272,24 +272,40 @@ export class DatabaseStorage implements IStorage {
   async bulkImportEvents(
     rows: InsertEvent[],
   ): Promise<{ imported: number; duplicates: { title: string; existingId: number; existingDate: string }[] }> {
-    let imported = 0;
-    const duplicates: { title: string; existingId: number; existingDate: string }[] = [];
-    for (const row of rows) {
-      // Match on title + date so two events with the same name on different dates aren't treated as dupes.
-      const existing = await db
-        .select({ id: events.id, date: events.date })
-        .from(events)
-        .where(and(eq(events.title, row.title), eq(events.date, row.date)))
-        .limit(1);
-      if (existing.length > 0) {
-        duplicates.push({ title: row.title, existingId: existing[0].id, existingDate: existing[0].date });
-      } else {
-        const normalized = { ...row, region: normalizeRegion(row.region) || row.region };
-        await db.insert(events).values(normalized);
-        imported++;
-      }
+    if (rows.length === 0) return { imported: 0, duplicates: [] };
+
+    // Single SELECT for all titles in the batch, then dedupe (title, date) in memory.
+    // Replaces an N+1 loop that timed out on 100+ row imports.
+    const uniqueTitles = Array.from(new Set(rows.map((r) => r.title)));
+    const existingMatches = await db
+      .select({ id: events.id, title: events.title, date: events.date })
+      .from(events)
+      .where(inArray(events.title, uniqueTitles));
+
+    const existingByKey = new Map<string, { id: number; date: string }>();
+    for (const e of existingMatches) {
+      existingByKey.set(`${e.title}|${e.date}`, { id: e.id, date: e.date });
     }
-    return { imported, duplicates };
+
+    const duplicates: { title: string; existingId: number; existingDate: string }[] = [];
+    const toInsert: InsertEvent[] = [];
+    const seenInBatch = new Set<string>();
+    for (const row of rows) {
+      const key = `${row.title}|${row.date}`;
+      const dbHit = existingByKey.get(key);
+      if (dbHit) {
+        duplicates.push({ title: row.title, existingId: dbHit.id, existingDate: dbHit.date });
+        continue;
+      }
+      if (seenInBatch.has(key)) continue;
+      seenInBatch.add(key);
+      toInsert.push({ ...row, region: normalizeRegion(row.region) || row.region });
+    }
+
+    if (toInsert.length > 0) {
+      await db.insert(events).values(toInsert);
+    }
+    return { imported: toInsert.length, duplicates };
   }
 
   // ── Pages ─────────────────────────────────────────────────────────────
