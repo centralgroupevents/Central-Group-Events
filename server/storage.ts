@@ -335,11 +335,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteEvent(id: number): Promise<void> {
+    // link_clicks.event_id FKs the events table — null them out first to satisfy
+    // the constraint. Click analytics rows survive (just no longer attributed
+    // to the deleted event).
+    await db.update(linkClicks).set({ eventId: null }).where(eq(linkClicks.eventId, id));
     await db.delete(events).where(eq(events.id, id));
   }
 
   async bulkDeleteEvents(ids: number[]): Promise<void> {
     if (ids.length === 0) return;
+    await db.update(linkClicks).set({ eventId: null }).where(inArray(linkClicks.eventId, ids));
     await db.delete(events).where(inArray(events.id, ids));
   }
 

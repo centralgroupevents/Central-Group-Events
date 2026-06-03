@@ -2379,6 +2379,7 @@ export default function Admin() {
   const [weekAnchor, setWeekAnchor] = useState<string>(getUpcomingMondayIso());
   const [genreIsOther, setGenreIsOther] = useState(false);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
+  const [lastClickedEventIndex, setLastClickedEventIndex] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [inlineEdit, setInlineEdit] = useState<{ id: number; field: string; value: string } | null>(null);
   const [inlineSaved, setInlineSaved] = useState<{ id: number; field: string } | null>(null);
@@ -2988,7 +2989,7 @@ export default function Admin() {
                           return (
                             <span
                               className="cursor-pointer hover:bg-white/10 rounded px-1 py-0.5 transition-colors flex items-center gap-1 group"
-                              onClick={() => setInlineEdit({ id: event.id, field, value: value || "" })}
+                              onClick={(e) => { e.stopPropagation(); setInlineEdit({ id: event.id, field, value: value || "" }); }}
                               title="Click to edit"
                             >
                               {isSaved && <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />}
@@ -2998,8 +2999,44 @@ export default function Admin() {
                           );
                         }
 
+                        const isRowSelected = selectedEventIds.has(event.id);
+                        const handleRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
+                          // Skip if click landed on any interactive element — preserves inline editing,
+                          // edit/delete buttons, featured toggle, and links.
+                          const target = e.target as HTMLElement;
+                          if (target.closest('input, button, a, textarea, [contenteditable="true"]')) return;
+                          const next = new Set(selectedEventIds);
+                          if (e.shiftKey && lastClickedEventIndex !== null) {
+                            // Range select: include every row between last-clicked and current
+                            const lo = Math.min(lastClickedEventIndex, i);
+                            const hi = Math.max(lastClickedEventIndex, i);
+                            for (let j = lo; j <= hi; j++) {
+                              const idAtJ = events[j]?.id;
+                              if (idAtJ !== undefined) next.add(idAtJ);
+                            }
+                          } else if (e.metaKey || e.ctrlKey) {
+                            // Toggle a single row without disturbing others
+                            if (next.has(event.id)) next.delete(event.id);
+                            else next.add(event.id);
+                          } else {
+                            // Plain click: toggle just this row
+                            if (next.has(event.id)) next.delete(event.id);
+                            else next.add(event.id);
+                          }
+                          setSelectedEventIds(next);
+                          setLastClickedEventIndex(i);
+                        };
                         return (
-                          <tr key={event.id} className={`border-b border-white/5 hover:bg-white/5 ${rowBg}`}>
+                          <tr
+                            key={event.id}
+                            onClick={handleRowClick}
+                            className={`border-b border-white/5 cursor-pointer transition-colors ${
+                              isRowSelected
+                                ? "bg-primary/10 hover:bg-primary/15 border-l-2 border-l-primary"
+                                : `hover:bg-white/5 ${rowBg}`
+                            }`}
+                            data-testid={`row-event-${event.id}`}
+                          >
                             <td className="px-3 py-3">
                               <input
                                 type="checkbox"
