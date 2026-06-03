@@ -8,6 +8,7 @@ import {
   postVersions,
   postViews,
   linkClicks,
+  funnelEvents,
   comments,
   pages,
   type InsertSubscriber,
@@ -111,8 +112,18 @@ export interface IStorage {
   getViewsByPost(postId: number): Promise<number>;
 
   // Link clicks
-  recordClick(url: string, postId?: number, sourcePage?: string): Promise<void>;
+  recordClick(url: string, postId?: number, sourcePage?: string, eventId?: number): Promise<void>;
   getClickStats(): Promise<{ url: string; count: number }[]>;
+
+  // Funnel tracking
+  recordFunnelStep(step: string, sessionId?: string, metadata?: string): Promise<void>;
+
+  // New analytics (event-level, regions, sources, funnel)
+  getEventPerformance(days?: number, limit?: number): Promise<{ eventId: number; title: string; date: string; region: string; city: string | null; clicks: number }[]>;
+  getTopRegions(days?: number): Promise<{ region: string; clicks: number; events: number }[]>;
+  getTopCities(days?: number, limit?: number): Promise<{ city: string; region: string; clicks: number }[]>;
+  getTrafficSources(days?: number): Promise<{ subscriberSources: { referrer: string; count: number }[]; clickSourcePages: { sourcePage: string; count: number }[] }>;
+  getBookingFunnel(days?: number): Promise<{ step: string; sessions: number }[]>;
 
   // Comments
   getCommentsByPost(postId: number): Promise<Comment[]>;
@@ -516,10 +527,11 @@ export class DatabaseStorage implements IStorage {
 
   // ── Link clicks ───────────────────────────────────────────────────────
 
-  async recordClick(url: string, postId?: number, sourcePage?: string): Promise<void> {
+  async recordClick(url: string, postId?: number, sourcePage?: string, eventId?: number): Promise<void> {
     await db.insert(linkClicks).values({
       url,
       postId: postId ?? null,
+      eventId: eventId ?? null,
       sourcePage: sourcePage ?? null,
     });
   }
@@ -531,6 +543,122 @@ export class DatabaseStorage implements IStorage {
       .groupBy(linkClicks.url)
       .orderBy(desc(count()));
     return rows.map((r) => ({ url: r.url, count: Number(r.total) }));
+  }
+
+  async recordFunnelStep(step: string, sessionId?: string, metadata?: string): Promise<void> {
+    await db.insert(funnelEvents).values({
+      step,
+      sessionId: sessionId ?? null,
+      metadata: metadata ?? null,
+    });
+  }
+
+  async getEventPerformance(days?: number, limit = 20) {
+    const since = days ? new Date(Date.now() - days * 86_400_000) : null;
+    const rows = await db
+      .select({
+        eventId: linkClicks.eventId,
+        title: events.title,
+        date: events.date,
+        region: events.region,
+        city: events.city,
+        clicks: count(),
+      })
+      .from(linkClicks)
+      .innerJoin(events, eq(linkClicks.eventId, events.id))
+      .where(since ? gte(linkClicks.clickedAt, since) : sql`TRUE`)
+      .groupBy(linkClicks.eventId, events.title, events.date, events.region, events.city)
+      .orderBy(desc(count()))
+      .limit(limit);
+    return rows.map((r) => ({
+      eventId: r.eventId ?? 0,
+      title: r.title,
+      date: r.date,
+      region: r.region,
+      city: r.city,
+      clicks: Number(r.clicks),
+    }));
+  }
+
+  async getTopRegions(days?: number) {
+    const since = days ? new Date(Date.now() - days * 86_400_000) : null;
+    const rows = await db
+      .select({
+        region: events.region,
+        clicks: count(linkClicks.id),
+        events: sql<number>`COUNT(DISTINCT ${events.id})`,
+      })
+      .from(linkClicks)
+      .innerJoin(events, eq(linkClicks.eventId, events.id))
+      .where(since ? gte(linkClicks.clickedAt, since) : sql`TRUE`)
+      .groupBy(events.region)
+      .orderBy(desc(count(linkClicks.id)));
+    return rows.map((r) => ({ region: r.region, clicks: Number(r.clicks), events: Number(r.events) }));
+  }
+
+  async getTopCities(days?: number, limit = 10) {
+    const since = days ? new Date(Date.now() - days * 86_400_000) : null;
+    const rows = await db
+      .select({
+        city: events.city,
+        region: events.region,
+        clicks: count(),
+      })
+      .from(linkClicks)
+      .innerJoin(events, eq(linkClicks.eventId, events.id))
+      .where(
+        and(
+          isNull(events.city) ? sql`FALSE` : sql`${events.city} IS NOT NULL`,
+          since ? gte(linkClicks.clickedAt, since) : sql`TRUE`,
+        ),
+      )
+      .groupBy(events.city, events.region)
+      .orderBy(desc(count()))
+      .limit(limit);
+    return rows
+      .filter((r) => r.city)
+      .map((r) => ({ city: r.city as string, region: r.region, clicks: Number(r.clicks) }));
+  }
+
+  async getTrafficSources(days?: number) {
+    const since = days ? new Date(Date.now() - days * 86_400_000) : null;
+    const subRows = await db
+      .select({ referrer: newsletterSubscribers.referrer, count: count() })
+      .from(newsletterSubscribers)
+      .where(since ? gte(newsletterSubscribers.createdAt, since) : sql`TRUE`)
+      .groupBy(newsletterSubscribers.referrer)
+      .orderBy(desc(count()));
+
+    const clickRows = await db
+      .select({ sourcePage: linkClicks.sourcePage, count: count() })
+      .from(linkClicks)
+      .where(
+        and(
+          sql`${linkClicks.sourcePage} IS NOT NULL`,
+          since ? gte(linkClicks.clickedAt, since) : sql`TRUE`,
+        ),
+      )
+      .groupBy(linkClicks.sourcePage)
+      .orderBy(desc(count()))
+      .limit(10);
+
+    return {
+      subscriberSources: subRows.map((r) => ({ referrer: r.referrer ?? "direct", count: Number(r.count) })),
+      clickSourcePages: clickRows.map((r) => ({ sourcePage: r.sourcePage ?? "", count: Number(r.count) })),
+    };
+  }
+
+  async getBookingFunnel(days?: number) {
+    const since = days ? new Date(Date.now() - days * 86_400_000) : null;
+    const rows = await db
+      .select({
+        step: funnelEvents.step,
+        sessions: sql<number>`COUNT(DISTINCT ${funnelEvents.sessionId})`,
+      })
+      .from(funnelEvents)
+      .where(since ? gte(funnelEvents.createdAt, since) : sql`TRUE`)
+      .groupBy(funnelEvents.step);
+    return rows.map((r) => ({ step: r.step, sessions: Number(r.sessions) }));
   }
 
   // ── Comments ──────────────────────────────────────────────────────────
