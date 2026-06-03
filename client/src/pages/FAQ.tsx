@@ -17,20 +17,45 @@ const FAQ_ITEMS = [
   {
     question: "How often is the newsletter published?",
     answer:
-      "Every week. We cover the best events across North, Central, and South NJ.",
+      "Every week. We cover the best events across North, Central, and South New Jersey.",
   },
   {
     question: "How do I submit my event?",
-    answer: "Use the Submit Your Event form on our homepage.",
+    answer: "Use the Book Promotion form on our homepage or visit /book to pick a package and submit your details.",
   },
   {
     question: "Is it free to subscribe?",
-    answer: "Yes, completely free.",
+    answer: "Yes, completely free. You'll get our curated weekly NJ events list with no spam.",
   },
   {
-    question: "How do I promote my event with CGE?",
+    question: "What does NJ event promotion cost?",
     answer:
-      "Fill out the Promote Your Event form and select Standard or Premium. Our team will be in touch within 24 hours.",
+      "We offer four tiers: Basic (free calendar listing), Starter ($70 per event), Growth ($150 per event with reels, premium newsletter placement, and SMS blasts), and Custom ($300+ per event for influencer reposts and dedicated campaign timelines).",
+  },
+  {
+    question: "How far in advance should I book event promotion?",
+    answer:
+      "Submit at least 7 days before your event date — we operate on a weekly posting schedule and slots fill quickly. For time-sensitive events (holidays, special weekends), 2 weeks in advance is recommended.",
+  },
+  {
+    question: "Which New Jersey regions do you cover?",
+    answer:
+      "All of New Jersey — North NJ (Newark, Jersey City, Hoboken, Paterson, Elizabeth, Montclair), Central NJ (Trenton, New Brunswick, Edison, Plainfield), and South NJ (Atlantic City, Cherry Hill, Camden).",
+  },
+  {
+    question: "What kinds of events do you promote?",
+    answer:
+      "Club nights, concerts, day parties, brunches, festivals, comedy shows, pop-ups, networking events, and lounge events. If it's a public, attendee-facing event in New Jersey, we can promote it.",
+  },
+  {
+    question: "Do you do influencer promotion?",
+    answer:
+      "Yes — included in our Custom package. We have a network of NJ-based content creators who repost and feature events to their audiences.",
+  },
+  {
+    question: "When does my event get posted after I book?",
+    answer:
+      "Our team confirms scheduling and invoicing within 24 hours of submission. Content goes live on your agreed posting date, typically the week of your event.",
   },
 ];
 
@@ -42,6 +67,28 @@ export default function FAQ() {
         description="Frequently asked questions about Central Group Events. Learn how to submit your event, get promoted, and join the NJ event community."
         keywords="CGE FAQ, how to submit event NJ, event promotion New Jersey, Central Group Events"
         canonical="https://www.centralgroupevents.com/faq"
+        jsonLd={[
+          {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": FAQ_ITEMS.map((item) => ({
+              "@type": "Question",
+              "name": item.question,
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": item.answer,
+              },
+            })),
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.centralgroupevents.com/" },
+              { "@type": "ListItem", "position": 2, "name": "FAQ", "item": "https://www.centralgroupevents.com/faq" },
+            ],
+          },
+        ]}
       />
       <Navigation />
 

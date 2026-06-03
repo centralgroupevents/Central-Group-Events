@@ -130,14 +130,25 @@ export default function Blog() {
         description="Get the weekly NJ event roundup from Central Group Events. Discover the hottest events across North, Central, and South New Jersey every week."
         keywords="NJ events blog, New Jersey weekend events, NJ nightlife guide, weekly events New Jersey, things to do NJ this weekend"
         canonical="https://www.centralgroupevents.com/blog"
+        jsonLd={[
+          {
+            "@context": "https://schema.org",
+            "@type": "Blog",
+            "name": "Central Group Events Blog",
+            "url": "https://www.centralgroupevents.com/blog",
+            "description": "Weekly NJ event roundups and nightlife guides",
+            "publisher": { "@id": "https://www.centralgroupevents.com/#organization" },
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.centralgroupevents.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Blog", "item": "https://www.centralgroupevents.com/blog" },
+            ],
+          },
+        ]}
       />
-      <script type="application/ld+json">{JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "Blog",
-        "name": "Central Group Events Blog",
-        "url": "https://www.centralgroupevents.com/blog",
-        "description": "Weekly NJ event roundups and nightlife guides"
-      })}</script>
       <Navigation />
 
       {/* Header */}

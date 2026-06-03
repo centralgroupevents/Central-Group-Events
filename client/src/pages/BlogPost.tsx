@@ -226,22 +226,33 @@ export default function BlogPost({ params }: { params: { slug: string } }) {
             image={post.coverImageUrl || undefined}
             type="article"
             publishedAt={post.publishedAt}
-            jsonLd={{
-              "@context": "https://schema.org",
-              "@type": "Article",
-              "headline": post.title,
-              "description": post.excerpt,
-              "image": post.coverImageUrl,
-              "datePublished": post.publishedAt,
-              "mainEntityOfPage": `https://www.centralgroupevents.com/blog/${slug}`,
-              "author": { "@type": "Organization", "name": "Central Group Events" },
-              "publisher": {
-                "@type": "Organization",
-                "name": "Central Group Events",
-                "url": "https://www.centralgroupevents.com",
-                "logo": { "@type": "ImageObject", "url": "https://www.centralgroupevents.com/favicon.png" },
+            jsonLd={[
+              {
+                "@context": "https://schema.org",
+                "@type": "Article",
+                "headline": post.title,
+                "description": post.excerpt,
+                "image": post.coverImageUrl,
+                "datePublished": post.publishedAt,
+                "mainEntityOfPage": `https://www.centralgroupevents.com/blog/${slug}`,
+                "author": { "@type": "Organization", "name": "Central Group Events" },
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Central Group Events",
+                  "url": "https://www.centralgroupevents.com",
+                  "logo": { "@type": "ImageObject", "url": "https://www.centralgroupevents.com/favicon.png" },
+                },
               },
-            }}
+              {
+                "@context": "https://schema.org",
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                  { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.centralgroupevents.com/" },
+                  { "@type": "ListItem", "position": 2, "name": "Blog", "item": "https://www.centralgroupevents.com/blog" },
+                  { "@type": "ListItem", "position": 3, "name": post.title, "item": `https://www.centralgroupevents.com/blog/${slug}` },
+                ],
+              },
+            ]}
           />
         </>
       )}

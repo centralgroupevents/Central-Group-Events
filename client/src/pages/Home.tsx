@@ -97,20 +97,94 @@ export default function Home() {
         description="Discover the best events in New Jersey every week. North, Central, and South NJ nightlife, brunch spots, live music, R&B nights, and more. Submit or promote your event with CGE."
         keywords="events in NJ, things to do in New Jersey, NJ nightlife, New Jersey events this weekend, events near me NJ, Newark events, Jersey City events, North NJ events, Central NJ events, South NJ events, NJ brunch, NJ live music, NJ R&B night, event promotion New Jersey"
         canonical="https://www.centralgroupevents.com"
-        jsonLd={{
-          "@context": "https://schema.org",
-          "@type": "Organization",
-          "name": "Central Group Events",
-          "url": "https://www.centralgroupevents.com",
-          "logo": "https://www.centralgroupevents.com/favicon.png",
-          "description": "New Jersey's #1 event discovery and promotion platform covering North, Central, and South NJ.",
-          "email": "centralgroupevents@gmail.com",
-          "sameAs": [
-            "https://www.instagram.com/centralgroupevents/",
-            "https://www.tiktok.com/@centralgroupevents",
-            "https://www.facebook.com/p/Central-Group-Events-61551661541206/",
-          ],
-        }}
+        jsonLd={[
+          {
+            "@context": "https://schema.org",
+            "@type": "ProfessionalService",
+            "@id": "https://www.centralgroupevents.com/#organization",
+            "name": "Central Group Events",
+            "alternateName": "CGE",
+            "url": "https://www.centralgroupevents.com",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://www.centralgroupevents.com/favicon.png",
+            },
+            "image": "https://www.centralgroupevents.com/og-image.jpg",
+            "description":
+              "New Jersey's #1 event discovery and promotion platform covering North, Central, and South NJ. We promote 100+ events weekly through newsletter, reels, paid ads, SMS blasts, and influencer campaigns.",
+            "email": "centralgroupevents@gmail.com",
+            "priceRange": "$70-$300+",
+            "serviceType": "Event Promotion",
+            "areaServed": [
+              { "@type": "State", "name": "New Jersey" },
+              { "@type": "City", "name": "Newark" },
+              { "@type": "City", "name": "Jersey City" },
+              { "@type": "City", "name": "Hoboken" },
+              { "@type": "City", "name": "Paterson" },
+              { "@type": "City", "name": "Elizabeth" },
+              { "@type": "City", "name": "Trenton" },
+              { "@type": "City", "name": "New Brunswick" },
+              { "@type": "City", "name": "Atlantic City" },
+              { "@type": "City", "name": "Cherry Hill" },
+              { "@type": "City", "name": "Montclair" },
+            ],
+            "sameAs": [
+              "https://www.instagram.com/centralgroupevents/",
+              "https://www.tiktok.com/@centralgroupevents",
+              "https://www.facebook.com/p/Central-Group-Events-61551661541206/",
+            ],
+            "hasOfferCatalog": {
+              "@type": "OfferCatalog",
+              "name": "Event Promotion Packages",
+              "itemListElement": [
+                {
+                  "@type": "Offer",
+                  "name": "Basic",
+                  "price": "0",
+                  "priceCurrency": "USD",
+                  "description": "Free event calendar listing",
+                  "url": "https://www.centralgroupevents.com/book?package=basic",
+                },
+                {
+                  "@type": "Offer",
+                  "name": "Starter",
+                  "price": "70",
+                  "priceCurrency": "USD",
+                  "description":
+                    "Event calendar listing, Instagram story feature, newsletter mention, and Facebook post",
+                  "url": "https://www.centralgroupevents.com/book?package=starter",
+                },
+                {
+                  "@type": "Offer",
+                  "name": "Growth",
+                  "price": "150",
+                  "priceCurrency": "USD",
+                  "description":
+                    "Everything in Starter plus Instagram reel feature, premium newsletter placement, and SMS blast to subscribers",
+                  "url": "https://www.centralgroupevents.com/book?package=growth",
+                },
+                {
+                  "@type": "Offer",
+                  "name": "Custom",
+                  "price": "300",
+                  "priceCurrency": "USD",
+                  "description":
+                    "Everything in Growth plus influencer reposts, strategy call, and custom campaign timeline",
+                  "url": "https://www.centralgroupevents.com/book?package=custom",
+                },
+              ],
+            },
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "@id": "https://www.centralgroupevents.com/#website",
+            "url": "https://www.centralgroupevents.com",
+            "name": "Central Group Events",
+            "description": "NJ events discovery and event promotion",
+            "publisher": { "@id": "https://www.centralgroupevents.com/#organization" },
+          },
+        ]}
       />
       <Navigation />
 
