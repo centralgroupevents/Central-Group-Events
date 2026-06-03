@@ -1821,6 +1821,36 @@ function buildIsoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+const DAY_OF_WEEK_OFFSET: Record<string, number> = {
+  mon: 0, monday: 0,
+  tue: 1, tues: 1, tuesday: 1,
+  wed: 2, weds: 2, wednesday: 2,
+  thu: 3, thur: 3, thurs: 3, thursday: 3,
+  fri: 4, friday: 4,
+  sat: 5, saturday: 5,
+  sun: 6, sunday: 6,
+};
+
+function resolveDayToIsoDate(day: string, weekStartIso: string): string {
+  const key = day.trim().toLowerCase().replace(/[.,]/g, "");
+  const offset = DAY_OF_WEEK_OFFSET[key];
+  if (offset === undefined) return "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStartIso)) return "";
+  const [y, m, d] = weekStartIso.split("-").map(Number);
+  const anchor = new Date(y, m - 1, d);
+  if (isNaN(anchor.getTime())) return "";
+  anchor.setDate(anchor.getDate() + offset);
+  return buildIsoDate(anchor.getFullYear(), anchor.getMonth() + 1, anchor.getDate());
+}
+
+function getUpcomingMondayIso(): string {
+  const today = new Date();
+  const dow = today.getDay();
+  const daysUntilMon = dow === 1 ? 0 : (8 - dow) % 7;
+  today.setDate(today.getDate() + daysUntilMon);
+  return buildIsoDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
+}
+
 function normalizeEventDate(input: string): string {
   if (!input) return "";
   const s = String(input).trim();
@@ -1926,6 +1956,7 @@ export default function Admin() {
     invalid: { rowIndex: number; title: string; reason: string }[];
   } | null>(null);
   const [pasteText, setPasteText] = useState("");
+  const [weekAnchor, setWeekAnchor] = useState<string>(getUpcomingMondayIso());
   const [genreIsOther, setGenreIsOther] = useState(false);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -2197,7 +2228,8 @@ export default function Admin() {
 
   const CGE_IMPORT_FIELDS: { key: string; label: string; required: boolean }[] = [
     { key: "name",            label: "Name",             required: true },
-    { key: "date",            label: "Date",             required: true },
+    { key: "date",            label: "Date",             required: false },
+    { key: "day",             label: "Day of Week",      required: false },
     { key: "time",            label: "Time",             required: false },
     { key: "venue",           label: "Venue",            required: false },
     { key: "city",            label: "City",             required: false },
@@ -2212,6 +2244,7 @@ export default function Admin() {
   const IMPORT_ALIASES: Record<string, string[]> = {
     name:            ["name", "title", "event", "event name"],
     date:            ["date", "event date", "event_date"],
+    day:             ["day", "weekday", "day of week", "dow"],
     time:            ["time", "event time", "start time", "start_time"],
     venue:           ["venue", "location", "place"],
     city:            ["city", "town", "area"],
@@ -2327,7 +2360,12 @@ export default function Admin() {
           obj[key] = colIdx >= 0 ? (row[colIdx] || "") : "";
         }
       }
-      if (obj.date) obj.date = normalizeEventDate(obj.date);
+      if (obj.date) {
+        obj.date = normalizeEventDate(obj.date);
+      } else if (obj.day) {
+        obj.date = resolveDayToIsoDate(obj.day, weekAnchor);
+      }
+      delete obj.day;
       return obj;
     });
     try {
@@ -2820,6 +2858,44 @@ export default function Admin() {
                       </table>
                     </div>
 
+                    {/* Week-anchor picker — shown when day is mapped but date isn't */}
+                    {importMapping["day"] && !importMapping["date"] && (
+                      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <Label className="text-xs text-white/80 sm:w-32 shrink-0">Week starting</Label>
+                          <Input
+                            type="date"
+                            value={weekAnchor}
+                            onChange={(e) => setWeekAnchor(e.target.value)}
+                            className="h-8 bg-black/40 border-white/10 text-xs"
+                            data-testid="input-week-anchor"
+                          />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-snug">
+                          Your file has weekday names instead of dates. Pick the Monday of the week these events fall in — we'll convert Mon/Tue/…/Sun into real dates.
+                        </p>
+                        {(() => {
+                          const dayColIdx = importRawHeaders.indexOf(importMapping["day"]);
+                          if (dayColIdx < 0) return null;
+                          const preview = importRawRows.slice(0, 5).map((r, i) => {
+                            const dayVal = r[dayColIdx] || "";
+                            const resolved = resolveDayToIsoDate(dayVal, weekAnchor);
+                            return { i, dayVal, resolved };
+                          });
+                          return (
+                            <div className="text-[11px] text-white/70 space-y-0.5 pt-1">
+                              <p className="text-muted-foreground">Resolved dates (first 5 rows):</p>
+                              {preview.map(({ i, dayVal, resolved }) => (
+                                <p key={i} className="font-mono">
+                                  <span className="text-white/50">Row {i + 1}:</span> {dayVal || "—"} → <span className={resolved ? "text-primary" : "text-red-400"}>{resolved || "could not resolve"}</span>
+                                </p>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {/* 3-row data preview */}
                     {importRawRows.length > 0 && (
                       <div className="space-y-1">
@@ -2859,7 +2935,7 @@ export default function Admin() {
                       <Button
                         onClick={submitMappedImport}
                         className="bg-primary hover:bg-primary/90 font-semibold"
-                        disabled={!importMapping["name"] || !importMapping["date"]}
+                        disabled={!importMapping["name"] || (!importMapping["date"] && !importMapping["day"])}
                         data-testid="button-confirm-import"
                       >
                         Import {importRawRows.length} Row{importRawRows.length !== 1 ? "s" : ""}
