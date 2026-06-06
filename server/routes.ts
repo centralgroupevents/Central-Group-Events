@@ -1742,36 +1742,10 @@ async function seedDatabase() {
 }
 
 async function seedRealEvents() {
-  const realEvents = [
-    { title: "COUNTRY LINE DANCING", city: "Asbury Park", region: "Central NJ" },
-    { title: "AYA FRIDAYS", city: "Edison", region: "Central NJ" },
-    { title: "FRIDAY NIGHT OUT", city: "Plainfield", region: "Central NJ" },
-    { title: "UNDERGROUND FRIDAYS WITH DJ FIORELLA", city: "Somerville", region: "Central NJ" },
-    { title: "90s vs 2000s BASH", city: "East Brunswick", region: "Central NJ" },
-    { title: "SAK PASE AFRO - GHANA INDEPENDENCE DAY", city: "Roselle", region: "Central NJ" },
-    { title: "THE BIGGIE BRUNCH", city: "Clifton", region: "North NJ" },
-    { title: "JOJOS HAPPY HOUR", city: "Garfield", region: "North NJ" },
-    { title: "COMMUNITY NIGHT: JOURNEYS HOME BY MOONLIGHT", city: "Newark", region: "North NJ" },
-    { title: "JAZZY FRIDAYS", city: "Fort Lee", region: "North NJ" },
-    { title: "DREAM: A LISTENING & VISUAL EXPERIENCE", city: "Jersey City", region: "North NJ" },
-  ];
-
-  const existingEvents = await storage.getEvents();
-  const existingTitles = new Set(existingEvents.map(e => e.title));
-
-  for (const event of realEvents) {
-    if (!existingTitles.has(event.title)) {
-      await storage.createEvent({
-        title: event.title,
-        description: `Live event in ${event.city}, NJ`,
-        date: "2026-03-06",
-        region: event.region,
-        city: event.city,
-        imageUrl: "",
-        ticketLink: "#",
-      });
-    }
-  }
+  // No-op. This function used to re-insert 11 hardcoded events on every server
+  // start, which on Replit Autoscale meant deleted events kept coming back
+  // whenever a fresh instance booted. Seeding is now strictly a one-time job
+  // for an empty database via seedDatabase() above.
 }
 
 async function seedSuperadmin() {
