@@ -3316,7 +3316,7 @@ export default function Admin() {
                                   </SelectTrigger>
                                   <SelectContent className="bg-secondary border-white/10 text-white">
                                     <SelectItem value="__none__">— skip —</SelectItem>
-                                    {importRawHeaders.map(h => (
+                                    {importRawHeaders.filter(h => h && h.trim().length > 0).map(h => (
                                       <SelectItem key={h} value={h}>{h}</SelectItem>
                                     ))}
                                   </SelectContent>
