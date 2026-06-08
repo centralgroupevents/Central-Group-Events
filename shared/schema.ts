@@ -232,7 +232,10 @@ export const adminBulkWorldCupRowSchema = z.object({
   town: z.string().min(1).max(100),
   eventName: z.string().max(200).optional().nullable(),
   instagramHandle: z.string().max(80).optional().nullable(),
-  learnMoreUrl: z.string().url().max(500).optional().nullable().or(z.literal("")),
+  // Admin bulk imports often carry bare URLs (posh.vip/foo, instagram.com/bar).
+  // Server normalizes by auto-prepending https:// — so accept any short-ish string
+  // here and let the route handler do the cleanup.
+  learnMoreUrl: z.string().max(500).optional().nullable().or(z.literal("")),
 });
 export const insertCommentSchema = createInsertSchema(comments).omit({ id: true, createdAt: true }).extend({
   body: z.string().min(1, "Comment cannot be empty").max(2000),

@@ -48,6 +48,18 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
+// Normalize a free-text URL field: prepend https:// if missing, treat empty
+// as null. Doesn't validate the URL beyond that — admin imports often have
+// bare domains like "posh.vip/event/foo" or "instagram.com/handle".
+function normalizeUrl(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const trimmed = String(input).trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  // Looks like a bare domain or path — prepend https://
+  return `https://${trimmed.replace(/^\/+/, "")}`;
+}
+
 // Flexible date parser used by the admin World Cup CSV bulk import.
 // Accepts YYYY-MM-DD, MM/DD/YYYY, MM/DD/YY, "Jun 11 2026", "Jun 11, 2026",
 // and date ranges (any "–", "-", "to", "through" separator) by taking the
@@ -1728,7 +1740,7 @@ ${blogList || "_No recent posts yet._"}
             town: parsed.town,
             eventName: parsed.eventName || null,
             instagramHandle: parsed.instagramHandle || null,
-            learnMoreUrl: parsed.learnMoreUrl || null,
+            learnMoreUrl: normalizeUrl(parsed.learnMoreUrl),
             submitterEmail: "centralgroupevents@gmail.com",
             status: "approved",
             source: "admin-import",
