@@ -132,6 +132,7 @@ export interface IStorage {
 
   // World Cup watch party submissions
   createWorldCupSubmission(data: InsertWorldCupSubmission): Promise<WorldCupSubmission>;
+  createWorldCupSubmissionRaw(row: any): Promise<void>;
   listWorldCupSubmissions(opts?: { status?: string }): Promise<WorldCupSubmission[]>;
   updateWorldCupSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<WorldCupSubmission | undefined>;
   getApprovedWorldCupSubmissions(weekIndex?: number): Promise<WorldCupSubmission[]>;
@@ -622,6 +623,12 @@ export class DatabaseStorage implements IStorage {
   async createWorldCupSubmission(data: InsertWorldCupSubmission): Promise<WorldCupSubmission> {
     const [created] = await db.insert(worldCupSubmissions).values(data).returning();
     return created;
+  }
+
+  // Used by admin bulk-import — bypasses the public-form insert schema so we
+  // can set status/source/reviewedAt directly. Row is pre-validated by the route.
+  async createWorldCupSubmissionRaw(row: any): Promise<void> {
+    await db.insert(worldCupSubmissions).values(row);
   }
 
   async listWorldCupSubmissions(opts?: { status?: string }): Promise<WorldCupSubmission[]> {

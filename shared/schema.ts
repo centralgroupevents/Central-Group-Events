@@ -136,7 +136,11 @@ export const worldCupSubmissions = pgTable("world_cup_submissions", {
   id: serial("id").primaryKey(),
   weekIndex: integer("week_index").notNull(),
   matchDate: text("match_date").notNull(),
-  matchSlot: text("match_slot").notNull(),
+  // matchSlot is the canonical schedule identifier (set when submitter picks
+  // from the dropdown). For admin CSV bulk-imports where the fixture is just
+  // free text, matchSlot may be null and matchLabel carries the human label.
+  matchSlot: text("match_slot"),
+  matchLabel: text("match_label"),
   venueName: text("venue_name").notNull(),
   town: text("town").notNull(),
   eventName: text("event_name"),
@@ -145,6 +149,7 @@ export const worldCupSubmissions = pgTable("world_cup_submissions", {
   submitterEmail: text("submitter_email").notNull(),
   status: text("status").notNull().default("pending"),
   adminNotes: text("admin_notes"),
+  source: text("source").notNull().default("public-form"),
   createdAt: timestamp("created_at").defaultNow(),
   reviewedAt: timestamp("reviewed_at"),
 });
@@ -198,7 +203,7 @@ export const insertPostViewSchema = createInsertSchema(postViews).omit({ id: tru
 export const insertLinkClickSchema = createInsertSchema(linkClicks).omit({ id: true, clickedAt: true });
 export const insertFunnelEventSchema = createInsertSchema(funnelEvents).omit({ id: true, createdAt: true });
 export const insertWorldCupSubmissionSchema = createInsertSchema(worldCupSubmissions)
-  .omit({ id: true, createdAt: true, reviewedAt: true, status: true, adminNotes: true })
+  .omit({ id: true, createdAt: true, reviewedAt: true, status: true, adminNotes: true, matchLabel: true, source: true })
   .extend({
     submitterEmail: z.string().email(),
     weekIndex: z.number().int().min(1).max(6),
@@ -210,6 +215,21 @@ export const insertWorldCupSubmissionSchema = createInsertSchema(worldCupSubmiss
     instagramHandle: z.string().max(80).optional().nullable(),
     learnMoreUrl: z.string().url("Must be a valid URL starting with http or https").max(500).optional().nullable(),
   });
+
+// Admin bulk-import schema: matchSlot is optional (admin may provide free-text
+// matchLabel instead of picking from the official schedule). Status is forced
+// to "approved" since admin is the source of truth.
+export const adminBulkWorldCupRowSchema = z.object({
+  weekIndex: z.number().int().min(1).max(6),
+  matchDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  matchSlot: z.string().max(200).optional().nullable(),
+  matchLabel: z.string().max(300).optional().nullable(),
+  venueName: z.string().min(1).max(200),
+  town: z.string().min(1).max(100),
+  eventName: z.string().max(200).optional().nullable(),
+  instagramHandle: z.string().max(80).optional().nullable(),
+  learnMoreUrl: z.string().url().max(500).optional().nullable().or(z.literal("")),
+});
 export const insertCommentSchema = createInsertSchema(comments).omit({ id: true, createdAt: true }).extend({
   body: z.string().min(1, "Comment cannot be empty").max(2000),
   parentId: z.number().optional().nullable(),

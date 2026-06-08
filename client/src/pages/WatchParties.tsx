@@ -16,7 +16,8 @@ interface ApprovedSubmission {
   id: number;
   weekIndex: number;
   matchDate: string;
-  matchSlot: string;
+  matchSlot: string | null;
+  matchLabel: string | null;
   venueName: string;
   town: string;
   eventName: string | null;
@@ -151,7 +152,9 @@ export default function WatchParties() {
                   <h2 className="text-lg font-black text-primary mb-3">{formatDate(date)}</h2>
                   <div className="space-y-3">
                     {items.map((s) => {
-                      const match = getMatchBySlot(s.matchSlot);
+                      const match = s.matchSlot ? getMatchBySlot(s.matchSlot) : null;
+                      const fixtureLabel = match?.fixture || s.matchLabel || null;
+                      const timeLabel = match?.timeEt || null;
                       return (
                         <div key={s.id} className="bg-secondary/30 border border-white/10 rounded-2xl p-5" data-testid={`watch-party-${s.id}`}>
                           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
@@ -160,11 +163,11 @@ export default function WatchParties() {
                           </div>
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70 mb-3">
                             <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {s.town}, NJ</span>
-                            {match && (
-                              <span className="text-white/80 font-semibold">⚽ {match.fixture}</span>
+                            {fixtureLabel && (
+                              <span className="text-white/80 font-semibold">⚽ {fixtureLabel}</span>
                             )}
-                            {match && (
-                              <span className="text-white/50">{match.timeEt}</span>
+                            {timeLabel && (
+                              <span className="text-white/50">{timeLabel}</span>
                             )}
                           </div>
                           <div className="flex items-center gap-4 flex-wrap">

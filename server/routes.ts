@@ -1658,6 +1658,54 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Admin: bulk-import watch parties from an uploaded CSV/Excel.
+  // Each row is auto-approved (admin is the source of truth).
+  app.post("/api/admin/world-cup-submissions/bulk", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { adminBulkWorldCupRowSchema } = await import("@shared/schema");
+      const raw = req.body as unknown[];
+      if (!Array.isArray(raw)) return res.status(400).json({ message: "Expected an array of rows" });
+      const valid: any[] = [];
+      const invalid: { rowIndex: number; reason: string }[] = [];
+      for (let i = 0; i < raw.length; i++) {
+        try {
+          const parsed = adminBulkWorldCupRowSchema.parse(raw[i]);
+          if (!parsed.matchSlot && !parsed.matchLabel) {
+            invalid.push({ rowIndex: i, reason: "Row needs either matchSlot or matchLabel" });
+            continue;
+          }
+          valid.push({
+            weekIndex: parsed.weekIndex,
+            matchDate: parsed.matchDate,
+            matchSlot: parsed.matchSlot || null,
+            matchLabel: parsed.matchLabel || null,
+            venueName: parsed.venueName,
+            town: parsed.town,
+            eventName: parsed.eventName || null,
+            instagramHandle: parsed.instagramHandle || null,
+            learnMoreUrl: parsed.learnMoreUrl || null,
+            submitterEmail: "centralgroupevents@gmail.com",
+            status: "approved",
+            source: "admin-import",
+            reviewedAt: new Date(),
+          });
+        } catch (err) {
+          const reason = err instanceof z.ZodError ? err.errors[0]?.message || "Validation failed" : "Unknown error";
+          invalid.push({ rowIndex: i, reason });
+        }
+      }
+      let imported = 0;
+      for (const row of valid) {
+        await storage.createWorldCupSubmissionRaw(row);
+        imported++;
+      }
+      res.json({ imported, invalid });
+    } catch (err) {
+      console.error("[wc-bulk] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── Cron-triggered email digests (called by external scheduler) ─────
   function checkCronAuth(req: Request, res: Response): boolean {
     const secret = process.env.CRON_SECRET;

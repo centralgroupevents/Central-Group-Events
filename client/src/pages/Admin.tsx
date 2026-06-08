@@ -2361,7 +2361,8 @@ interface WorldCupSubmissionRow {
   id: number;
   weekIndex: number;
   matchDate: string;
-  matchSlot: string;
+  matchSlot: string | null;
+  matchLabel: string | null;
   venueName: string;
   town: string;
   eventName: string | null;
@@ -2377,6 +2378,57 @@ function WorldCupTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("pending");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; invalid: { rowIndex: number; reason: string }[] } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  function downloadCsvTemplate() {
+    const headers = "weekIndex,matchDate,matchLabel,venueName,town,eventName,instagramHandle,learnMoreUrl";
+    const sample = "1,2026-06-15,USA vs Wales,Little Tijuana,Newark,The Big USA Watch Party,@littletijuanaNJ,https://posh.vip/e/example";
+    const blob = new Blob([headers + "\n" + sample + "\n"], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "world-cup-watch-parties-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportBusy(true);
+    setImportResult(null);
+    try {
+      const text = await file.text();
+      const parsed = Papa.parse<Record<string, string>>(text, {
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: (h) => h.trim(),
+      });
+      const rows = parsed.data.map((r) => ({
+        weekIndex: parseInt(String(r.weekIndex ?? "").trim(), 10),
+        matchDate: String(r.matchDate ?? "").trim(),
+        matchSlot: undefined,
+        matchLabel: String(r.matchLabel ?? "").trim() || undefined,
+        venueName: String(r.venueName ?? "").trim(),
+        town: String(r.town ?? "").trim(),
+        eventName: String(r.eventName ?? "").trim() || undefined,
+        instagramHandle: String(r.instagramHandle ?? "").trim() || undefined,
+        learnMoreUrl: String(r.learnMoreUrl ?? "").trim() || undefined,
+      }));
+      const res = await apiRequest("POST", "/api/admin/world-cup-submissions/bulk", rows);
+      const result = await res.json();
+      setImportResult(result);
+      qc.invalidateQueries({ queryKey: ["/api/admin/world-cup-submissions"] });
+      toast({ title: `Imported ${result.imported} watch ${result.imported === 1 ? "party" : "parties"}` });
+    } catch (err) {
+      toast({ title: "Import failed", description: String(err), variant: "destructive" });
+    } finally {
+      setImportBusy(false);
+      e.target.value = "";
+    }
+  }
 
   const { data: submissions = [], isLoading } = useQuery<WorldCupSubmissionRow[]>({
     queryKey: ["/api/admin/world-cup-submissions", statusFilter],
@@ -2423,9 +2475,30 @@ function WorldCupTab() {
       </div>
 
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-white/10">
+        <div className="px-6 py-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-bold text-white">World Cup Watch Party Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({submissions.length})</span></h2>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="border-white/20 text-white/70 h-8" onClick={downloadCsvTemplate} data-testid="wc-download-template">
+              <Download className="w-3.5 h-3.5 mr-1.5" /> Template
+            </Button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,.txt"
+              className="hidden"
+              onChange={handleImportFile}
+              data-testid="wc-import-file"
+            />
+            <Button size="sm" className="bg-primary hover:bg-primary/90 h-8" disabled={importBusy} onClick={() => importInputRef.current?.click()} data-testid="wc-import-btn">
+              {importBusy ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Importing…</> : <><Upload className="w-3.5 h-3.5 mr-1.5" /> Import CSV</>}
+            </Button>
+          </div>
         </div>
+        {importResult && (
+          <div className="px-6 py-3 border-b border-white/10 bg-green-500/5 text-sm text-white/80">
+            <span className="font-semibold text-green-400">{importResult.imported}</span> imported{importResult.invalid.length > 0 && <>, <span className="font-semibold text-yellow-400">{importResult.invalid.length}</span> invalid row{importResult.invalid.length !== 1 ? "s" : ""} skipped (check column headers)</>}.
+          </div>
+        )}
         {isLoading ? (
           <div className="p-6 space-y-3">
             {[1,2,3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
@@ -2448,7 +2521,7 @@ function WorldCupTab() {
                       }`}>{s.status}</span>
                     </div>
                     <div className="text-sm text-white/70 space-y-0.5">
-                      <p>📍 {s.town}, NJ · 📅 {s.matchDate} · ⚽ {s.matchSlot}</p>
+                      <p>📍 {s.town}, NJ · 📅 {s.matchDate} · ⚽ {s.matchLabel || s.matchSlot || "(no match)"}</p>
                       <p className="text-xs text-white/50">
                         <a href={`mailto:${s.submitterEmail}`} className="text-primary hover:underline">{s.submitterEmail}</a>
                         {s.instagramHandle && <> · <a href={`https://instagram.com/${s.instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{s.instagramHandle.replace("@","")}</a></>}
