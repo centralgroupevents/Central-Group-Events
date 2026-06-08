@@ -191,7 +191,7 @@ export default function SubmitWatchParty() {
                   <SelectItem key={m.slot} value={m.slot}>
                     <div className="flex flex-col items-start">
                       <span className="text-sm font-semibold">{m.fixture}</span>
-                      <span className="text-[11px] text-white/50">{m.timeEt} · {m.stadium}</span>
+                      <span className="text-[11px] text-white/50">{m.timeEt}</span>
                     </div>
                   </SelectItem>
                 ))}
