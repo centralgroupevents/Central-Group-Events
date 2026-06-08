@@ -220,9 +220,12 @@ export const insertWorldCupSubmissionSchema = createInsertSchema(worldCupSubmiss
 // matchLabel instead of picking from the official schedule). Status is forced
 // to "approved" since admin is the source of truth. weekIndex is auto-derived
 // server-side from matchDate, so it's optional in the wire format.
+// matchDate accepts any free-text date string. The server normalizes it via
+// parseFlexibleWcDate() — supports YYYY-MM-DD, "Jun 11, 2026", "6/11/2026",
+// and date ranges like "Jun 11 – Jul 19, 2026" (start date is used).
 export const adminBulkWorldCupRowSchema = z.object({
   weekIndex: z.number().int().min(1).max(6).optional(),
-  matchDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  matchDate: z.string().min(1).max(120),
   matchSlot: z.string().max(200).optional().nullable(),
   matchLabel: z.string().max(300).optional().nullable(),
   venueName: z.string().min(1).max(200),

@@ -48,6 +48,40 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
+// Flexible date parser used by the admin World Cup CSV bulk import.
+// Accepts YYYY-MM-DD, MM/DD/YYYY, MM/DD/YY, "Jun 11 2026", "Jun 11, 2026",
+// and date ranges (any "–", "-", "to", "through" separator) by taking the
+// start date. Returns "YYYY-MM-DD" or null if it can't make sense of it.
+function parseFlexibleWcDate(input: string): string | null {
+  if (!input) return null;
+  // Strip any range — take the first half (e.g., "Jun 11 – Jul 19, 2026" → "Jun 11")
+  // Range separators: en-dash, em-dash, hyphen between dates, "to", "through".
+  // We split, but preserve the year from the second half if first half lacks it.
+  let raw = String(input).trim();
+  const rangeSplit = raw.split(/\s+(?:[–—\-]|to|through)\s+/i);
+  let head = rangeSplit[0].trim();
+  if (rangeSplit.length > 1 && !/\d{4}/.test(head)) {
+    // Year sits at the end of the second half → append it to the head
+    const yearMatch = rangeSplit[1].match(/(\d{4})/);
+    if (yearMatch) head = `${head}, ${yearMatch[1]}`;
+  }
+  // Try ISO first
+  const iso = head.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // Try MM/DD/YYYY or MM/DD/YY
+  const slash = head.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slash) {
+    const yr = slash[3].length === 2 ? "20" + slash[3] : slash[3];
+    return `${yr}-${slash[1].padStart(2, "0")}-${slash[2].padStart(2, "0")}`;
+  }
+  // Fall back to JS Date parser for natural-language ("Jun 11, 2026")
+  const d = new Date(head);
+  if (!isNaN(d.getTime())) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  return null;
+}
+
 const formLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -1672,18 +1706,22 @@ ${blogList || "_No recent posts yet._"}
         try {
           const parsed = adminBulkWorldCupRowSchema.parse(raw[i]);
           if (!parsed.matchSlot && !parsed.matchLabel) {
-            invalid.push({ rowIndex: i, reason: "Row needs either matchSlot or matchLabel" });
+            invalid.push({ rowIndex: i, reason: "Row needs either Match (matchLabel) or matchSlot" });
             continue;
           }
-          // Auto-derive weekIndex from matchDate if not provided.
-          const weekIndex = parsed.weekIndex ?? getWeekIndexForDate(parsed.matchDate);
+          const normalizedDate = parseFlexibleWcDate(parsed.matchDate);
+          if (!normalizedDate) {
+            invalid.push({ rowIndex: i, reason: `Could not parse date "${parsed.matchDate}". Use YYYY-MM-DD, MM/DD/YYYY, "Jun 11, 2026", or a range like "Jun 11 – Jul 19, 2026".` });
+            continue;
+          }
+          const weekIndex = parsed.weekIndex ?? getWeekIndexForDate(normalizedDate);
           if (!weekIndex) {
-            invalid.push({ rowIndex: i, reason: `Date ${parsed.matchDate} is outside the 2026 World Cup tournament window (Jun 11 – Jul 19, 2026)` });
+            invalid.push({ rowIndex: i, reason: `Date ${normalizedDate} is outside the 2026 World Cup tournament window (Jun 11 – Jul 19, 2026)` });
             continue;
           }
           valid.push({
             weekIndex,
-            matchDate: parsed.matchDate,
+            matchDate: normalizedDate,
             matchSlot: parsed.matchSlot || null,
             matchLabel: parsed.matchLabel || null,
             venueName: parsed.venueName,
