@@ -259,6 +259,7 @@ const TABS = [
   { id: "subscribers", label: "Subscribers", icon: Mail },
   { id: "blog", label: "Blog Posts", icon: BookOpen },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
+  { id: "world-cup", label: "World Cup", icon: Star },
   { id: "team", label: "Team Members", icon: Users },
 ] as const;
 
@@ -2354,6 +2355,133 @@ function normalizeEventDate(input: string): string {
 }
 
 /* ─────────────────────────────────────────────────────────── */
+/*  WORLD CUP WATCH PARTIES TAB                               */
+/* ─────────────────────────────────────────────────────────── */
+interface WorldCupSubmissionRow {
+  id: number;
+  weekIndex: number;
+  matchDate: string;
+  matchSlot: string;
+  venueName: string;
+  town: string;
+  eventName: string | null;
+  instagramHandle: string | null;
+  submitterEmail: string;
+  status: string;
+  adminNotes: string | null;
+  createdAt: string | null;
+}
+
+function WorldCupTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [statusFilter, setStatusFilter] = useState<string>("pending");
+
+  const { data: submissions = [], isLoading } = useQuery<WorldCupSubmissionRow[]>({
+    queryKey: ["/api/admin/world-cup-submissions", statusFilter],
+    queryFn: async () => {
+      const url = statusFilter === "all"
+        ? "/api/admin/world-cup-submissions"
+        : `/api/admin/world-cup-submissions?status=${statusFilter}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/world-cup-submissions/${id}/status`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/world-cup-submissions"] });
+      toast({ title: "Updated" });
+    },
+    onError: () => toast({ title: "Update failed", variant: "destructive" }),
+  });
+
+  const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+        <span className="text-sm text-muted-foreground font-medium">Filter:</span>
+        <div className="flex gap-1.5 flex-wrap">
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${statusFilter === s ? "bg-primary border-primary text-white" : "border-white/10 text-white/40 hover:text-white/60"}`}
+              data-testid={`filter-wc-status-${s}`}
+            >
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-white/10">
+          <h2 className="font-bold text-white">World Cup Watch Party Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({submissions.length})</span></h2>
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {[1,2,3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+          </div>
+        ) : submissions.length === 0 ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">No submissions match this filter.</div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {submissions.map((s) => (
+              <div key={s.id} className="px-6 py-5" data-testid={`wc-row-${s.id}`}>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                      <h3 className="font-bold text-white">{s.eventName || s.venueName}</h3>
+                      {s.eventName && <span className="text-sm text-white/50">at {s.venueName}</span>}
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                        s.status === "approved" ? "border-green-500/40 text-green-400 bg-green-500/10" :
+                        s.status === "rejected" ? "border-red-500/40 text-red-400 bg-red-500/10" :
+                        "border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
+                      }`}>{s.status}</span>
+                    </div>
+                    <div className="text-sm text-white/70 space-y-0.5">
+                      <p>📍 {s.town}, NJ · 📅 {s.matchDate} · ⚽ {s.matchSlot}</p>
+                      <p className="text-xs text-white/50">
+                        <a href={`mailto:${s.submitterEmail}`} className="text-primary hover:underline">{s.submitterEmail}</a>
+                        {s.instagramHandle && <> · <a href={`https://instagram.com/${s.instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{s.instagramHandle.replace("@","")}</a></>}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {s.status !== "approved" && (
+                      <Button size="sm" onClick={() => updateMutation.mutate({ id: s.id, status: "approved" })} className="bg-green-500/15 border border-green-500/30 text-green-400 hover:bg-green-500/25" data-testid={`wc-approve-${s.id}`}>
+                        Approve
+                      </Button>
+                    )}
+                    {s.status !== "rejected" && (
+                      <Button size="sm" onClick={() => updateMutation.mutate({ id: s.id, status: "rejected" })} className="bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/25" data-testid={`wc-reject-${s.id}`}>
+                        Reject
+                      </Button>
+                    )}
+                    {s.status !== "pending" && (
+                      <Button size="sm" variant="outline" onClick={() => updateMutation.mutate({ id: s.id, status: "pending" })} className="border-white/15 text-white/60" data-testid={`wc-reopen-${s.id}`}>
+                        Reopen
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
 export default function Admin() {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -3995,6 +4123,7 @@ export default function Admin() {
         {activeTab === "blog" && <BlogPostsTab />}
         {activeTab === "this-week" && <ThisWeekTab />}
         {activeTab === "analytics" && <AnalyticsTab />}
+        {activeTab === "world-cup" && <WorldCupTab />}
         {activeTab === "team" && <TeamTab currentRole={user.role} />}
       </div>
     </div>

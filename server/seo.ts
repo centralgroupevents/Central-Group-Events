@@ -166,6 +166,37 @@ export async function getMetaForRoute(rawPath: string): Promise<SeoMeta> {
     };
   }
 
+  if (path === "/world-cup-2026-nj-watch-parties") {
+    return {
+      title: `2026 FIFA World Cup Watch Parties in NJ | ${SITE_NAME}`,
+      description:
+        "Find every New Jersey venue hosting an official 2026 FIFA World Cup watch party. Listings by week and match — Newark, Jersey City, Hoboken, Atlantic City, and across NJ.",
+      canonical: `${SITE}/world-cup-2026-nj-watch-parties`,
+      image: DEFAULT_IMAGE,
+      type: "website",
+      jsonLd: [
+        breadcrumb([
+          { name: "Home", url: `${SITE}/` },
+          { name: "World Cup 2026 NJ Guide", url: `${SITE}/world-cup-2026-nj-guide` },
+          { name: "Watch Parties", url: `${SITE}/world-cup-2026-nj-watch-parties` },
+        ]),
+      ],
+    };
+  }
+
+  if (path === "/submit-world-cup-watch-party") {
+    return {
+      title: `Submit a World Cup 2026 Watch Party in NJ | ${SITE_NAME}`,
+      description:
+        "Hosting a 2026 FIFA World Cup watch party at your New Jersey venue? Submit it here for free listing on our public watch parties page.",
+      canonical: `${SITE}/submit-world-cup-watch-party`,
+      image: DEFAULT_IMAGE,
+      type: "website",
+      noindex: true,
+      jsonLd: [],
+    };
+  }
+
   if (path === "/booking-confirmation" || path === "/welcome" || path === "/admin" || path.startsWith("/admin/")) {
     return { ...HOME_META, canonical: `${SITE}${path}`, noindex: true, jsonLd: [] };
   }

@@ -152,6 +152,16 @@ export async function registerRoutes(
     <loc>https://centralgroupevents.com/faq</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://centralgroupevents.com/world-cup-2026-nj-watch-parties</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://centralgroupevents.com/submit-world-cup-watch-party</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
   </url>${topicEntries}${postEntries}
 </urlset>`;
       console.log(`[sitemap] returning ${publishedPosts.length} blog entries + topic landings`);
@@ -1527,6 +1537,122 @@ ${blogList || "_No recent posts yet._"}
       const meta = metadata !== undefined ? JSON.stringify(metadata).slice(0, 1000) : undefined;
       storage.recordFunnelStep(step, typeof sessionId === "string" ? sessionId.slice(0, 100) : undefined, meta).catch(() => {});
       res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── World Cup watch party submissions ────────────────────────────────────
+  app.post("/api/world-cup-submissions", formLimiter, async (req: Request, res: Response) => {
+    try {
+      const { insertWorldCupSubmissionSchema } = await import("@shared/schema");
+      const { getMatchBySlot } = await import("@shared/world-cup-schedule");
+      const parsed = insertWorldCupSubmissionSchema.parse(req.body);
+      if (!getMatchBySlot(parsed.matchSlot)) {
+        return res.status(400).json({ message: "Unknown match slot" });
+      }
+      const created = await storage.createWorldCupSubmission(parsed);
+
+      // Auto-reply to submitter
+      transporter.sendMail({
+        from: `"CGE Watch Parties" <${process.env.GMAIL_USER}>`,
+        to: parsed.submitterEmail,
+        subject: `Watch party submission received — ${parsed.venueName}`,
+        html: `
+          <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px">
+            <h2 style="color:#9333ea">Thanks — we got your submission.</h2>
+            <p>We're reviewing your World Cup 2026 watch party at <strong>${escapeHtml(parsed.venueName)}</strong> in <strong>${escapeHtml(parsed.town)}</strong>.</p>
+            <p>Once approved (usually within 24-48 hours), it goes live at <a href="https://centralgroupevents.com/world-cup-2026-nj-watch-parties">centralgroupevents.com/world-cup-2026-nj-watch-parties</a> and you'll get a confirmation email.</p>
+            <p style="color:#777;font-size:13px">Questions? Reply to this email.</p>
+            <p style="color:#777;font-size:12px;margin-top:32px">— Central Group Events</p>
+          </div>`,
+      }).catch(() => {});
+
+      // Admin alert
+      transporter.sendMail({
+        from: `"CGE Website" <${process.env.GMAIL_USER}>`,
+        to: "centralgroupevents@gmail.com",
+        subject: `⚽ New watch party submission: ${parsed.venueName}, ${parsed.town}`,
+        html: `
+          <div style="font-family:Arial,Helvetica,sans-serif">
+            <h2>New watch party submission</h2>
+            <table style="border-collapse:collapse;font-size:14px">
+              <tr><td style="padding:4px 12px;color:#555">Venue</td><td>${escapeHtml(parsed.venueName)}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Town</td><td>${escapeHtml(parsed.town)}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Match</td><td>${escapeHtml(parsed.matchSlot)}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Date</td><td>${escapeHtml(parsed.matchDate)}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Event name</td><td>${escapeHtml(parsed.eventName || "(none)")}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Instagram</td><td>${escapeHtml(parsed.instagramHandle || "(none)")}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Submitter</td><td>${escapeHtml(parsed.submitterEmail)}</td></tr>
+            </table>
+            <p><a href="https://centralgroupevents.com/admin">Review in admin →</a></p>
+          </div>`,
+      }).catch(() => {});
+
+      res.status(201).json({ id: created.id, status: created.status });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message || "Invalid submission" });
+      }
+      console.error("[world-cup-submissions] create error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Public: list approved watch parties (optionally filter by week)
+  app.get("/api/world-cup-submissions/approved", async (req: Request, res: Response) => {
+    try {
+      const weekRaw = req.query.week;
+      const week = typeof weekRaw === "string" ? parseInt(weekRaw, 10) : undefined;
+      const weekIndex = Number.isFinite(week as number) ? (week as number) : undefined;
+      const rows = await storage.getApprovedWorldCupSubmissions(weekIndex);
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: list all (with optional status filter)
+  app.get("/api/admin/world-cup-submissions", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const rows = await storage.listWorldCupSubmissions({ status });
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: approve / reject / set adminNotes
+  app.patch("/api/admin/world-cup-submissions/:id/status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const { status, adminNotes } = req.body as { status?: string; adminNotes?: string };
+      if (!status || !["pending", "approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "status must be one of pending/approved/rejected" });
+      }
+      const updated = await storage.updateWorldCupSubmissionStatus(id, status, adminNotes);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+
+      // Notify submitter on approval
+      if (status === "approved" && updated.submitterEmail) {
+        transporter.sendMail({
+          from: `"CGE Watch Parties" <${process.env.GMAIL_USER}>`,
+          to: updated.submitterEmail,
+          subject: `🟢 Your World Cup watch party is live — ${updated.venueName}`,
+          html: `
+            <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px">
+              <h2 style="color:#9333ea">You're live!</h2>
+              <p>Your World Cup 2026 watch party at <strong>${escapeHtml(updated.venueName)}</strong> in <strong>${escapeHtml(updated.town)}</strong> has been approved.</p>
+              <p>It's now visible at: <a href="https://centralgroupevents.com/world-cup-2026-nj-watch-parties">centralgroupevents.com/world-cup-2026-nj-watch-parties</a></p>
+              <p style="color:#777;font-size:13px">Share the link with your audience. See you at the match.</p>
+              <p style="color:#777;font-size:12px;margin-top:32px">— Central Group Events</p>
+            </div>`,
+        }).catch(() => {});
+      }
+
+      res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }

@@ -9,6 +9,7 @@ import {
   postViews,
   linkClicks,
   funnelEvents,
+  worldCupSubmissions,
   comments,
   pages,
   type InsertSubscriber,
@@ -26,6 +27,8 @@ import {
   type InsertComment,
   type Page,
   type InsertPage,
+  type WorldCupSubmission,
+  type InsertWorldCupSubmission,
 } from "@shared/schema";
 import { eq, desc, sql, count, and, isNull, gte, lt, inArray } from "drizzle-orm";
 import slugifyLib from "slugify";
@@ -126,6 +129,12 @@ export interface IStorage {
 
   // Funnel tracking
   recordFunnelStep(step: string, sessionId?: string, metadata?: string): Promise<void>;
+
+  // World Cup watch party submissions
+  createWorldCupSubmission(data: InsertWorldCupSubmission): Promise<WorldCupSubmission>;
+  listWorldCupSubmissions(opts?: { status?: string }): Promise<WorldCupSubmission[]>;
+  updateWorldCupSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<WorldCupSubmission | undefined>;
+  getApprovedWorldCupSubmissions(weekIndex?: number): Promise<WorldCupSubmission[]>;
 
   // New analytics (event-level, regions, sources, funnel)
   getEventPerformance(days?: number, limit?: number): Promise<{ eventId: number; title: string; date: string; region: string; city: string | null; clicks: number }[]>;
@@ -607,6 +616,40 @@ export class DatabaseStorage implements IStorage {
       sessionId: sessionId ?? null,
       metadata: metadata ?? null,
     });
+  }
+
+  // ── World Cup watch party submissions ─────────────────────────────────
+  async createWorldCupSubmission(data: InsertWorldCupSubmission): Promise<WorldCupSubmission> {
+    const [created] = await db.insert(worldCupSubmissions).values(data).returning();
+    return created;
+  }
+
+  async listWorldCupSubmissions(opts?: { status?: string }): Promise<WorldCupSubmission[]> {
+    if (opts?.status) {
+      return await db.select().from(worldCupSubmissions)
+        .where(eq(worldCupSubmissions.status, opts.status))
+        .orderBy(desc(worldCupSubmissions.createdAt));
+    }
+    return await db.select().from(worldCupSubmissions).orderBy(desc(worldCupSubmissions.createdAt));
+  }
+
+  async updateWorldCupSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<WorldCupSubmission | undefined> {
+    const patch: Partial<WorldCupSubmission> = { status, reviewedAt: new Date() };
+    if (adminNotes !== undefined) patch.adminNotes = adminNotes;
+    const [updated] = await db.update(worldCupSubmissions)
+      .set(patch)
+      .where(eq(worldCupSubmissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getApprovedWorldCupSubmissions(weekIndex?: number): Promise<WorldCupSubmission[]> {
+    const conds = weekIndex
+      ? and(eq(worldCupSubmissions.status, "approved"), eq(worldCupSubmissions.weekIndex, weekIndex))
+      : eq(worldCupSubmissions.status, "approved");
+    return await db.select().from(worldCupSubmissions)
+      .where(conds)
+      .orderBy(worldCupSubmissions.matchDate);
   }
 
   async getEventPerformance(days?: number, limit = 20) {

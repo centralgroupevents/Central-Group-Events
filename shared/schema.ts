@@ -132,6 +132,22 @@ export const funnelEvents = pgTable("funnel_events", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const worldCupSubmissions = pgTable("world_cup_submissions", {
+  id: serial("id").primaryKey(),
+  weekIndex: integer("week_index").notNull(),
+  matchDate: text("match_date").notNull(),
+  matchSlot: text("match_slot").notNull(),
+  venueName: text("venue_name").notNull(),
+  town: text("town").notNull(),
+  eventName: text("event_name"),
+  instagramHandle: text("instagram_handle"),
+  submitterEmail: text("submitter_email").notNull(),
+  status: text("status").notNull().default("pending"),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
 export const comments = pgTable("comments", {
   id: serial("id").primaryKey(),
   postId: integer("post_id").references(() => posts.id).notNull(),
@@ -180,6 +196,18 @@ export const insertPostVersionSchema = createInsertSchema(postVersions).omit({ i
 export const insertPostViewSchema = createInsertSchema(postViews).omit({ id: true, viewedAt: true });
 export const insertLinkClickSchema = createInsertSchema(linkClicks).omit({ id: true, clickedAt: true });
 export const insertFunnelEventSchema = createInsertSchema(funnelEvents).omit({ id: true, createdAt: true });
+export const insertWorldCupSubmissionSchema = createInsertSchema(worldCupSubmissions)
+  .omit({ id: true, createdAt: true, reviewedAt: true, status: true, adminNotes: true })
+  .extend({
+    submitterEmail: z.string().email(),
+    weekIndex: z.number().int().min(1).max(6),
+    matchDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    matchSlot: z.string().min(1).max(200),
+    venueName: z.string().min(1).max(200),
+    town: z.string().min(1).max(100),
+    eventName: z.string().max(200).optional().nullable(),
+    instagramHandle: z.string().max(80).optional().nullable(),
+  });
 export const insertCommentSchema = createInsertSchema(comments).omit({ id: true, createdAt: true }).extend({
   body: z.string().min(1, "Comment cannot be empty").max(2000),
   parentId: z.number().optional().nullable(),
@@ -224,6 +252,9 @@ export type InsertLinkClick = z.infer<typeof insertLinkClickSchema>;
 
 export type FunnelEvent = typeof funnelEvents.$inferSelect;
 export type InsertFunnelEvent = z.infer<typeof insertFunnelEventSchema>;
+
+export type WorldCupSubmission = typeof worldCupSubmissions.$inferSelect;
+export type InsertWorldCupSubmission = z.infer<typeof insertWorldCupSubmissionSchema>;
 
 export type Comment = typeof comments.$inferSelect;
 export type InsertComment = z.infer<typeof insertCommentSchema>;
