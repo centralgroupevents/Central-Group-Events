@@ -141,6 +141,7 @@ export const worldCupSubmissions = pgTable("world_cup_submissions", {
   town: text("town").notNull(),
   eventName: text("event_name"),
   instagramHandle: text("instagram_handle"),
+  learnMoreUrl: text("learn_more_url"),
   submitterEmail: text("submitter_email").notNull(),
   status: text("status").notNull().default("pending"),
   adminNotes: text("admin_notes"),
@@ -207,6 +208,7 @@ export const insertWorldCupSubmissionSchema = createInsertSchema(worldCupSubmiss
     town: z.string().min(1).max(100),
     eventName: z.string().max(200).optional().nullable(),
     instagramHandle: z.string().max(80).optional().nullable(),
+    learnMoreUrl: z.string().url("Must be a valid URL starting with http or https").max(500).optional().nullable(),
   });
 export const insertCommentSchema = createInsertSchema(comments).omit({ id: true, createdAt: true }).extend({
   body: z.string().min(1, "Comment cannot be empty").max(2000),

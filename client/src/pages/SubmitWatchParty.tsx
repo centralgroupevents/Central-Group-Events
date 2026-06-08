@@ -27,6 +27,7 @@ export default function SubmitWatchParty() {
   const [town, setTown] = useState("");
   const [eventName, setEventName] = useState("");
   const [instagramHandle, setInstagramHandle] = useState("");
+  const [learnMoreUrl, setLearnMoreUrl] = useState("");
   const [submitterEmail, setSubmitterEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -67,6 +68,7 @@ export default function SubmitWatchParty() {
           town: town.trim(),
           eventName: eventName.trim() || null,
           instagramHandle: instagramHandle.trim() || null,
+          learnMoreUrl: learnMoreUrl.trim() || null,
           submitterEmail: submitterEmail.trim().toLowerCase(),
         }),
       });
@@ -217,6 +219,12 @@ export default function SubmitWatchParty() {
           <div className="space-y-1.5">
             <Label className="text-white/80">Instagram handle <span className="text-white/40 text-xs">(optional)</span></Label>
             <Input value={instagramHandle} onChange={(e) => setInstagramHandle(e.target.value)} placeholder="@yourvenue" className="bg-black/40 border-white/10 h-11" data-testid="input-instagram" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-white/80">Learn-more URL <span className="text-white/40 text-xs">(optional)</span></Label>
+            <Input type="url" value={learnMoreUrl} onChange={(e) => setLearnMoreUrl(e.target.value)} placeholder="https://your-event-page.com" className="bg-black/40 border-white/10 h-11" data-testid="input-learn-more-url" />
+            <p className="text-xs text-muted-foreground">Eventbrite, Posh, your venue page, or any link where guests can learn more or RSVP.</p>
           </div>
 
           <div className="space-y-1.5">

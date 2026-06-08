@@ -2366,6 +2366,7 @@ interface WorldCupSubmissionRow {
   town: string;
   eventName: string | null;
   instagramHandle: string | null;
+  learnMoreUrl: string | null;
   submitterEmail: string;
   status: string;
   adminNotes: string | null;
@@ -2451,6 +2452,7 @@ function WorldCupTab() {
                       <p className="text-xs text-white/50">
                         <a href={`mailto:${s.submitterEmail}`} className="text-primary hover:underline">{s.submitterEmail}</a>
                         {s.instagramHandle && <> · <a href={`https://instagram.com/${s.instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{s.instagramHandle.replace("@","")}</a></>}
+                        {s.learnMoreUrl && <> · <a href={s.learnMoreUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Learn-more link ↗</a></>}
                       </p>
                     </div>
                   </div>

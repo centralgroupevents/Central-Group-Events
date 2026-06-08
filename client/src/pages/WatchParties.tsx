@@ -21,6 +21,7 @@ interface ApprovedSubmission {
   town: string;
   eventName: string | null;
   instagramHandle: string | null;
+  learnMoreUrl: string | null;
 }
 
 function formatDate(iso: string): string {
@@ -166,17 +167,30 @@ export default function WatchParties() {
                               <span className="text-white/50">{match.timeEt}</span>
                             )}
                           </div>
-                          {s.instagramHandle && (
-                            <a
-                              href={`https://instagram.com/${s.instagramHandle.replace("@", "")}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                            >
-                              <Instagram className="w-3.5 h-3.5" />
-                              @{s.instagramHandle.replace("@", "")}
-                            </a>
-                          )}
+                          <div className="flex items-center gap-4 flex-wrap">
+                            {s.instagramHandle && (
+                              <a
+                                href={`https://instagram.com/${s.instagramHandle.replace("@", "")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                              >
+                                <Instagram className="w-3.5 h-3.5" />
+                                @{s.instagramHandle.replace("@", "")}
+                              </a>
+                            )}
+                            {s.learnMoreUrl && (
+                              <a
+                                href={s.learnMoreUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/25 transition-colors"
+                                data-testid={`watch-party-learn-more-${s.id}`}
+                              >
+                                Learn more →
+                              </a>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
