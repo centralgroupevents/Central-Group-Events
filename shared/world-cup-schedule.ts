@@ -203,3 +203,12 @@ export function getMatchBySlot(slot: string): WorldCupMatch | null {
 export function getWeekByIndex(index: number) {
   return WORLD_CUP_2026_WEEKS.find((w) => w.index === index) || null;
 }
+
+/** Returns the week index that contains the given YYYY-MM-DD date, or null if outside tournament window. */
+export function getWeekIndexForDate(isoDate: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null;
+  for (const w of WORLD_CUP_2026_WEEKS) {
+    if (isoDate >= w.startDate && isoDate <= w.endDate) return w.index;
+  }
+  return null;
+}

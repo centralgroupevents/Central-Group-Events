@@ -2374,17 +2374,51 @@ interface WorldCupSubmissionRow {
   createdAt: string | null;
 }
 
+const WC_IMPORT_FIELDS: { key: string; label: string; required: boolean }[] = [
+  { key: "matchDate",       label: "Match Date (YYYY-MM-DD)", required: true },
+  { key: "matchLabel",      label: "Match (e.g. USA vs Wales)", required: true },
+  { key: "venueName",       label: "Venue Name",   required: true },
+  { key: "town",            label: "Town / City",  required: true },
+  { key: "eventName",       label: "Event Name",   required: false },
+  { key: "instagramHandle", label: "Instagram Handle", required: false },
+  { key: "learnMoreUrl",    label: "Learn-more URL", required: false },
+];
+
+const WC_IMPORT_ALIASES: Record<string, string[]> = {
+  matchDate:       ["date", "matchdate", "match date", "event date", "day"],
+  matchLabel:      ["match", "matchlabel", "match label", "fixture", "game", "teams", "matchup"],
+  venueName:       ["venue", "venuename", "venue name", "location", "place"],
+  town:            ["town", "city", "area"],
+  eventName:       ["event", "eventname", "event name", "name", "title"],
+  instagramHandle: ["instagram", "ig", "handle", "insta", "instagramhandle"],
+  learnMoreUrl:    ["url", "link", "learnmoreurl", "learn more url", "learn more", "learnmore", "ticket", "tickets", "ticketlink"],
+};
+
+function wcAutoMatch(headers: string[], key: string): string {
+  const aliases = WC_IMPORT_ALIASES[key] || [key];
+  return headers.find((h) => aliases.some((a) => h.toLowerCase().trim() === a.toLowerCase())) ||
+         headers.find((h) => aliases.some((a) => h.toLowerCase().trim().includes(a.toLowerCase()))) || "";
+}
+
 function WorldCupTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("pending");
+
+  // Import wizard state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importStep, setImportStep] = useState<"input" | "mapping">("input");
+  const [importRawHeaders, setImportRawHeaders] = useState<string[]>([]);
+  const [importRawRows, setImportRawRows] = useState<string[][]>([]);
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({});
+  const [importError, setImportError] = useState("");
   const [importBusy, setImportBusy] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; invalid: { rowIndex: number; reason: string }[] } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   function downloadCsvTemplate() {
-    const headers = "weekIndex,matchDate,matchLabel,venueName,town,eventName,instagramHandle,learnMoreUrl";
-    const sample = "1,2026-06-15,USA vs Wales,Little Tijuana,Newark,The Big USA Watch Party,@littletijuanaNJ,https://posh.vip/e/example";
+    const headers = "matchDate,matchLabel,venueName,town,eventName,instagramHandle,learnMoreUrl";
+    const sample = "2026-06-15,USA vs Wales,Little Tijuana,Newark,The Big USA Watch Party,@littletijuanaNJ,https://posh.vip/e/example";
     const blob = new Blob([headers + "\n" + sample + "\n"], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2394,30 +2428,99 @@ function WorldCupTab() {
     URL.revokeObjectURL(url);
   }
 
-  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+  function resetImportWizard() {
+    setImportStep("input");
+    setImportRawHeaders([]);
+    setImportRawRows([]);
+    setImportMapping({});
+    setImportError("");
+    setImportResult(null);
+    setImportBusy(false);
+  }
+
+  function buildInitialWcMapping(headers: string[]): Record<string, string> {
+    const mapping: Record<string, string> = {};
+    for (const { key } of WC_IMPORT_FIELDS) {
+      mapping[key] = wcAutoMatch(headers, key);
+    }
+    return mapping;
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setImportBusy(true);
+    setImportError("");
     setImportResult(null);
-    try {
-      const text = await file.text();
-      const parsed = Papa.parse<Record<string, string>>(text, {
-        header: true,
+
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name) ||
+      file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.type === "application/vnd.ms-excel";
+
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const allRows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as string[][];
+          const nonEmpty = allRows.filter((r) => r.some((c) => String(c).trim() !== ""));
+          if (nonEmpty.length < 2) { setImportError("Spreadsheet appears to be empty or has only headers."); return; }
+          const headers = nonEmpty[0].map((h) => String(h).trim());
+          const dataRows = nonEmpty.slice(1).map((row) => row.map((c) => String(c).trim()));
+          setImportRawHeaders(headers);
+          setImportRawRows(dataRows);
+          setImportMapping(buildInitialWcMapping(headers));
+          setImportStep("mapping");
+        } catch {
+          setImportError("Could not read the spreadsheet file. Make sure it's a valid .xlsx or .xls file.");
+        }
+      };
+      reader.onerror = () => setImportError("Failed to read the file.");
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse<string[]>(file, {
+        header: false,
         skipEmptyLines: true,
-        transformHeader: (h) => h.trim(),
+        complete: (results) => {
+          const allRows = results.data as string[][];
+          if (allRows.length < 2) { setImportError("File appears to be empty or has only headers."); return; }
+          const headers = allRows[0].map((h) => h.trim());
+          const dataRows = allRows.slice(1);
+          setImportRawHeaders(headers);
+          setImportRawRows(dataRows);
+          setImportMapping(buildInitialWcMapping(headers));
+          setImportStep("mapping");
+        },
+        error: (err: Error) => setImportError(err.message),
       });
-      const rows = parsed.data.map((r) => ({
-        weekIndex: parseInt(String(r.weekIndex ?? "").trim(), 10),
-        matchDate: String(r.matchDate ?? "").trim(),
-        matchSlot: undefined,
-        matchLabel: String(r.matchLabel ?? "").trim() || undefined,
-        venueName: String(r.venueName ?? "").trim(),
-        town: String(r.town ?? "").trim(),
-        eventName: String(r.eventName ?? "").trim() || undefined,
-        instagramHandle: String(r.instagramHandle ?? "").trim() || undefined,
-        learnMoreUrl: String(r.learnMoreUrl ?? "").trim() || undefined,
-      }));
-      const res = await apiRequest("POST", "/api/admin/world-cup-submissions/bulk", rows);
+    }
+    e.target.value = "";
+  }
+
+  async function submitMappedImport() {
+    setImportBusy(true);
+    const mapped = importRawRows.map((row) => {
+      const obj: Record<string, string> = {};
+      for (const { key } of WC_IMPORT_FIELDS) {
+        const col = importMapping[key];
+        if (col) {
+          const idx = importRawHeaders.indexOf(col);
+          obj[key] = idx >= 0 ? (row[idx] || "").trim() : "";
+        }
+      }
+      return obj;
+    }).map((r) => ({
+      matchDate: r.matchDate,
+      matchLabel: r.matchLabel || undefined,
+      venueName: r.venueName,
+      town: r.town,
+      eventName: r.eventName || undefined,
+      instagramHandle: r.instagramHandle || undefined,
+      learnMoreUrl: r.learnMoreUrl || undefined,
+    }));
+    try {
+      const res = await apiRequest("POST", "/api/admin/world-cup-submissions/bulk", mapped);
       const result = await res.json();
       setImportResult(result);
       qc.invalidateQueries({ queryKey: ["/api/admin/world-cup-submissions"] });
@@ -2426,7 +2529,6 @@ function WorldCupTab() {
       toast({ title: "Import failed", description: String(err), variant: "destructive" });
     } finally {
       setImportBusy(false);
-      e.target.value = "";
     }
   }
 
@@ -2481,24 +2583,11 @@ function WorldCupTab() {
             <Button size="sm" variant="outline" className="border-white/20 text-white/70 h-8" onClick={downloadCsvTemplate} data-testid="wc-download-template">
               <Download className="w-3.5 h-3.5 mr-1.5" /> Template
             </Button>
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".csv,.txt"
-              className="hidden"
-              onChange={handleImportFile}
-              data-testid="wc-import-file"
-            />
-            <Button size="sm" className="bg-primary hover:bg-primary/90 h-8" disabled={importBusy} onClick={() => importInputRef.current?.click()} data-testid="wc-import-btn">
-              {importBusy ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Importing…</> : <><Upload className="w-3.5 h-3.5 mr-1.5" /> Import CSV</>}
+            <Button size="sm" className="bg-primary hover:bg-primary/90 h-8" onClick={() => { resetImportWizard(); setShowImportModal(true); }} data-testid="wc-import-btn">
+              <Upload className="w-3.5 h-3.5 mr-1.5" /> Import CSV / XLSX
             </Button>
           </div>
         </div>
-        {importResult && (
-          <div className="px-6 py-3 border-b border-white/10 bg-green-500/5 text-sm text-white/80">
-            <span className="font-semibold text-green-400">{importResult.imported}</span> imported{importResult.invalid.length > 0 && <>, <span className="font-semibold text-yellow-400">{importResult.invalid.length}</span> invalid row{importResult.invalid.length !== 1 ? "s" : ""} skipped (check column headers)</>}.
-          </div>
-        )}
         {isLoading ? (
           <div className="p-6 space-y-3">
             {[1,2,3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
@@ -2552,6 +2641,148 @@ function WorldCupTab() {
           </div>
         )}
       </div>
+
+      {/* Import wizard modal */}
+      <Dialog open={showImportModal} onOpenChange={(o) => { setShowImportModal(o); if (!o) resetImportWizard(); }}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Import Watch Parties from CSV or Excel</DialogTitle>
+          </DialogHeader>
+
+          {/* Step 1: upload */}
+          {importStep === "input" && !importResult && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">
+                Upload a <strong>.csv</strong>, <strong>.xlsx</strong>, or <strong>.xls</strong> file with one watch party per row. You'll map the columns in the next step.
+              </p>
+              <div className="border-2 border-dashed border-white/15 rounded-2xl p-8 text-center">
+                <Upload className="w-8 h-8 mx-auto text-white/40 mb-3" />
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls,.txt"
+                  className="hidden"
+                  onChange={handleImportFile}
+                  data-testid="wc-import-file"
+                />
+                <Button onClick={() => importInputRef.current?.click()} className="bg-primary hover:bg-primary/90">
+                  Choose file
+                </Button>
+                <p className="text-xs text-muted-foreground mt-3">CSV, XLSX, or XLS</p>
+              </div>
+              {importError && <p className="text-sm text-red-400">{importError}</p>}
+              <p className="text-xs text-muted-foreground">
+                Don't have a file yet? <button type="button" onClick={downloadCsvTemplate} className="text-primary hover:underline">Download a CSV template</button> to start from.
+              </p>
+            </div>
+          )}
+
+          {/* Step 2: column mapping */}
+          {importStep === "mapping" && !importResult && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">
+                Map your file's columns to our fields. Required fields are marked <span className="text-red-400">*</span>. The tournament week is auto-derived from the match date.
+              </p>
+              <div className="rounded-lg border border-white/10 overflow-hidden">
+                <table className="text-sm w-full">
+                  <thead>
+                    <tr className="bg-white/5 border-b border-white/10 text-muted-foreground text-left">
+                      <th className="px-3 py-2 font-medium w-1/2">CGE Field</th>
+                      <th className="px-3 py-2 font-medium w-1/2">Your Column</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {WC_IMPORT_FIELDS.map(({ key, label, required }) => (
+                      <tr key={key} className="border-b border-white/5">
+                        <td className="px-3 py-2 text-white/80">{label}{required && <span className="text-red-400 ml-1">*</span>}</td>
+                        <td className="px-3 py-2">
+                          <Select
+                            value={importMapping[key] || "__none__"}
+                            onValueChange={(v) => setImportMapping({ ...importMapping, [key]: v === "__none__" ? "" : v })}
+                          >
+                            <SelectTrigger className="h-8 bg-black/40 border-white/10 text-xs" data-testid={`wc-map-${key}`}>
+                              <SelectValue placeholder="— skip —" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-secondary border-white/10 text-white">
+                              <SelectItem value="__none__">— skip —</SelectItem>
+                              {importRawHeaders.filter(h => h && h.trim().length > 0).map((h) => (
+                                <SelectItem key={h} value={h}>{h}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {importRawRows.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Preview (first 3 rows with current mapping):</p>
+                  <div className="overflow-x-auto rounded-lg border border-white/10">
+                    <table className="text-xs w-full">
+                      <thead>
+                        <tr className="bg-white/5 border-b border-white/10 text-muted-foreground">
+                          {WC_IMPORT_FIELDS.filter(f => importMapping[f.key]).map(f => (
+                            <th key={f.key} className="px-3 py-2 text-left font-medium whitespace-nowrap">{f.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importRawRows.slice(0, 3).map((row, ri) => (
+                          <tr key={ri} className="border-b border-white/5">
+                            {WC_IMPORT_FIELDS.filter(f => importMapping[f.key]).map(f => {
+                              const idx = importRawHeaders.indexOf(importMapping[f.key]);
+                              return <td key={f.key} className="px-3 py-2 text-white/80 whitespace-nowrap max-w-[160px] truncate">{idx >= 0 ? (row[idx] || "—") : "—"}</td>;
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter className="gap-2 pt-2">
+                <Button variant="outline" onClick={() => setImportStep("input")} className="border-white/20 text-white/70">Back</Button>
+                <Button
+                  onClick={submitMappedImport}
+                  disabled={importBusy || !importMapping["matchDate"] || !importMapping["matchLabel"] || !importMapping["venueName"] || !importMapping["town"]}
+                  className="bg-primary hover:bg-primary/90 font-semibold"
+                  data-testid="wc-confirm-import"
+                >
+                  {importBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing…</> : <>Import {importRawRows.length} row{importRawRows.length !== 1 ? "s" : ""}</>}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {/* Result */}
+          {importResult && (
+            <div className="py-4 space-y-4">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                <p className="text-green-400 text-sm font-medium">
+                  {importResult.imported} watch {importResult.imported === 1 ? "party" : "parties"} imported
+                  {importResult.invalid.length > 0 && `, ${importResult.invalid.length} invalid row${importResult.invalid.length !== 1 ? "s" : ""} skipped`}
+                </p>
+              </div>
+              {importResult.invalid.length > 0 && (
+                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4 max-h-48 overflow-y-auto">
+                  <p className="text-xs font-semibold text-yellow-300 mb-2">Skipped rows:</p>
+                  <ul className="text-xs text-white/70 space-y-1">
+                    {importResult.invalid.map((iv, i) => <li key={i}>Row {iv.rowIndex + 1}: {iv.reason}</li>)}
+                  </ul>
+                </div>
+              )}
+              <DialogFooter>
+                <Button onClick={() => { setShowImportModal(false); resetImportWizard(); }} className="bg-primary hover:bg-primary/90">Done</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

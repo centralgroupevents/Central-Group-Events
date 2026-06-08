@@ -1663,6 +1663,7 @@ ${blogList || "_No recent posts yet._"}
   app.post("/api/admin/world-cup-submissions/bulk", requireAuth(), async (req: Request, res: Response) => {
     try {
       const { adminBulkWorldCupRowSchema } = await import("@shared/schema");
+      const { getWeekIndexForDate } = await import("@shared/world-cup-schedule");
       const raw = req.body as unknown[];
       if (!Array.isArray(raw)) return res.status(400).json({ message: "Expected an array of rows" });
       const valid: any[] = [];
@@ -1674,8 +1675,14 @@ ${blogList || "_No recent posts yet._"}
             invalid.push({ rowIndex: i, reason: "Row needs either matchSlot or matchLabel" });
             continue;
           }
+          // Auto-derive weekIndex from matchDate if not provided.
+          const weekIndex = parsed.weekIndex ?? getWeekIndexForDate(parsed.matchDate);
+          if (!weekIndex) {
+            invalid.push({ rowIndex: i, reason: `Date ${parsed.matchDate} is outside the 2026 World Cup tournament window (Jun 11 – Jul 19, 2026)` });
+            continue;
+          }
           valid.push({
-            weekIndex: parsed.weekIndex,
+            weekIndex,
             matchDate: parsed.matchDate,
             matchSlot: parsed.matchSlot || null,
             matchLabel: parsed.matchLabel || null,

@@ -218,9 +218,10 @@ export const insertWorldCupSubmissionSchema = createInsertSchema(worldCupSubmiss
 
 // Admin bulk-import schema: matchSlot is optional (admin may provide free-text
 // matchLabel instead of picking from the official schedule). Status is forced
-// to "approved" since admin is the source of truth.
+// to "approved" since admin is the source of truth. weekIndex is auto-derived
+// server-side from matchDate, so it's optional in the wire format.
 export const adminBulkWorldCupRowSchema = z.object({
-  weekIndex: z.number().int().min(1).max(6),
+  weekIndex: z.number().int().min(1).max(6).optional(),
   matchDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   matchSlot: z.string().max(200).optional().nullable(),
   matchLabel: z.string().max(300).optional().nullable(),
