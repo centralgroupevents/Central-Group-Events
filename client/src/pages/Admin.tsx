@@ -2558,6 +2558,53 @@ function WorldCupTab() {
     onError: () => toast({ title: "Update failed", variant: "destructive" }),
   });
 
+  // Edit-submission modal state
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({
+    venueName: "", town: "", matchDate: "", matchLabel: "",
+    eventName: "", instagramHandle: "", learnMoreUrl: "",
+  });
+  const [editBusy, setEditBusy] = useState(false);
+
+  function openEdit(s: WorldCupSubmissionRow) {
+    setEditingId(s.id);
+    setEditForm({
+      venueName: s.venueName || "",
+      town: s.town || "",
+      matchDate: s.matchDate || "",
+      matchLabel: s.matchLabel || s.matchSlot || "",
+      eventName: s.eventName || "",
+      instagramHandle: s.instagramHandle || "",
+      learnMoreUrl: s.learnMoreUrl || "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    setEditBusy(true);
+    try {
+      const payload: Record<string, string | null> = {
+        venueName: editForm.venueName.trim(),
+        town: editForm.town.trim(),
+        matchDate: editForm.matchDate.trim(),
+        matchLabel: editForm.matchLabel.trim() || null,
+        eventName: editForm.eventName.trim() || null,
+        instagramHandle: editForm.instagramHandle.trim() || null,
+        learnMoreUrl: editForm.learnMoreUrl.trim() || null,
+      };
+      const res = await apiRequest("PATCH", `/api/admin/world-cup-submissions/${editingId}`, payload);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Save failed");
+      qc.invalidateQueries({ queryKey: ["/api/admin/world-cup-submissions"] });
+      toast({ title: "Saved" });
+      setEditingId(null);
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message || err), variant: "destructive" });
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
@@ -2621,6 +2668,9 @@ function WorldCupTab() {
                     </div>
                   </div>
                   <div className="flex gap-2 flex-wrap">
+                    <Button size="sm" variant="outline" onClick={() => openEdit(s)} className="border-white/15 text-white/70" data-testid={`wc-edit-${s.id}`}>
+                      <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
+                    </Button>
                     {s.status !== "approved" && (
                       <Button size="sm" onClick={() => updateMutation.mutate({ id: s.id, status: "approved" })} className="bg-green-500/15 border border-green-500/30 text-green-400 hover:bg-green-500/25" data-testid={`wc-approve-${s.id}`}>
                         Approve
@@ -2783,6 +2833,52 @@ function WorldCupTab() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit submission modal — clean up details before approving */}
+      <Dialog open={editingId !== null} onOpenChange={(o) => { if (!o) setEditingId(null); }}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit watch party submission</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Venue name *</Label>
+              <Input value={editForm.venueName} onChange={(e) => setEditForm({ ...editForm, venueName: e.target.value })} className="bg-black/40 border-white/10 h-10" data-testid="edit-venue" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Town *</Label>
+              <Input value={editForm.town} onChange={(e) => setEditForm({ ...editForm, town: e.target.value })} className="bg-black/40 border-white/10 h-10" data-testid="edit-town" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Match date *</Label>
+              <Input type="date" value={editForm.matchDate} onChange={(e) => setEditForm({ ...editForm, matchDate: e.target.value })} className="bg-black/40 border-white/10 h-10" data-testid="edit-match-date" />
+              <p className="text-[11px] text-white/40">Must be in the World Cup window (Jun 11 – Jul 19, 2026). Week is auto-derived.</p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Match label / fixture</Label>
+              <Input value={editForm.matchLabel} onChange={(e) => setEditForm({ ...editForm, matchLabel: e.target.value })} placeholder="USA vs Wales" className="bg-black/40 border-white/10 h-10" data-testid="edit-match-label" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Event name <span className="text-white/40">(optional)</span></Label>
+              <Input value={editForm.eventName} onChange={(e) => setEditForm({ ...editForm, eventName: e.target.value })} className="bg-black/40 border-white/10 h-10" data-testid="edit-event-name" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Instagram handle <span className="text-white/40">(optional)</span></Label>
+              <Input value={editForm.instagramHandle} onChange={(e) => setEditForm({ ...editForm, instagramHandle: e.target.value })} placeholder="@venue" className="bg-black/40 border-white/10 h-10" data-testid="edit-ig" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Learn-more URL <span className="text-white/40">(optional)</span></Label>
+              <Input value={editForm.learnMoreUrl} onChange={(e) => setEditForm({ ...editForm, learnMoreUrl: e.target.value })} placeholder="posh.vip/e/your-event" className="bg-black/40 border-white/10 h-10" data-testid="edit-url" />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditingId(null)} className="border-white/20 text-white/70">Cancel</Button>
+            <Button onClick={saveEdit} disabled={editBusy} className="bg-primary hover:bg-primary/90" data-testid="edit-save">
+              {editBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save changes"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

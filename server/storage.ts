@@ -135,6 +135,7 @@ export interface IStorage {
   createWorldCupSubmissionRaw(row: any): Promise<void>;
   listWorldCupSubmissions(opts?: { status?: string }): Promise<WorldCupSubmission[]>;
   updateWorldCupSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<WorldCupSubmission | undefined>;
+  updateWorldCupSubmissionFields(id: number, fields: Partial<WorldCupSubmission>): Promise<WorldCupSubmission | undefined>;
   getApprovedWorldCupSubmissions(weekIndex?: number): Promise<WorldCupSubmission[]>;
 
   // New analytics (event-level, regions, sources, funnel)
@@ -645,6 +646,19 @@ export class DatabaseStorage implements IStorage {
     if (adminNotes !== undefined) patch.adminNotes = adminNotes;
     const [updated] = await db.update(worldCupSubmissions)
       .set(patch)
+      .where(eq(worldCupSubmissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Used by the admin "Edit submission" modal — accepts any subset of mutable fields.
+  async updateWorldCupSubmissionFields(id: number, fields: Partial<WorldCupSubmission>): Promise<WorldCupSubmission | undefined> {
+    if (Object.keys(fields).length === 0) {
+      const [row] = await db.select().from(worldCupSubmissions).where(eq(worldCupSubmissions.id, id));
+      return row;
+    }
+    const [updated] = await db.update(worldCupSubmissions)
+      .set(fields)
       .where(eq(worldCupSubmissions.id, id))
       .returning();
     return updated;

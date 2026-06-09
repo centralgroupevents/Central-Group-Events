@@ -1721,6 +1721,45 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Admin: edit submission fields (used when a row comes in with off details).
+  // Re-derives weekIndex if matchDate changes.
+  app.patch("/api/admin/world-cup-submissions/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const { getWeekIndexForDate } = await import("@shared/world-cup-schedule");
+      const body = req.body as Record<string, any>;
+      const allowed: Record<string, unknown> = {};
+      const STRING_FIELDS = ["venueName", "town", "matchDate", "matchSlot", "matchLabel", "eventName", "instagramHandle", "learnMoreUrl", "adminNotes"];
+      for (const k of STRING_FIELDS) {
+        if (k in body) {
+          const v = body[k];
+          allowed[k] = v == null || v === "" ? null : String(v).slice(0, 500);
+        }
+      }
+      // Required-field guards (only when fields are present in the patch)
+      if ("venueName" in allowed && !allowed.venueName) return res.status(400).json({ message: "venueName cannot be empty" });
+      if ("town" in allowed && !allowed.town) return res.status(400).json({ message: "town cannot be empty" });
+      if ("matchDate" in allowed && allowed.matchDate) {
+        const md = String(allowed.matchDate);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(md)) return res.status(400).json({ message: "matchDate must be YYYY-MM-DD" });
+        const wk = getWeekIndexForDate(md);
+        if (!wk) return res.status(400).json({ message: `matchDate ${md} is outside the 2026 World Cup tournament window` });
+        allowed.weekIndex = wk;
+      }
+      // URL normalize
+      if ("learnMoreUrl" in allowed) {
+        allowed.learnMoreUrl = normalizeUrl(allowed.learnMoreUrl as string | null);
+      }
+      const updated = await storage.updateWorldCupSubmissionFields(id, allowed as any);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[wc-edit] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Admin: bulk-import watch parties from an uploaded CSV/Excel.
   // Each row is auto-approved (admin is the source of truth).
   app.post("/api/admin/world-cup-submissions/bulk", requireAuth(), async (req: Request, res: Response) => {
