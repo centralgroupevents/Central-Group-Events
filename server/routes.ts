@@ -66,10 +66,20 @@ function normalizeUrl(input: string | null | undefined): string | null {
 // start date. Returns "YYYY-MM-DD" or null if it can't make sense of it.
 function parseFlexibleWcDate(input: string): string | null {
   if (!input) return null;
+  let raw = String(input).trim();
+  // Excel serial date fallback (e.g. "46184" → 2026-06-11). Triggers when an
+  // XLSX cell came through as the raw number (cellDates/raw:false missed it).
+  const asNumber = Number(raw);
+  if (Number.isFinite(asNumber) && asNumber > 30000 && asNumber < 80000 && /^\d+(\.\d+)?$/.test(raw)) {
+    const ms = Date.UTC(1899, 11, 30) + asNumber * 86_400_000;
+    const d = new Date(ms);
+    if (!isNaN(d.getTime())) {
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    }
+  }
   // Strip any range — take the first half (e.g., "Jun 11 – Jul 19, 2026" → "Jun 11")
   // Range separators: en-dash, em-dash, hyphen between dates, "to", "through".
   // We split, but preserve the year from the second half if first half lacks it.
-  let raw = String(input).trim();
   const rangeSplit = raw.split(/\s+(?:[–—\-]|to|through)\s+/i);
   let head = rangeSplit[0].trim();
   if (rangeSplit.length > 1 && !/\d{4}/.test(head)) {

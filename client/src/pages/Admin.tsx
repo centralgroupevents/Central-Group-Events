@@ -2461,9 +2461,11 @@ function WorldCupTab() {
       reader.onload = (ev) => {
         try {
           const data = new Uint8Array(ev.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: "array" });
+          // cellDates+raw:false ensures Excel date cells come through as
+          // YYYY-MM-DD strings instead of serial numbers like 46184.
+          const workbook = XLSX.read(data, { type: "array", cellDates: true });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const allRows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as string[][];
+          const allRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, dateNF: "yyyy-mm-dd" }) as any[][];
           const nonEmpty = allRows.filter((r) => r.some((c) => String(c).trim() !== ""));
           if (nonEmpty.length < 2) { setImportError("Spreadsheet appears to be empty or has only headers."); return; }
           const headers = nonEmpty[0].map((h) => String(h).trim());
