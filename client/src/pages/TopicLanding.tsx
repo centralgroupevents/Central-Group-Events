@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { EventBrowser } from "@/components/EventBrowser";
+import { WorldCupEmailBanner } from "@/components/WorldCupEmailBanner";
 import {
   Accordion,
   AccordionContent,
@@ -94,22 +95,27 @@ export default function TopicLanding() {
 
           {/* Cross-link CTAs for the World Cup tentpole — sit between intro and events list */}
           {slug === "world-cup-2026-nj-guide" && (
-            <div className="mt-8 flex flex-col sm:flex-row gap-3">
-              <Link
-                href="/world-cup-2026-nj-watch-parties"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors"
-                data-testid="cta-watch-parties"
-              >
-                ⚽ See NJ World Cup watch parties →
-              </Link>
-              <Link
-                href="/submit-world-cup-watch-party"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-white/15 text-white/80 font-semibold text-sm hover:bg-white/5 transition-colors"
-                data-testid="cta-submit-watch-party"
-              >
-                Submit your venue's watch party
-              </Link>
-            </div>
+            <>
+              <div className="mt-8 flex flex-col sm:flex-row gap-3">
+                <Link
+                  href="/world-cup-2026-nj-watch-parties"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors"
+                  data-testid="cta-watch-parties"
+                >
+                  ⚽ See NJ World Cup watch parties →
+                </Link>
+                <Link
+                  href="/submit-world-cup-watch-party"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-white/15 text-white/80 font-semibold text-sm hover:bg-white/5 transition-colors"
+                  data-testid="cta-submit-watch-party"
+                >
+                  Submit your venue's watch party
+                </Link>
+              </div>
+              <div className="mt-6">
+                <WorldCupEmailBanner source="world-cup-guide" />
+              </div>
+            </>
           )}
         </div>
       </section>

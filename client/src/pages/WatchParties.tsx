@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
+import { WorldCupEmailBanner } from "@/components/WorldCupEmailBanner";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, Instagram, MapPin } from "lucide-react";
 import {
@@ -115,6 +116,14 @@ export default function WatchParties() {
             >
               What's happening in NJ during the World Cup →
             </Link>
+          </div>
+
+          <div className="mt-6">
+            <WorldCupEmailBanner
+              source="world-cup-watch-parties"
+              headline="Get the NJ watch party schedule each week"
+              subhead="We email subscribers when new watch parties are approved + which matches are happening that week."
+            />
           </div>
         </div>
       </section>
