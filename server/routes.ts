@@ -1609,6 +1609,13 @@ ${blogList || "_No recent posts yet._"}
       }
       const created = await storage.createWorldCupSubmission(parsed);
 
+      // Auto-subscribe the submitter to the newsletter (non-blocking, ON CONFLICT DO NOTHING).
+      // Matches the same pattern used for /api/bookings — every email captured is a lead.
+      storage.upsertSubscriber(
+        parsed.submitterEmail.toLowerCase().trim(),
+        "world-cup-watch-party",
+      ).catch(() => {});
+
       // Auto-reply to submitter
       transporter.sendMail({
         from: `"CGE Watch Parties" <${process.env.GMAIL_USER}>`,
