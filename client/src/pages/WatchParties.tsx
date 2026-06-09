@@ -97,13 +97,25 @@ export default function WatchParties() {
           <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4">
             2026 World Cup Watch Parties in NJ
           </h1>
-          <p className="text-white/80 leading-relaxed">
+          <p className="text-white/80 leading-relaxed mb-6">
             Every venue hosting a 2026 FIFA World Cup watch party across New Jersey. Updated as new submissions are reviewed.
-            Hosting one yourself?{" "}
-            <Link href="/submit-world-cup-watch-party" className="text-primary hover:underline font-semibold">
-              Submit your watch party →
-            </Link>
           </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Link
+              href="/submit-world-cup-watch-party"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors"
+              data-testid="cta-submit-watch-party"
+            >
+              + Submit your watch party
+            </Link>
+            <Link
+              href="/world-cup-2026-nj-guide"
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-white/15 text-white/80 font-semibold text-sm hover:bg-white/5 transition-colors"
+              data-testid="cta-wc-guide"
+            >
+              What's happening in NJ during the World Cup →
+            </Link>
+          </div>
         </div>
       </section>
 
