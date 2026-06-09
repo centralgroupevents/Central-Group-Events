@@ -325,16 +325,20 @@ const TENTPOLE_TOPICS: TopicConfig[] = [
   {
     slug: "world-cup-2026-nj-guide",
     pageType: "tentpole",
-    h1: "World Cup 2026 NJ Guide — What to Do, Where to Watch, Where to Stay",
-    metaTitle: "World Cup 2026 NJ Guide — MetLife Stadium Final, Watch Parties & Events | Central Group Events",
-    metaDescription: "Everything you need to know about the FIFA World Cup 2026 in New Jersey. MetLife Stadium hosts the Final on July 19, 2026. Watch parties, events, restaurants, and travel tips in East Rutherford and the surrounding region.",
+    h1: "What's Happening in NJ During the 2026 World Cup",
+    metaTitle: "Things to Do in NJ During the 2026 World Cup | Central Group Events",
+    metaDescription: "The full New Jersey event calendar during the 2026 FIFA World Cup (June 11 – July 19). Day parties, brunches, concerts, nightlife, and more across NJ — plus where to watch the matches.",
     filter: {},
     introParagraphs: [
-      "The 2026 FIFA World Cup runs June 11 through July 19, 2026, hosted across the United States, Canada, and Mexico. New Jersey takes center stage: MetLife Stadium in East Rutherford hosts the World Cup Final on July 19, 2026, along with several earlier tournament matches.",
-      "If you're traveling to New Jersey for the World Cup — or you live here and want to plan around the event surge — this guide collects the essentials: where the matches happen, the best places in NJ to watch every game, restaurants and bars filling up around match days, and the surrounding event scene throughout the tournament window.",
-      "Central Group Events curates official watch parties, satellite events around MetLife Stadium, and the broader weekly NJ events schedule during the tournament. Bookmark this page and the main events list — both refresh weekly through July 2026.",
+      "The 2026 FIFA World Cup runs June 11 through July 19, 2026, and New Jersey is at the center of it — MetLife Stadium hosts the Final on July 19, along with several earlier tournament matches.",
+      "This page is the broader NJ event scene during the tournament window: brunches, day parties, concerts, festivals, and nightlife across the state. Everything below is curated weekly by Central Group Events.",
+      "Looking specifically for World Cup watch parties? We track those separately on a dedicated page. Browse approved watch parties at /world-cup-2026-nj-watch-parties — or submit your own venue at /submit-world-cup-watch-party.",
     ],
     faqItems: [
+      {
+        q: "Where can I find a list of World Cup watch parties in NJ?",
+        a: "Central Group Events maintains a dedicated, free public list of approved 2026 World Cup watch parties across New Jersey at https://centralgroupevents.com/world-cup-2026-nj-watch-parties — filterable by tournament week. Venues hosting a watch party can submit it for free at https://centralgroupevents.com/submit-world-cup-watch-party.",
+      },
       {
         q: "Where is the World Cup 2026 Final being held?",
         a: "The FIFA World Cup 2026 Final will be played at MetLife Stadium in East Rutherford, New Jersey on July 19, 2026. MetLife also hosts several earlier tournament matches.",
@@ -344,12 +348,8 @@ const TENTPOLE_TOPICS: TopicConfig[] = [
         a: "MetLife Stadium is scheduled to host multiple group stage and knockout round matches throughout June and early July 2026, in addition to the July 19 Final. Refer to the official FIFA fixture list for exact dates.",
       },
       {
-        q: "Where can I watch the World Cup in New Jersey?",
-        a: "Best NJ watch spots are concentrated in East Rutherford (closest to MetLife), Newark, Jersey City, and Hoboken — sports bars, Brazilian/Portuguese restaurants in the Ironbound, and waterfront venues along the Hudson. Central Group Events maintains a weekly watch-party schedule during the tournament.",
-      },
-      {
         q: "What is there to do in NJ during the World Cup?",
-        a: "The tournament overlaps with peak NJ summer events — beach weekends in Atlantic City, day parties in Newark and Jersey City, festivals statewide. International fan zones, watch parties, and themed events also pop up across the state. The Central Group Events calendar covers all of it.",
+        a: "The tournament overlaps with peak NJ summer events — beach weekends in Atlantic City, day parties in Newark and Jersey City, festivals statewide, brunches in Hoboken. The Central Group Events calendar covers all of it; this page lists the upcoming items.",
       },
       {
         q: "How do I get to MetLife Stadium from NYC?",
