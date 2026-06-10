@@ -149,6 +149,12 @@ export interface IStorage {
   updateNbaFinalsSubmissionFields(id: number, fields: Partial<NbaFinalsSubmission>): Promise<NbaFinalsSubmission | undefined>;
   getApprovedNbaFinalsSubmissions(gameNumber?: number): Promise<NbaFinalsSubmission[]>;
 
+  // Bulk operations (admin multi-select)
+  bulkUpdateWorldCupSubmissionStatus(ids: number[], status: string): Promise<number>;
+  bulkDeleteWorldCupSubmissions(ids: number[]): Promise<number>;
+  bulkUpdateNbaFinalsSubmissionStatus(ids: number[], status: string): Promise<number>;
+  bulkDeleteNbaFinalsSubmissions(ids: number[]): Promise<number>;
+
   // New analytics (event-level, regions, sources, funnel)
   getEventPerformance(days?: number, limit?: number): Promise<{ eventId: number; title: string; date: string; region: string; city: string | null; clicks: number }[]>;
   getTopRegions(days?: number): Promise<{ region: string; clicks: number; events: number }[]>;
@@ -732,6 +738,41 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(nbaFinalsSubmissions)
       .where(conds)
       .orderBy(nbaFinalsSubmissions.gameDate);
+  }
+
+  // ── Bulk admin operations ─────────────────────────────────────────────
+  async bulkUpdateWorldCupSubmissionStatus(ids: number[], status: string): Promise<number> {
+    if (ids.length === 0) return 0;
+    const updated = await db.update(worldCupSubmissions)
+      .set({ status, reviewedAt: new Date() })
+      .where(inArray(worldCupSubmissions.id, ids))
+      .returning({ id: worldCupSubmissions.id });
+    return updated.length;
+  }
+
+  async bulkDeleteWorldCupSubmissions(ids: number[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const deleted = await db.delete(worldCupSubmissions)
+      .where(inArray(worldCupSubmissions.id, ids))
+      .returning({ id: worldCupSubmissions.id });
+    return deleted.length;
+  }
+
+  async bulkUpdateNbaFinalsSubmissionStatus(ids: number[], status: string): Promise<number> {
+    if (ids.length === 0) return 0;
+    const updated = await db.update(nbaFinalsSubmissions)
+      .set({ status, reviewedAt: new Date() })
+      .where(inArray(nbaFinalsSubmissions.id, ids))
+      .returning({ id: nbaFinalsSubmissions.id });
+    return updated.length;
+  }
+
+  async bulkDeleteNbaFinalsSubmissions(ids: number[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const deleted = await db.delete(nbaFinalsSubmissions)
+      .where(inArray(nbaFinalsSubmissions.id, ids))
+      .returning({ id: nbaFinalsSubmissions.id });
+    return deleted.length;
   }
 
   async getEventPerformance(days?: number, limit = 20) {

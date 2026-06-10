@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -2606,6 +2607,37 @@ function WorldCupTab() {
     }
   }
 
+  // Multi-select state for bulk actions
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: async ({ status }: { status: string }) => {
+      const res = await apiRequest("POST", "/api/admin/world-cup-submissions/bulk-status", { ids: Array.from(selectedIds), status });
+      return res.json();
+    },
+    onSuccess: (data: { updated: number }) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/world-cup-submissions"] });
+      toast({ title: `Updated ${data.updated}` });
+      setSelectedIds(new Set());
+    },
+    onError: () => toast({ title: "Bulk update failed", variant: "destructive" }),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/world-cup-submissions/bulk-delete", { ids: Array.from(selectedIds) });
+      return res.json();
+    },
+    onSuccess: (data: { deleted: number }) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/world-cup-submissions"] });
+      toast({ title: `Deleted ${data.deleted}` });
+      setSelectedIds(new Set());
+      setShowBulkDeleteConfirm(false);
+    },
+    onError: () => toast({ title: "Bulk delete failed", variant: "destructive" }),
+  });
+
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
@@ -2626,9 +2658,37 @@ function WorldCupTab() {
         </div>
       </div>
 
+      {/* Bulk action bar — visible only when at least one row is selected */}
+      {selectedIds.size > 0 && (
+        <div className="bg-primary/15 border border-primary/40 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3" data-testid="wc-bulk-bar">
+          <span className="text-sm text-white font-medium">{selectedIds.size} selected</span>
+          <div className="flex gap-2 flex-wrap ml-auto">
+            <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "approved" })} className="bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/30">Approve all</Button>
+            <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "rejected" })} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">Reject all</Button>
+            <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "pending" })} variant="outline" className="border-white/20 text-white/70">Reopen all</Button>
+            <Button size="sm" disabled={bulkDeleteMutation.isPending} onClick={() => setShowBulkDeleteConfirm(true)} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete all
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())} className="border-white/15 text-white/50">Clear</Button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-bold text-white">World Cup Watch Party Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({submissions.length})</span></h2>
+          <div className="flex items-center gap-3">
+            {submissions.length > 0 && (
+              <Checkbox
+                checked={selectedIds.size === submissions.length && submissions.length > 0}
+                onCheckedChange={(checked) => {
+                  if (checked) setSelectedIds(new Set(submissions.map((s) => s.id)));
+                  else setSelectedIds(new Set());
+                }}
+                data-testid="wc-select-all"
+              />
+            )}
+            <h2 className="font-bold text-white">World Cup Watch Party Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({submissions.length})</span></h2>
+          </div>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" className="border-white/20 text-white/70 h-8" onClick={downloadCsvTemplate} data-testid="wc-download-template">
               <Download className="w-3.5 h-3.5 mr-1.5" /> Template
@@ -2646,10 +2706,23 @@ function WorldCupTab() {
           <div className="py-10 px-6 text-center text-muted-foreground text-sm">No submissions match this filter.</div>
         ) : (
           <div className="divide-y divide-white/5">
-            {submissions.map((s) => (
-              <div key={s.id} className="px-6 py-5" data-testid={`wc-row-${s.id}`}>
+            {submissions.map((s) => {
+              const isRowSelected = selectedIds.has(s.id);
+              return (
+              <div key={s.id} className={`px-6 py-5 ${isRowSelected ? "bg-primary/5" : ""}`} data-testid={`wc-row-${s.id}`}>
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 flex items-start gap-3">
+                    <Checkbox
+                      checked={isRowSelected}
+                      onCheckedChange={(checked) => {
+                        const next = new Set(selectedIds);
+                        if (checked) next.add(s.id); else next.delete(s.id);
+                        setSelectedIds(next);
+                      }}
+                      className="mt-1"
+                      data-testid={`wc-select-${s.id}`}
+                    />
+                    <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 flex-wrap mb-1">
                       <h3 className="font-bold text-white">{s.eventName || s.venueName}</h3>
                       {s.eventName && <span className="text-sm text-white/50">at {s.venueName}</span>}
@@ -2666,6 +2739,7 @@ function WorldCupTab() {
                         {s.instagramHandle && <> · <a href={`https://instagram.com/${s.instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{s.instagramHandle.replace("@","")}</a></>}
                         {s.learnMoreUrl && <> · <a href={s.learnMoreUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Learn-more link ↗</a></>}
                       </p>
+                    </div>
                     </div>
                   </div>
                   <div className="flex gap-2 flex-wrap">
@@ -2690,10 +2764,29 @@ function WorldCupTab() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* Bulk delete confirmation */}
+      <Dialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} submission{selectedIds.size !== 1 ? "s" : ""}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-white/70 py-2">
+            This permanently deletes {selectedIds.size} selected watch party submission{selectedIds.size !== 1 ? "s" : ""}. Cannot be undone.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowBulkDeleteConfirm(false)} className="border-white/20 text-white/70">Cancel</Button>
+            <Button onClick={() => bulkDeleteMutation.mutate()} disabled={bulkDeleteMutation.isPending} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">
+              {bulkDeleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Delete ${selectedIds.size}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Import wizard modal */}
       <Dialog open={showImportModal} onOpenChange={(o) => { setShowImportModal(o); if (!o) resetImportWizard(); }}>
@@ -3105,6 +3198,37 @@ function NbaFinalsTab() {
     }
   }
 
+  // Multi-select state for bulk actions
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: async ({ status }: { status: string }) => {
+      const res = await apiRequest("POST", "/api/admin/nba-finals-submissions/bulk-status", { ids: Array.from(selectedIds), status });
+      return res.json();
+    },
+    onSuccess: (data: { updated: number }) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/nba-finals-submissions"] });
+      toast({ title: `Updated ${data.updated}` });
+      setSelectedIds(new Set());
+    },
+    onError: () => toast({ title: "Bulk update failed", variant: "destructive" }),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/nba-finals-submissions/bulk-delete", { ids: Array.from(selectedIds) });
+      return res.json();
+    },
+    onSuccess: (data: { deleted: number }) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/nba-finals-submissions"] });
+      toast({ title: `Deleted ${data.deleted}` });
+      setSelectedIds(new Set());
+      setShowBulkDeleteConfirm(false);
+    },
+    onError: () => toast({ title: "Bulk delete failed", variant: "destructive" }),
+  });
+
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
@@ -3124,9 +3248,37 @@ function NbaFinalsTab() {
         </div>
       </div>
 
+      {/* NBA Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="bg-primary/15 border border-primary/40 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3" data-testid="nba-bulk-bar">
+          <span className="text-sm text-white font-medium">{selectedIds.size} selected</span>
+          <div className="flex gap-2 flex-wrap ml-auto">
+            <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "approved" })} className="bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/30">Approve all</Button>
+            <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "rejected" })} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">Reject all</Button>
+            <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "pending" })} variant="outline" className="border-white/20 text-white/70">Reopen all</Button>
+            <Button size="sm" disabled={bulkDeleteMutation.isPending} onClick={() => setShowBulkDeleteConfirm(true)} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete all
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())} className="border-white/15 text-white/50">Clear</Button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-bold text-white">NBA Finals Watch Party Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({submissions.length})</span></h2>
+          <div className="flex items-center gap-3">
+            {submissions.length > 0 && (
+              <Checkbox
+                checked={selectedIds.size === submissions.length && submissions.length > 0}
+                onCheckedChange={(checked) => {
+                  if (checked) setSelectedIds(new Set(submissions.map((s) => s.id)));
+                  else setSelectedIds(new Set());
+                }}
+                data-testid="nba-select-all"
+              />
+            )}
+            <h2 className="font-bold text-white">NBA Finals Watch Party Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({submissions.length})</span></h2>
+          </div>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" className="border-white/20 text-white/70 h-8" onClick={downloadCsvTemplate}>
               <Download className="w-3.5 h-3.5 mr-1.5" /> Template
@@ -3144,10 +3296,23 @@ function NbaFinalsTab() {
           <div className="py-10 px-6 text-center text-muted-foreground text-sm">No submissions match this filter.</div>
         ) : (
           <div className="divide-y divide-white/5">
-            {submissions.map((s) => (
-              <div key={s.id} className="px-6 py-5">
+            {submissions.map((s) => {
+              const isRowSelected = selectedIds.has(s.id);
+              return (
+              <div key={s.id} className={`px-6 py-5 ${isRowSelected ? "bg-primary/5" : ""}`}>
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 flex items-start gap-3">
+                    <Checkbox
+                      checked={isRowSelected}
+                      onCheckedChange={(checked) => {
+                        const next = new Set(selectedIds);
+                        if (checked) next.add(s.id); else next.delete(s.id);
+                        setSelectedIds(next);
+                      }}
+                      className="mt-1"
+                      data-testid={`nba-select-${s.id}`}
+                    />
+                    <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 flex-wrap mb-1">
                       <h3 className="font-bold text-white">{s.eventName || s.venueName}</h3>
                       {s.eventName && <span className="text-sm text-white/50">at {s.venueName}</span>}
@@ -3164,6 +3329,7 @@ function NbaFinalsTab() {
                         {s.instagramHandle && <> · <a href={`https://instagram.com/${s.instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{s.instagramHandle.replace("@","")}</a></>}
                         {s.learnMoreUrl && <> · <a href={s.learnMoreUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Learn-more link ↗</a></>}
                       </p>
+                    </div>
                     </div>
                   </div>
                   <div className="flex gap-2 flex-wrap">
@@ -3182,10 +3348,29 @@ function NbaFinalsTab() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* NBA Bulk delete confirmation */}
+      <Dialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} submission{selectedIds.size !== 1 ? "s" : ""}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-white/70 py-2">
+            This permanently deletes {selectedIds.size} selected watch party submission{selectedIds.size !== 1 ? "s" : ""}. Cannot be undone.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowBulkDeleteConfirm(false)} className="border-white/20 text-white/70">Cancel</Button>
+            <Button onClick={() => bulkDeleteMutation.mutate()} disabled={bulkDeleteMutation.isPending} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">
+              {bulkDeleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Delete ${selectedIds.size}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Import wizard modal */}
       <Dialog open={showImportModal} onOpenChange={(o) => { setShowImportModal(o); if (!o) resetImportWizard(); }}>

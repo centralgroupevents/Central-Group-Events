@@ -1829,6 +1829,37 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Admin: bulk status update on World Cup submissions (multi-select approve/reject/reopen).
+  app.post("/api/admin/world-cup-submissions/bulk-status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids, status } = req.body as { ids?: unknown; status?: string };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      if (!status || !["pending", "approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "status must be pending/approved/rejected" });
+      }
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const updated = await storage.bulkUpdateWorldCupSubmissionStatus(numIds, status);
+      res.json({ updated });
+    } catch (err) {
+      console.error("[wc-bulk-status] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: bulk delete World Cup submissions (multi-select).
+  app.post("/api/admin/world-cup-submissions/bulk-delete", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body as { ids?: unknown };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const deleted = await storage.bulkDeleteWorldCupSubmissions(numIds);
+      res.json({ deleted });
+    } catch (err) {
+      console.error("[wc-bulk-delete] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── NBA Finals 2026 watch party submissions ──────────────────────────────
   app.post("/api/nba-finals-submissions", formLimiter, async (req: Request, res: Response) => {
     try {
@@ -2024,6 +2055,35 @@ ${blogList || "_No recent posts yet._"}
       res.json({ imported, invalid });
     } catch (err) {
       console.error("[nba-bulk] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/nba-finals-submissions/bulk-status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids, status } = req.body as { ids?: unknown; status?: string };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      if (!status || !["pending", "approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "status must be pending/approved/rejected" });
+      }
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const updated = await storage.bulkUpdateNbaFinalsSubmissionStatus(numIds, status);
+      res.json({ updated });
+    } catch (err) {
+      console.error("[nba-bulk-status] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/nba-finals-submissions/bulk-delete", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body as { ids?: unknown };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const deleted = await storage.bulkDeleteNbaFinalsSubmissions(numIds);
+      res.json({ deleted });
+    } catch (err) {
+      console.error("[nba-bulk-delete] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
