@@ -1,9 +1,10 @@
-// 2026 NBA Finals schedule — games 4 through 7. Games 5-7 are conditional
+// 2026 NBA Finals schedule — Games 4 through 7. Games 5-7 are conditional
 // ("if necessary") since the Finals end as soon as one team clinches 4 wins.
 //
-// IMPORTANT — team names and exact dates are PLACEHOLDERS. Update each game's
-// `fixture` and `date` fields once the actual Finals matchup is locked and the
-// official schedule is published by the NBA.
+// Matchup: San Antonio Spurs vs New York Knicks. The 2-2-1-1-1 home rotation
+// below assumes the Spurs are the higher seed (Games 1-2, 5, 7 at Frost Bank
+// Center in San Antonio; Games 3-4, 6 at Madison Square Garden in New York).
+// If the Knicks turn out to be the higher seed, swap the arena values.
 
 export interface NbaFinalsGame {
   /** Game number in the series (4-7). */
@@ -23,34 +24,34 @@ export interface NbaFinalsGame {
 export const NBA_FINALS_2026_GAMES: NbaFinalsGame[] = [
   {
     gameNumber: 4,
-    fixture: "Game 4: Western Champion @ Eastern Champion",
+    fixture: "Game 4: Spurs @ Knicks",
     date: "2026-06-12",
     timeEt: "8:30 PM ET",
-    arena: "Eastern Champion's home arena",
+    arena: "Madison Square Garden, New York NY",
     ifNecessary: false,
   },
   {
     gameNumber: 5,
-    fixture: "Game 5: Eastern Champion @ Western Champion",
+    fixture: "Game 5: Knicks @ Spurs",
     date: "2026-06-15",
     timeEt: "8:00 PM ET",
-    arena: "Western Champion's home arena",
+    arena: "Frost Bank Center, San Antonio TX",
     ifNecessary: true,
   },
   {
     gameNumber: 6,
-    fixture: "Game 6: Western Champion @ Eastern Champion",
+    fixture: "Game 6: Spurs @ Knicks",
     date: "2026-06-18",
     timeEt: "8:30 PM ET",
-    arena: "Eastern Champion's home arena",
+    arena: "Madison Square Garden, New York NY",
     ifNecessary: true,
   },
   {
     gameNumber: 7,
-    fixture: "Game 7: Eastern Champion @ Western Champion",
+    fixture: "Game 7: Knicks @ Spurs",
     date: "2026-06-21",
     timeEt: "8:00 PM ET",
-    arena: "Western Champion's home arena",
+    arena: "Frost Bank Center, San Antonio TX",
     ifNecessary: true,
   },
 ];
