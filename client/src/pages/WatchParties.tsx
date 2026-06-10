@@ -23,6 +23,7 @@ interface ApprovedSubmission {
   matchLabel: string | null;
   venueName: string;
   town: string;
+  region: string | null;
   eventName: string | null;
   instagramHandle: string | null;
   learnMoreUrl: string | null;
@@ -57,7 +58,7 @@ export default function WatchParties() {
   const submissions = useMemo(() => {
     if (!allSubmissions) return undefined;
     if (selectedRegion === "all") return allSubmissions;
-    return allSubmissions.filter((s) => getRegionForTown(s.town) === selectedRegion);
+    return allSubmissions.filter((s) => (s.region ?? getRegionForTown(s.town)) === selectedRegion);
   }, [allSubmissions, selectedRegion]);
 
   // Gate the full list behind an email — admin bypass via existing session cookie.
@@ -95,7 +96,7 @@ export default function WatchParties() {
       .map(([date, items]) => {
         const byRegion = new Map<NjRegion | "Other", ApprovedSubmission[]>();
         for (const s of items) {
-          const r = (getRegionForTown(s.town) ?? "Other") as NjRegion | "Other";
+          const r = ((s.region as NjRegion | null) ?? getRegionForTown(s.town) ?? "Other") as NjRegion | "Other";
           const arr = byRegion.get(r) || [];
           arr.push(s);
           byRegion.set(r, arr);

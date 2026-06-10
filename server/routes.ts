@@ -1740,7 +1740,7 @@ ${blogList || "_No recent posts yet._"}
       const { getWeekIndexForDate } = await import("@shared/world-cup-schedule");
       const body = req.body as Record<string, any>;
       const allowed: Record<string, unknown> = {};
-      const STRING_FIELDS = ["venueName", "town", "matchDate", "matchSlot", "matchLabel", "eventName", "instagramHandle", "learnMoreUrl", "adminNotes"];
+      const STRING_FIELDS = ["venueName", "town", "matchDate", "matchSlot", "matchLabel", "eventName", "instagramHandle", "learnMoreUrl", "adminNotes", "region"];
       for (const k of STRING_FIELDS) {
         if (k in body) {
           const v = body[k];
@@ -1856,6 +1856,31 @@ ${blogList || "_No recent posts yet._"}
       res.json({ deleted });
     } catch (err) {
       console.error("[wc-bulk-delete] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: bulk-edit shared fields across selected submissions.
+  // Body: { ids: number[], fields: { region?, eventName?, ... } }. NULL clears, missing key = no change.
+  app.post("/api/admin/world-cup-submissions/bulk-edit", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids, fields } = req.body as { ids?: unknown; fields?: Record<string, any> };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      if (!fields || typeof fields !== "object") return res.status(400).json({ message: "fields object required" });
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const ALLOWED = ["region", "eventName", "instagramHandle", "learnMoreUrl", "adminNotes"];
+      const clean: Record<string, unknown> = {};
+      for (const k of ALLOWED) {
+        if (k in fields) {
+          const v = fields[k];
+          clean[k] = v == null || v === "" ? null : String(v).slice(0, 500);
+        }
+      }
+      if ("learnMoreUrl" in clean) clean.learnMoreUrl = normalizeUrl(clean.learnMoreUrl as string | null);
+      const updated = await storage.bulkEditWorldCupSubmissions(numIds, clean as any);
+      res.json({ updated });
+    } catch (err) {
+      console.error("[wc-bulk-edit] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -1980,7 +2005,7 @@ ${blogList || "_No recent posts yet._"}
       const { getNbaGameNumberForDate } = await import("@shared/nba-finals-schedule");
       const body = req.body as Record<string, any>;
       const allowed: Record<string, unknown> = {};
-      const STRING_FIELDS = ["venueName", "town", "gameDate", "eventName", "instagramHandle", "learnMoreUrl", "adminNotes"];
+      const STRING_FIELDS = ["venueName", "town", "gameDate", "eventName", "instagramHandle", "learnMoreUrl", "adminNotes", "region"];
       for (const k of STRING_FIELDS) {
         if (k in body) {
           const v = body[k];
@@ -2084,6 +2109,29 @@ ${blogList || "_No recent posts yet._"}
       res.json({ deleted });
     } catch (err) {
       console.error("[nba-bulk-delete] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/nba-finals-submissions/bulk-edit", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids, fields } = req.body as { ids?: unknown; fields?: Record<string, any> };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      if (!fields || typeof fields !== "object") return res.status(400).json({ message: "fields object required" });
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const ALLOWED = ["region", "eventName", "instagramHandle", "learnMoreUrl", "adminNotes"];
+      const clean: Record<string, unknown> = {};
+      for (const k of ALLOWED) {
+        if (k in fields) {
+          const v = fields[k];
+          clean[k] = v == null || v === "" ? null : String(v).slice(0, 500);
+        }
+      }
+      if ("learnMoreUrl" in clean) clean.learnMoreUrl = normalizeUrl(clean.learnMoreUrl as string | null);
+      const updated = await storage.bulkEditNbaFinalsSubmissions(numIds, clean as any);
+      res.json({ updated });
+    } catch (err) {
+      console.error("[nba-bulk-edit] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });

@@ -2367,6 +2367,7 @@ interface WorldCupSubmissionRow {
   matchLabel: string | null;
   venueName: string;
   town: string;
+  region: string | null;
   eventName: string | null;
   instagramHandle: string | null;
   learnMoreUrl: string | null;
@@ -2564,7 +2565,7 @@ function WorldCupTab() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({
     venueName: "", town: "", matchDate: "", matchLabel: "",
-    eventName: "", instagramHandle: "", learnMoreUrl: "",
+    eventName: "", instagramHandle: "", learnMoreUrl: "", region: "",
   });
   const [editBusy, setEditBusy] = useState(false);
 
@@ -2578,6 +2579,7 @@ function WorldCupTab() {
       eventName: s.eventName || "",
       instagramHandle: s.instagramHandle || "",
       learnMoreUrl: s.learnMoreUrl || "",
+      region: s.region || "",
     });
   }
 
@@ -2593,6 +2595,7 @@ function WorldCupTab() {
         eventName: editForm.eventName.trim() || null,
         instagramHandle: editForm.instagramHandle.trim() || null,
         learnMoreUrl: editForm.learnMoreUrl.trim() || null,
+        region: editForm.region.trim() || null,
       };
       const res = await apiRequest("PATCH", `/api/admin/world-cup-submissions/${editingId}`, payload);
       const body = await res.json().catch(() => ({}));
@@ -2638,6 +2641,28 @@ function WorldCupTab() {
     onError: () => toast({ title: "Bulk delete failed", variant: "destructive" }),
   });
 
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [bulkEditFields, setBulkEditFields] = useState<{ region: string }>({ region: "" });
+
+  const bulkEditMutation = useMutation({
+    mutationFn: async () => {
+      const fields: Record<string, string | null> = {};
+      if (bulkEditFields.region) {
+        fields.region = bulkEditFields.region === "__clear__" ? null : bulkEditFields.region;
+      }
+      const res = await apiRequest("POST", "/api/admin/world-cup-submissions/bulk-edit", { ids: Array.from(selectedIds), fields });
+      return res.json();
+    },
+    onSuccess: (data: { updated: number }) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/world-cup-submissions"] });
+      toast({ title: `Updated ${data.updated}` });
+      setSelectedIds(new Set());
+      setShowBulkEditModal(false);
+      setBulkEditFields({ region: "" });
+    },
+    onError: () => toast({ title: "Bulk edit failed", variant: "destructive" }),
+  });
+
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
@@ -2666,6 +2691,9 @@ function WorldCupTab() {
             <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "approved" })} className="bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/30">Approve all</Button>
             <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "rejected" })} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">Reject all</Button>
             <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "pending" })} variant="outline" className="border-white/20 text-white/70">Reopen all</Button>
+            <Button size="sm" onClick={() => setShowBulkEditModal(true)} className="bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30" data-testid="wc-bulk-edit-btn">
+              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit selected
+            </Button>
             <Button size="sm" disabled={bulkDeleteMutation.isPending} onClick={() => setShowBulkDeleteConfirm(true)} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">
               <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete all
             </Button>
@@ -2783,6 +2811,37 @@ function WorldCupTab() {
             <Button variant="outline" onClick={() => setShowBulkDeleteConfirm(false)} className="border-white/20 text-white/70">Cancel</Button>
             <Button onClick={() => bulkDeleteMutation.mutate()} disabled={bulkDeleteMutation.isPending} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">
               {bulkDeleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Delete ${selectedIds.size}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk edit modal — apply a field value to all selected rows */}
+      <Dialog open={showBulkEditModal} onOpenChange={(o) => { setShowBulkEditModal(o); if (!o) setBulkEditFields({ region: "" }); }}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit {selectedIds.size} submission{selectedIds.size !== 1 ? "s" : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-white/50">Leave a field blank to keep its current value. Select "Auto from town" to clear the override and fall back to the auto-derived region.</p>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Region override</Label>
+              <Select value={bulkEditFields.region || "__none__"} onValueChange={(v) => setBulkEditFields({ ...bulkEditFields, region: v === "__none__" ? "" : v })}>
+                <SelectTrigger className="bg-black/40 border-white/10 h-10"><SelectValue placeholder="No change" /></SelectTrigger>
+                <SelectContent className="bg-secondary border-white/10 text-white">
+                  <SelectItem value="__none__">— No change —</SelectItem>
+                  <SelectItem value="North NJ">North NJ</SelectItem>
+                  <SelectItem value="Central NJ">Central NJ</SelectItem>
+                  <SelectItem value="South NJ">South NJ</SelectItem>
+                  <SelectItem value="__clear__">Auto from town (clear override)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowBulkEditModal(false)} className="border-white/20 text-white/70">Cancel</Button>
+            <Button onClick={() => bulkEditMutation.mutate()} disabled={bulkEditMutation.isPending || !bulkEditFields.region} className="bg-primary hover:bg-primary/90">
+              {bulkEditMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Apply to ${selectedIds.size}`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2946,6 +3005,19 @@ function WorldCupTab() {
               <Input value={editForm.town} onChange={(e) => setEditForm({ ...editForm, town: e.target.value })} className="bg-black/40 border-white/10 h-10" data-testid="edit-town" />
             </div>
             <div className="space-y-1">
+              <Label className="text-xs text-white/70">Region override <span className="text-white/40">(optional)</span></Label>
+              <Select value={editForm.region || "__auto__"} onValueChange={(v) => setEditForm({ ...editForm, region: v === "__auto__" ? "" : v })}>
+                <SelectTrigger className="bg-black/40 border-white/10 h-10"><SelectValue placeholder="Auto from town" /></SelectTrigger>
+                <SelectContent className="bg-secondary border-white/10 text-white">
+                  <SelectItem value="__auto__">Auto from town</SelectItem>
+                  <SelectItem value="North NJ">North NJ</SelectItem>
+                  <SelectItem value="Central NJ">Central NJ</SelectItem>
+                  <SelectItem value="South NJ">South NJ</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-white/40">Leave on "Auto" unless the town isn't recognized and you need to force a region.</p>
+            </div>
+            <div className="space-y-1">
               <Label className="text-xs text-white/70">Match date *</Label>
               <Input type="date" value={editForm.matchDate} onChange={(e) => setEditForm({ ...editForm, matchDate: e.target.value })} className="bg-black/40 border-white/10 h-10" data-testid="edit-match-date" />
               <p className="text-[11px] text-white/40">Must be in the World Cup window (Jun 11 – Jul 19, 2026). Week is auto-derived.</p>
@@ -2988,6 +3060,7 @@ interface NbaFinalsSubmissionRow {
   gameDate: string;
   venueName: string;
   town: string;
+  region: string | null;
   eventName: string | null;
   instagramHandle: string | null;
   learnMoreUrl: string | null;
@@ -3039,7 +3112,7 @@ function NbaFinalsTab() {
 
   // Edit modal state
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ venueName: "", town: "", gameDate: "", eventName: "", instagramHandle: "", learnMoreUrl: "" });
+  const [editForm, setEditForm] = useState({ venueName: "", town: "", gameDate: "", eventName: "", instagramHandle: "", learnMoreUrl: "", region: "" });
   const [editBusy, setEditBusy] = useState(false);
 
   const { data: submissions = [], isLoading } = useQuery<NbaFinalsSubmissionRow[]>({
@@ -3075,6 +3148,7 @@ function NbaFinalsTab() {
       eventName: s.eventName || "",
       instagramHandle: s.instagramHandle || "",
       learnMoreUrl: s.learnMoreUrl || "",
+      region: s.region || "",
     });
   }
 
@@ -3089,6 +3163,7 @@ function NbaFinalsTab() {
         eventName: editForm.eventName.trim() || null,
         instagramHandle: editForm.instagramHandle.trim() || null,
         learnMoreUrl: editForm.learnMoreUrl.trim() || null,
+        region: editForm.region.trim() || null,
       };
       const res = await apiRequest("PATCH", `/api/admin/nba-finals-submissions/${editingId}`, payload);
       const body = await res.json().catch(() => ({}));
@@ -3229,6 +3304,28 @@ function NbaFinalsTab() {
     onError: () => toast({ title: "Bulk delete failed", variant: "destructive" }),
   });
 
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [bulkEditFields, setBulkEditFields] = useState<{ region: string }>({ region: "" });
+
+  const bulkEditMutation = useMutation({
+    mutationFn: async () => {
+      const fields: Record<string, string | null> = {};
+      if (bulkEditFields.region) {
+        fields.region = bulkEditFields.region === "__clear__" ? null : bulkEditFields.region;
+      }
+      const res = await apiRequest("POST", "/api/admin/nba-finals-submissions/bulk-edit", { ids: Array.from(selectedIds), fields });
+      return res.json();
+    },
+    onSuccess: (data: { updated: number }) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/nba-finals-submissions"] });
+      toast({ title: `Updated ${data.updated}` });
+      setSelectedIds(new Set());
+      setShowBulkEditModal(false);
+      setBulkEditFields({ region: "" });
+    },
+    onError: () => toast({ title: "Bulk edit failed", variant: "destructive" }),
+  });
+
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
@@ -3256,6 +3353,9 @@ function NbaFinalsTab() {
             <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "approved" })} className="bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/30">Approve all</Button>
             <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "rejected" })} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">Reject all</Button>
             <Button size="sm" disabled={bulkStatusMutation.isPending} onClick={() => bulkStatusMutation.mutate({ status: "pending" })} variant="outline" className="border-white/20 text-white/70">Reopen all</Button>
+            <Button size="sm" onClick={() => setShowBulkEditModal(true)} className="bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30" data-testid="nba-bulk-edit-btn">
+              <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit selected
+            </Button>
             <Button size="sm" disabled={bulkDeleteMutation.isPending} onClick={() => setShowBulkDeleteConfirm(true)} className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30">
               <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete all
             </Button>
@@ -3459,6 +3559,19 @@ function NbaFinalsTab() {
             <div className="space-y-1">
               <Label className="text-xs text-white/70">Town *</Label>
               <Input value={editForm.town} onChange={(e) => setEditForm({ ...editForm, town: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Region override <span className="text-white/40">(optional)</span></Label>
+              <Select value={editForm.region || "__auto__"} onValueChange={(v) => setEditForm({ ...editForm, region: v === "__auto__" ? "" : v })}>
+                <SelectTrigger className="bg-black/40 border-white/10 h-10"><SelectValue placeholder="Auto from town" /></SelectTrigger>
+                <SelectContent className="bg-secondary border-white/10 text-white">
+                  <SelectItem value="__auto__">Auto from town</SelectItem>
+                  <SelectItem value="North NJ">North NJ</SelectItem>
+                  <SelectItem value="Central NJ">Central NJ</SelectItem>
+                  <SelectItem value="South NJ">South NJ</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-white/40">Leave on "Auto" unless the town isn't recognized.</p>
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-white/70">Game date *</Label>

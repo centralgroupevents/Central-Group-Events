@@ -143,6 +143,9 @@ export const worldCupSubmissions = pgTable("world_cup_submissions", {
   matchLabel: text("match_label"),
   venueName: text("venue_name").notNull(),
   town: text("town").notNull(),
+  // Optional admin-set region override. NULL = client falls back to
+  // auto-deriving region from `town` via shared/nj-town-regions.
+  region: text("region"),
   eventName: text("event_name"),
   instagramHandle: text("instagram_handle"),
   learnMoreUrl: text("learn_more_url"),
@@ -162,6 +165,9 @@ export const nbaFinalsSubmissions = pgTable("nba_finals_submissions", {
   gameDate: text("game_date").notNull(),
   venueName: text("venue_name").notNull(),
   town: text("town").notNull(),
+  // Optional admin-set region override. NULL = client falls back to
+  // auto-deriving region from `town` via shared/nj-town-regions.
+  region: text("region"),
   eventName: text("event_name"),
   instagramHandle: text("instagram_handle"),
   learnMoreUrl: text("learn_more_url"),

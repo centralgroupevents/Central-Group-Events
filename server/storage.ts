@@ -152,8 +152,10 @@ export interface IStorage {
   // Bulk operations (admin multi-select)
   bulkUpdateWorldCupSubmissionStatus(ids: number[], status: string): Promise<number>;
   bulkDeleteWorldCupSubmissions(ids: number[]): Promise<number>;
+  bulkEditWorldCupSubmissions(ids: number[], fields: Partial<WorldCupSubmission>): Promise<number>;
   bulkUpdateNbaFinalsSubmissionStatus(ids: number[], status: string): Promise<number>;
   bulkDeleteNbaFinalsSubmissions(ids: number[]): Promise<number>;
+  bulkEditNbaFinalsSubmissions(ids: number[], fields: Partial<NbaFinalsSubmission>): Promise<number>;
 
   // New analytics (event-level, regions, sources, funnel)
   getEventPerformance(days?: number, limit?: number): Promise<{ eventId: number; title: string; date: string; region: string; city: string | null; clicks: number }[]>;
@@ -773,6 +775,24 @@ export class DatabaseStorage implements IStorage {
       .where(inArray(nbaFinalsSubmissions.id, ids))
       .returning({ id: nbaFinalsSubmissions.id });
     return deleted.length;
+  }
+
+  async bulkEditWorldCupSubmissions(ids: number[], fields: Partial<WorldCupSubmission>): Promise<number> {
+    if (ids.length === 0 || Object.keys(fields).length === 0) return 0;
+    const updated = await db.update(worldCupSubmissions)
+      .set(fields)
+      .where(inArray(worldCupSubmissions.id, ids))
+      .returning({ id: worldCupSubmissions.id });
+    return updated.length;
+  }
+
+  async bulkEditNbaFinalsSubmissions(ids: number[], fields: Partial<NbaFinalsSubmission>): Promise<number> {
+    if (ids.length === 0 || Object.keys(fields).length === 0) return 0;
+    const updated = await db.update(nbaFinalsSubmissions)
+      .set(fields)
+      .where(inArray(nbaFinalsSubmissions.id, ids))
+      .returning({ id: nbaFinalsSubmissions.id });
+    return updated.length;
   }
 
   async getEventPerformance(days?: number, limit = 20) {

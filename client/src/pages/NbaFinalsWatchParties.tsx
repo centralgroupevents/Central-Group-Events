@@ -19,6 +19,7 @@ interface ApprovedNbaSubmission {
   gameDate: string;
   venueName: string;
   town: string;
+  region: string | null;
   eventName: string | null;
   instagramHandle: string | null;
   learnMoreUrl: string | null;
@@ -48,7 +49,7 @@ export default function NbaFinalsWatchParties() {
   const submissions = useMemo(() => {
     if (!allSubmissions) return undefined;
     if (selectedRegion === "all") return allSubmissions;
-    return allSubmissions.filter((s) => getRegionForTown(s.town) === selectedRegion);
+    return allSubmissions.filter((s) => (s.region ?? getRegionForTown(s.town)) === selectedRegion);
   }, [allSubmissions, selectedRegion]);
 
   const { data: subVerify } = useQuery<{ access: boolean }>({
@@ -82,7 +83,7 @@ export default function NbaFinalsWatchParties() {
       .map(([date, items]) => {
         const byRegion = new Map<NjRegion | "Other", ApprovedNbaSubmission[]>();
         for (const s of items) {
-          const r = (getRegionForTown(s.town) ?? "Other") as NjRegion | "Other";
+          const r = ((s.region as NjRegion | null) ?? getRegionForTown(s.town) ?? "Other") as NjRegion | "Other";
           const arr = byRegion.get(r) || [];
           arr.push(s);
           byRegion.set(r, arr);
