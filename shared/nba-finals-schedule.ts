@@ -33,7 +33,7 @@ export const NBA_FINALS_2026_GAMES: NbaFinalsGame[] = [
   {
     gameNumber: 4,
     fixture: "Game 4: Spurs @ Knicks",
-    date: "2026-06-12",
+    date: "2026-06-13",
     timeEt: "8:30 PM ET",
     arena: "Madison Square Garden, New York NY",
     ifNecessary: false,
@@ -49,7 +49,7 @@ export const NBA_FINALS_2026_GAMES: NbaFinalsGame[] = [
   {
     gameNumber: 6,
     fixture: "Game 6: Spurs @ Knicks",
-    date: "2026-06-18",
+    date: "2026-06-16",
     timeEt: "8:30 PM ET",
     arena: "Madison Square Garden, New York NY",
     ifNecessary: true,
@@ -57,7 +57,7 @@ export const NBA_FINALS_2026_GAMES: NbaFinalsGame[] = [
   {
     gameNumber: 7,
     fixture: "Game 7: Knicks @ Spurs",
-    date: "2026-06-21",
+    date: "2026-06-19",
     timeEt: "8:00 PM ET",
     arena: "Frost Bank Center, San Antonio TX",
     ifNecessary: true,
