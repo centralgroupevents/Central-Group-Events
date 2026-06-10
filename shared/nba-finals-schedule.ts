@@ -23,14 +23,6 @@ export interface NbaFinalsGame {
 
 export const NBA_FINALS_2026_GAMES: NbaFinalsGame[] = [
   {
-    gameNumber: 3,
-    fixture: "Game 3: Spurs @ Knicks",
-    date: "2026-06-10",
-    timeEt: "8:30 PM ET",
-    arena: "Madison Square Garden, New York NY",
-    ifNecessary: false,
-  },
-  {
     gameNumber: 4,
     fixture: "Game 4: Spurs @ Knicks",
     date: "2026-06-13",
