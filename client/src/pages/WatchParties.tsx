@@ -216,20 +216,24 @@ export default function WatchParties() {
                             )}
                           </div>
                           <div className="flex items-center gap-4 flex-wrap">
-                            {s.instagramHandle && (
-                              <a
-                                href={`https://instagram.com/${s.instagramHandle.replace("@", "")}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                              >
-                                <Instagram className="w-3.5 h-3.5" />
-                                @{s.instagramHandle.replace("@", "")}
-                              </a>
-                            )}
+                            {s.instagramHandle && (() => {
+                              const igUrl = `https://instagram.com/${s.instagramHandle.replace("@", "")}`;
+                              return (
+                                <a
+                                  href={`/go?url=${encodeURIComponent(igUrl)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                                  data-testid={`watch-party-ig-${s.id}`}
+                                >
+                                  <Instagram className="w-3.5 h-3.5" />
+                                  @{s.instagramHandle.replace("@", "")}
+                                </a>
+                              );
+                            })()}
                             {s.learnMoreUrl && (
                               <a
-                                href={s.learnMoreUrl}
+                                href={`/go?url=${encodeURIComponent(s.learnMoreUrl)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/25 transition-colors"
