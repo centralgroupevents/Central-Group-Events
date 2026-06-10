@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronRight, Instagram, MapPin, Lock } from "lucide-react";
 import { getQueryFn } from "@/lib/queryClient";
 import { NBA_FINALS_2026_GAMES, getNbaGameByNumber } from "@shared/nba-finals-schedule";
+import { getRegionForTown, REGIONS, type NjRegion } from "@shared/nj-town-regions";
 
 const SITE = "https://centralgroupevents.com";
 const TEASER_LIMIT = 5;
@@ -30,8 +31,9 @@ function formatDate(iso: string): string {
 
 export default function NbaFinalsWatchParties() {
   const [selectedGame, setSelectedGame] = useState<number | "all">("all");
+  const [selectedRegion, setSelectedRegion] = useState<NjRegion | "all">("all");
 
-  const { data: submissions, isLoading } = useQuery<ApprovedNbaSubmission[]>({
+  const { data: allSubmissions, isLoading } = useQuery<ApprovedNbaSubmission[]>({
     queryKey: ["/api/nba-finals-submissions/approved", selectedGame],
     queryFn: async () => {
       const url = selectedGame === "all"
@@ -42,6 +44,12 @@ export default function NbaFinalsWatchParties() {
       return res.json();
     },
   });
+
+  const submissions = useMemo(() => {
+    if (!allSubmissions) return undefined;
+    if (selectedRegion === "all") return allSubmissions;
+    return allSubmissions.filter((s) => getRegionForTown(s.town) === selectedRegion);
+  }, [allSubmissions, selectedRegion]);
 
   const { data: subVerify } = useQuery<{ access: boolean }>({
     queryKey: ["/api/subscriber/verify"],
@@ -59,16 +67,31 @@ export default function NbaFinalsWatchParties() {
   }, [submissions, hasAccess]);
   const hiddenCount = submissions ? Math.max(0, submissions.length - visibleSubmissions.length) : 0;
 
-  const grouped = useMemo(() => {
-    if (!visibleSubmissions.length) return [] as { date: string; items: ApprovedNbaSubmission[] }[];
-    const map = new Map<string, ApprovedNbaSubmission[]>();
+  type RegionBucket = { region: NjRegion | "Other"; items: ApprovedNbaSubmission[] };
+  type DateGroup = { date: string; regions: RegionBucket[] };
+  const grouped = useMemo<DateGroup[]>(() => {
+    if (!visibleSubmissions.length) return [];
+    const byDate = new Map<string, ApprovedNbaSubmission[]>();
     for (const s of visibleSubmissions) {
-      const arr = map.get(s.gameDate) || [];
+      const arr = byDate.get(s.gameDate) || [];
       arr.push(s);
-      map.set(s.gameDate, arr);
+      byDate.set(s.gameDate, arr);
     }
-    return Array.from(map.entries())
-      .map(([date, items]) => ({ date, items }))
+    const ordering: (NjRegion | "Other")[] = [...REGIONS, "Other"];
+    return Array.from(byDate.entries())
+      .map(([date, items]) => {
+        const byRegion = new Map<NjRegion | "Other", ApprovedNbaSubmission[]>();
+        for (const s of items) {
+          const r = (getRegionForTown(s.town) ?? "Other") as NjRegion | "Other";
+          const arr = byRegion.get(r) || [];
+          arr.push(s);
+          byRegion.set(r, arr);
+        }
+        const regions: RegionBucket[] = ordering
+          .filter((r) => byRegion.has(r))
+          .map((r) => ({ region: r, items: byRegion.get(r)! }));
+        return { date, regions };
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [visibleSubmissions]);
 
@@ -132,29 +155,54 @@ export default function NbaFinalsWatchParties() {
         </div>
       </section>
 
-      {/* Game filter */}
+      {/* Game + Region filters */}
       <section className="pb-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setSelectedGame("all")}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedGame === "all" ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
-              data-testid="filter-nba-game-all"
-            >
-              All games
-            </button>
-            {NBA_FINALS_2026_GAMES.map((g) => (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-3">
+          <div>
+            <p className="text-[11px] font-bold text-white/40 uppercase tracking-wider mb-2">By game</p>
+            <div className="flex gap-2 flex-wrap">
               <button
-                key={g.gameNumber}
-                onClick={() => setSelectedGame(g.gameNumber)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedGame === g.gameNumber ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
-                data-testid={`filter-nba-game-${g.gameNumber}`}
+                onClick={() => setSelectedGame("all")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedGame === "all" ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
+                data-testid="filter-nba-game-all"
               >
-                Game {g.gameNumber}{g.ifNecessary ? "*" : ""}
+                All games
               </button>
-            ))}
+              {NBA_FINALS_2026_GAMES.map((g) => (
+                <button
+                  key={g.gameNumber}
+                  onClick={() => setSelectedGame(g.gameNumber)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedGame === g.gameNumber ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
+                  data-testid={`filter-nba-game-${g.gameNumber}`}
+                >
+                  Game {g.gameNumber}{g.ifNecessary ? "*" : ""}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-white/40 mt-2">* Games 5-7 only happen if the series isn't decided.</p>
           </div>
-          <p className="text-[11px] text-white/40 mt-2">* Games 5-7 only happen if the series isn't decided.</p>
+          <div>
+            <p className="text-[11px] font-bold text-white/40 uppercase tracking-wider mb-2">By NJ region</p>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setSelectedRegion("all")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedRegion === "all" ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
+                data-testid="filter-nba-region-all"
+              >
+                All NJ
+              </button>
+              {REGIONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setSelectedRegion(r)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedRegion === r ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
+                  data-testid={`filter-nba-region-${r.split(" ")[0].toLowerCase()}`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -172,54 +220,64 @@ export default function NbaFinalsWatchParties() {
             </div>
           ) : (
             <div className="space-y-8">
-              {grouped.map(({ date, items }) => (
+              {grouped.map(({ date, regions }) => (
                 <div key={date}>
-                  <h2 className="text-lg font-black text-primary mb-3">{formatDate(date)}</h2>
-                  <div className="space-y-3">
-                    {items.map((s) => {
-                      const game = getNbaGameByNumber(s.gameNumber);
-                      return (
-                        <div key={s.id} className="bg-secondary/30 border border-white/10 rounded-2xl p-5" data-testid={`nba-watch-party-${s.id}`}>
-                          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
-                            <h3 className="text-lg font-black text-white">{s.eventName || s.venueName}</h3>
-                            {s.eventName && <p className="text-sm text-white/60">at {s.venueName}</p>}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70 mb-3">
-                            <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {s.town}, NJ</span>
-                            {game && <span className="text-white/80 font-semibold">🏀 Game {game.gameNumber}</span>}
-                            {game && <span className="text-white/50">{game.timeEt}</span>}
-                          </div>
-                          <div className="flex items-center gap-4 flex-wrap">
-                            {s.instagramHandle && (() => {
-                              const igUrl = `https://instagram.com/${s.instagramHandle.replace("@", "")}`;
-                              return (
-                                <a
-                                  href={`/go?url=${encodeURIComponent(igUrl)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                                  data-testid={`nba-watch-party-ig-${s.id}`}
-                                >
-                                  <Instagram className="w-3.5 h-3.5" />
-                                  @{s.instagramHandle.replace("@", "")}
-                                </a>
-                              );
-                            })()}
-                            {s.learnMoreUrl && (
-                              <a
-                                href={`/go?url=${encodeURIComponent(s.learnMoreUrl)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/25 transition-colors"
-                                data-testid={`nba-watch-party-learn-more-${s.id}`}
-                              >
-                                Learn more →
-                              </a>
-                            )}
-                          </div>
+                  <h2 className="text-2xl font-black text-primary mb-4">{formatDate(date)}</h2>
+                  <div className="space-y-6">
+                    {regions.map(({ region, items }) => (
+                      <div key={region}>
+                        <div className="flex items-baseline gap-2 mb-3">
+                          <h3 className="text-sm font-bold text-white/80 uppercase tracking-wider">{region}</h3>
+                          <span className="text-xs text-white/40">{items.length} {items.length === 1 ? "venue" : "venues"}</span>
                         </div>
-                      );
-                    })}
+                        <div className="space-y-3">
+                          {items.map((s) => {
+                            const game = getNbaGameByNumber(s.gameNumber);
+                            return (
+                              <div key={s.id} className="bg-secondary/30 border border-white/10 rounded-2xl p-5" data-testid={`nba-watch-party-${s.id}`}>
+                                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
+                                  <h4 className="text-lg font-black text-white">{s.eventName || s.venueName}</h4>
+                                  {s.eventName && <p className="text-sm text-white/60">at {s.venueName}</p>}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70 mb-3">
+                                  <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {s.town}, NJ</span>
+                                  {game && <span className="text-white/80 font-semibold">🏀 Game {game.gameNumber}</span>}
+                                  {game && <span className="text-white/50">{game.timeEt}</span>}
+                                </div>
+                                <div className="flex items-center gap-4 flex-wrap">
+                                  {s.instagramHandle && (() => {
+                                    const igUrl = `https://instagram.com/${s.instagramHandle.replace("@", "")}`;
+                                    return (
+                                      <a
+                                        href={`/go?url=${encodeURIComponent(igUrl)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                                        data-testid={`nba-watch-party-ig-${s.id}`}
+                                      >
+                                        <Instagram className="w-3.5 h-3.5" />
+                                        @{s.instagramHandle.replace("@", "")}
+                                      </a>
+                                    );
+                                  })()}
+                                  {s.learnMoreUrl && (
+                                    <a
+                                      href={`/go?url=${encodeURIComponent(s.learnMoreUrl)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/25 transition-colors"
+                                      data-testid={`nba-watch-party-learn-more-${s.id}`}
+                                    >
+                                      Learn more →
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}

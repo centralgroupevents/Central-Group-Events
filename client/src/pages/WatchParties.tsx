@@ -11,6 +11,7 @@ import {
   WORLD_CUP_2026_WEEKS,
   getMatchBySlot,
 } from "@shared/world-cup-schedule";
+import { getRegionForTown, REGIONS, type NjRegion } from "@shared/nj-town-regions";
 
 const SITE = "https://centralgroupevents.com";
 
@@ -38,8 +39,9 @@ const TEASER_LIMIT = 5;
 
 export default function WatchParties() {
   const [selectedWeek, setSelectedWeek] = useState<number | "all">("all");
+  const [selectedRegion, setSelectedRegion] = useState<NjRegion | "all">("all");
 
-  const { data: submissions, isLoading } = useQuery<ApprovedSubmission[]>({
+  const { data: allSubmissions, isLoading } = useQuery<ApprovedSubmission[]>({
     queryKey: ["/api/world-cup-submissions/approved", selectedWeek],
     queryFn: async () => {
       const url = selectedWeek === "all"
@@ -50,6 +52,13 @@ export default function WatchParties() {
       return res.json();
     },
   });
+
+  // Apply region filter client-side (region is derived from town, not stored).
+  const submissions = useMemo(() => {
+    if (!allSubmissions) return undefined;
+    if (selectedRegion === "all") return allSubmissions;
+    return allSubmissions.filter((s) => getRegionForTown(s.town) === selectedRegion);
+  }, [allSubmissions, selectedRegion]);
 
   // Gate the full list behind an email — admin bypass via existing session cookie.
   const { data: subVerify } = useQuery<{ access: boolean }>({
@@ -69,18 +78,35 @@ export default function WatchParties() {
   }, [submissions, hasAccess]);
   const hiddenCount = submissions ? Math.max(0, submissions.length - visibleSubmissions.length) : 0;
 
-  const grouped = useMemo(() => {
-    if (!visibleSubmissions.length) return [] as { date: string; items: ApprovedSubmission[] }[];
-    const map = new Map<string, ApprovedSubmission[]>();
+  // Group by date, then within each date split into North / Central / South /
+  // Other (unrecognized town) — so people scanning a date see all NJ regions.
+  type RegionBucket = { region: NjRegion | "Other"; items: ApprovedSubmission[] };
+  type DateGroup = { date: string; regions: RegionBucket[] };
+  const grouped = useMemo<DateGroup[]>(() => {
+    if (!visibleSubmissions.length) return [];
+    const byDate = new Map<string, ApprovedSubmission[]>();
     for (const s of visibleSubmissions) {
-      const arr = map.get(s.matchDate) || [];
+      const arr = byDate.get(s.matchDate) || [];
       arr.push(s);
-      map.set(s.matchDate, arr);
+      byDate.set(s.matchDate, arr);
     }
-    return Array.from(map.entries())
-      .map(([date, items]) => ({ date, items }))
+    const ordering: (NjRegion | "Other")[] = [...REGIONS, "Other"];
+    return Array.from(byDate.entries())
+      .map(([date, items]) => {
+        const byRegion = new Map<NjRegion | "Other", ApprovedSubmission[]>();
+        for (const s of items) {
+          const r = (getRegionForTown(s.town) ?? "Other") as NjRegion | "Other";
+          const arr = byRegion.get(r) || [];
+          arr.push(s);
+          byRegion.set(r, arr);
+        }
+        const regions: RegionBucket[] = ordering
+          .filter((r) => byRegion.has(r))
+          .map((r) => ({ region: r, items: byRegion.get(r)! }));
+        return { date, regions };
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [submissions]);
+  }, [visibleSubmissions]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -152,27 +178,52 @@ export default function WatchParties() {
         </div>
       </section>
 
-      {/* Week filter */}
+      {/* Week + Region filters */}
       <section className="pb-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setSelectedWeek("all")}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedWeek === "all" ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
-              data-testid="filter-week-all"
-            >
-              All weeks
-            </button>
-            {WORLD_CUP_2026_WEEKS.map((w) => (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-3">
+          <div>
+            <p className="text-[11px] font-bold text-white/40 uppercase tracking-wider mb-2">By week</p>
+            <div className="flex gap-2 flex-wrap">
               <button
-                key={w.index}
-                onClick={() => setSelectedWeek(w.index)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedWeek === w.index ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
-                data-testid={`filter-week-${w.index}`}
+                onClick={() => setSelectedWeek("all")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedWeek === "all" ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
+                data-testid="filter-week-all"
               >
-                Week {w.index}
+                All weeks
               </button>
-            ))}
+              {WORLD_CUP_2026_WEEKS.map((w) => (
+                <button
+                  key={w.index}
+                  onClick={() => setSelectedWeek(w.index)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedWeek === w.index ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
+                  data-testid={`filter-week-${w.index}`}
+                >
+                  Week {w.index}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-white/40 uppercase tracking-wider mb-2">By NJ region</p>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setSelectedRegion("all")}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedRegion === "all" ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
+                data-testid="filter-region-all"
+              >
+                All NJ
+              </button>
+              {REGIONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setSelectedRegion(r)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedRegion === r ? "bg-primary border-primary text-white" : "border-white/15 text-white/60 hover:text-white"}`}
+                  data-testid={`filter-region-${r.split(" ")[0].toLowerCase()}`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -192,60 +243,70 @@ export default function WatchParties() {
             </div>
           ) : (
             <div className="space-y-8">
-              {grouped.map(({ date, items }) => (
+              {grouped.map(({ date, regions }) => (
                 <div key={date}>
-                  <h2 className="text-lg font-black text-primary mb-3">{formatDate(date)}</h2>
-                  <div className="space-y-3">
-                    {items.map((s) => {
-                      const match = s.matchSlot ? getMatchBySlot(s.matchSlot) : null;
-                      const fixtureLabel = match?.fixture || s.matchLabel || null;
-                      const timeLabel = match?.timeEt || null;
-                      return (
-                        <div key={s.id} className="bg-secondary/30 border border-white/10 rounded-2xl p-5" data-testid={`watch-party-${s.id}`}>
-                          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
-                            <h3 className="text-lg font-black text-white">{s.eventName || s.venueName}</h3>
-                            {s.eventName && <p className="text-sm text-white/60">at {s.venueName}</p>}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70 mb-3">
-                            <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {s.town}, NJ</span>
-                            {fixtureLabel && (
-                              <span className="text-white/80 font-semibold">⚽ {fixtureLabel}</span>
-                            )}
-                            {timeLabel && (
-                              <span className="text-white/50">{timeLabel}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4 flex-wrap">
-                            {s.instagramHandle && (() => {
-                              const igUrl = `https://instagram.com/${s.instagramHandle.replace("@", "")}`;
-                              return (
-                                <a
-                                  href={`/go?url=${encodeURIComponent(igUrl)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-                                  data-testid={`watch-party-ig-${s.id}`}
-                                >
-                                  <Instagram className="w-3.5 h-3.5" />
-                                  @{s.instagramHandle.replace("@", "")}
-                                </a>
-                              );
-                            })()}
-                            {s.learnMoreUrl && (
-                              <a
-                                href={`/go?url=${encodeURIComponent(s.learnMoreUrl)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/25 transition-colors"
-                                data-testid={`watch-party-learn-more-${s.id}`}
-                              >
-                                Learn more →
-                              </a>
-                            )}
-                          </div>
+                  <h2 className="text-2xl font-black text-primary mb-4">{formatDate(date)}</h2>
+                  <div className="space-y-6">
+                    {regions.map(({ region, items }) => (
+                      <div key={region}>
+                        <div className="flex items-baseline gap-2 mb-3">
+                          <h3 className="text-sm font-bold text-white/80 uppercase tracking-wider">{region}</h3>
+                          <span className="text-xs text-white/40">{items.length} {items.length === 1 ? "venue" : "venues"}</span>
                         </div>
-                      );
-                    })}
+                        <div className="space-y-3">
+                          {items.map((s) => {
+                            const match = s.matchSlot ? getMatchBySlot(s.matchSlot) : null;
+                            const fixtureLabel = match?.fixture || s.matchLabel || null;
+                            const timeLabel = match?.timeEt || null;
+                            return (
+                              <div key={s.id} className="bg-secondary/30 border border-white/10 rounded-2xl p-5" data-testid={`watch-party-${s.id}`}>
+                                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
+                                  <h4 className="text-lg font-black text-white">{s.eventName || s.venueName}</h4>
+                                  {s.eventName && <p className="text-sm text-white/60">at {s.venueName}</p>}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70 mb-3">
+                                  <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {s.town}, NJ</span>
+                                  {fixtureLabel && (
+                                    <span className="text-white/80 font-semibold">⚽ {fixtureLabel}</span>
+                                  )}
+                                  {timeLabel && (
+                                    <span className="text-white/50">{timeLabel}</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-4 flex-wrap">
+                                  {s.instagramHandle && (() => {
+                                    const igUrl = `https://instagram.com/${s.instagramHandle.replace("@", "")}`;
+                                    return (
+                                      <a
+                                        href={`/go?url=${encodeURIComponent(igUrl)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                                        data-testid={`watch-party-ig-${s.id}`}
+                                      >
+                                        <Instagram className="w-3.5 h-3.5" />
+                                        @{s.instagramHandle.replace("@", "")}
+                                      </a>
+                                    );
+                                  })()}
+                                  {s.learnMoreUrl && (
+                                    <a
+                                      href={`/go?url=${encodeURIComponent(s.learnMoreUrl)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-semibold hover:bg-primary/25 transition-colors"
+                                      data-testid={`watch-party-learn-more-${s.id}`}
+                                    >
+                                      Learn more →
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
