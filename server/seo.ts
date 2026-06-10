@@ -197,6 +197,36 @@ export async function getMetaForRoute(rawPath: string): Promise<SeoMeta> {
     };
   }
 
+  if (path === "/nba-finals-2026-nj-watch-parties") {
+    return {
+      title: `2026 NBA Finals Watch Parties in NJ | ${SITE_NAME}`,
+      description:
+        "Find every New Jersey venue hosting a 2026 NBA Finals watch party for Games 4-7. Listings by game across Newark, Jersey City, Hoboken, Atlantic City, and the rest of NJ.",
+      canonical: `${SITE}/nba-finals-2026-nj-watch-parties`,
+      image: DEFAULT_IMAGE,
+      type: "website",
+      jsonLd: [
+        breadcrumb([
+          { name: "Home", url: `${SITE}/` },
+          { name: "NBA Finals Watch Parties", url: `${SITE}/nba-finals-2026-nj-watch-parties` },
+        ]),
+      ],
+    };
+  }
+
+  if (path === "/submit-nba-finals-watch-party") {
+    return {
+      title: `Submit a 2026 NBA Finals Watch Party in NJ | ${SITE_NAME}`,
+      description:
+        "Hosting a 2026 NBA Finals watch party at your New Jersey venue? Submit it here for free listing on our public watch parties page.",
+      canonical: `${SITE}/submit-nba-finals-watch-party`,
+      image: DEFAULT_IMAGE,
+      type: "website",
+      noindex: true,
+      jsonLd: [],
+    };
+  }
+
   if (path === "/booking-confirmation" || path === "/welcome" || path === "/admin" || path.startsWith("/admin/")) {
     return { ...HOME_META, canonical: `${SITE}${path}`, noindex: true, jsonLd: [] };
   }

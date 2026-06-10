@@ -154,6 +154,25 @@ export const worldCupSubmissions = pgTable("world_cup_submissions", {
   reviewedAt: timestamp("reviewed_at"),
 });
 
+// NBA Finals 2026 watch party submissions — same shape as worldCupSubmissions
+// but keyed on game number (4-7) instead of weekIndex + matchSlot.
+export const nbaFinalsSubmissions = pgTable("nba_finals_submissions", {
+  id: serial("id").primaryKey(),
+  gameNumber: integer("game_number").notNull(),
+  gameDate: text("game_date").notNull(),
+  venueName: text("venue_name").notNull(),
+  town: text("town").notNull(),
+  eventName: text("event_name"),
+  instagramHandle: text("instagram_handle"),
+  learnMoreUrl: text("learn_more_url"),
+  submitterEmail: text("submitter_email").notNull(),
+  status: text("status").notNull().default("pending"),
+  adminNotes: text("admin_notes"),
+  source: text("source").notNull().default("public-form"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
 export const comments = pgTable("comments", {
   id: serial("id").primaryKey(),
   postId: integer("post_id").references(() => posts.id).notNull(),
@@ -202,6 +221,32 @@ export const insertPostVersionSchema = createInsertSchema(postVersions).omit({ i
 export const insertPostViewSchema = createInsertSchema(postViews).omit({ id: true, viewedAt: true });
 export const insertLinkClickSchema = createInsertSchema(linkClicks).omit({ id: true, clickedAt: true });
 export const insertFunnelEventSchema = createInsertSchema(funnelEvents).omit({ id: true, createdAt: true });
+// NBA Finals public form schema (gameDate must be ISO since it comes from a
+// strict dropdown derived from the hardcoded schedule).
+export const insertNbaFinalsSubmissionSchema = createInsertSchema(nbaFinalsSubmissions)
+  .omit({ id: true, createdAt: true, reviewedAt: true, status: true, adminNotes: true, source: true })
+  .extend({
+    submitterEmail: z.string().email(),
+    gameNumber: z.number().int().min(4).max(7),
+    gameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    venueName: z.string().min(1).max(200),
+    town: z.string().min(1).max(100),
+    eventName: z.string().max(200).optional().nullable(),
+    instagramHandle: z.string().max(80).optional().nullable(),
+    learnMoreUrl: z.string().max(500).optional().nullable().or(z.literal("")),
+  });
+
+// Admin bulk-import schema for NBA Finals (looser — matches WC pattern).
+export const adminBulkNbaFinalsRowSchema = z.object({
+  gameNumber: z.number().int().min(4).max(7).optional(),
+  gameDate: z.string().min(1).max(120),
+  venueName: z.string().min(1).max(200),
+  town: z.string().min(1).max(100),
+  eventName: z.string().max(200).optional().nullable(),
+  instagramHandle: z.string().max(80).optional().nullable(),
+  learnMoreUrl: z.string().max(500).optional().nullable().or(z.literal("")),
+});
+
 export const insertWorldCupSubmissionSchema = createInsertSchema(worldCupSubmissions)
   .omit({ id: true, createdAt: true, reviewedAt: true, status: true, adminNotes: true, matchLabel: true, source: true })
   .extend({
@@ -284,6 +329,9 @@ export type InsertFunnelEvent = z.infer<typeof insertFunnelEventSchema>;
 
 export type WorldCupSubmission = typeof worldCupSubmissions.$inferSelect;
 export type InsertWorldCupSubmission = z.infer<typeof insertWorldCupSubmissionSchema>;
+
+export type NbaFinalsSubmission = typeof nbaFinalsSubmissions.$inferSelect;
+export type InsertNbaFinalsSubmission = z.infer<typeof insertNbaFinalsSubmissionSchema>;
 
 export type Comment = typeof comments.$inferSelect;
 export type InsertComment = z.infer<typeof insertCommentSchema>;

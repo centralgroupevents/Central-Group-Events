@@ -10,6 +10,7 @@ import {
   linkClicks,
   funnelEvents,
   worldCupSubmissions,
+  nbaFinalsSubmissions,
   comments,
   pages,
   type InsertSubscriber,
@@ -29,6 +30,8 @@ import {
   type InsertPage,
   type WorldCupSubmission,
   type InsertWorldCupSubmission,
+  type NbaFinalsSubmission,
+  type InsertNbaFinalsSubmission,
 } from "@shared/schema";
 import { eq, desc, sql, count, and, isNull, gte, lt, inArray } from "drizzle-orm";
 import slugifyLib from "slugify";
@@ -137,6 +140,14 @@ export interface IStorage {
   updateWorldCupSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<WorldCupSubmission | undefined>;
   updateWorldCupSubmissionFields(id: number, fields: Partial<WorldCupSubmission>): Promise<WorldCupSubmission | undefined>;
   getApprovedWorldCupSubmissions(weekIndex?: number): Promise<WorldCupSubmission[]>;
+
+  // NBA Finals watch party submissions (mirrors WC pattern)
+  createNbaFinalsSubmission(data: InsertNbaFinalsSubmission): Promise<NbaFinalsSubmission>;
+  createNbaFinalsSubmissionRaw(row: any): Promise<void>;
+  listNbaFinalsSubmissions(opts?: { status?: string }): Promise<NbaFinalsSubmission[]>;
+  updateNbaFinalsSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<NbaFinalsSubmission | undefined>;
+  updateNbaFinalsSubmissionFields(id: number, fields: Partial<NbaFinalsSubmission>): Promise<NbaFinalsSubmission | undefined>;
+  getApprovedNbaFinalsSubmissions(gameNumber?: number): Promise<NbaFinalsSubmission[]>;
 
   // New analytics (event-level, regions, sources, funnel)
   getEventPerformance(days?: number, limit?: number): Promise<{ eventId: number; title: string; date: string; region: string; city: string | null; clicks: number }[]>;
@@ -671,6 +682,56 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(worldCupSubmissions)
       .where(conds)
       .orderBy(worldCupSubmissions.matchDate);
+  }
+
+  // ── NBA Finals watch party submissions (mirrors WC pattern) ───────────
+  async createNbaFinalsSubmission(data: InsertNbaFinalsSubmission): Promise<NbaFinalsSubmission> {
+    const [created] = await db.insert(nbaFinalsSubmissions).values(data).returning();
+    return created;
+  }
+
+  async createNbaFinalsSubmissionRaw(row: any): Promise<void> {
+    await db.insert(nbaFinalsSubmissions).values(row);
+  }
+
+  async listNbaFinalsSubmissions(opts?: { status?: string }): Promise<NbaFinalsSubmission[]> {
+    if (opts?.status) {
+      return await db.select().from(nbaFinalsSubmissions)
+        .where(eq(nbaFinalsSubmissions.status, opts.status))
+        .orderBy(desc(nbaFinalsSubmissions.createdAt));
+    }
+    return await db.select().from(nbaFinalsSubmissions).orderBy(desc(nbaFinalsSubmissions.createdAt));
+  }
+
+  async updateNbaFinalsSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<NbaFinalsSubmission | undefined> {
+    const patch: Partial<NbaFinalsSubmission> = { status, reviewedAt: new Date() };
+    if (adminNotes !== undefined) patch.adminNotes = adminNotes;
+    const [updated] = await db.update(nbaFinalsSubmissions)
+      .set(patch)
+      .where(eq(nbaFinalsSubmissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateNbaFinalsSubmissionFields(id: number, fields: Partial<NbaFinalsSubmission>): Promise<NbaFinalsSubmission | undefined> {
+    if (Object.keys(fields).length === 0) {
+      const [row] = await db.select().from(nbaFinalsSubmissions).where(eq(nbaFinalsSubmissions.id, id));
+      return row;
+    }
+    const [updated] = await db.update(nbaFinalsSubmissions)
+      .set(fields)
+      .where(eq(nbaFinalsSubmissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getApprovedNbaFinalsSubmissions(gameNumber?: number): Promise<NbaFinalsSubmission[]> {
+    const conds = gameNumber
+      ? and(eq(nbaFinalsSubmissions.status, "approved"), eq(nbaFinalsSubmissions.gameNumber, gameNumber))
+      : eq(nbaFinalsSubmissions.status, "approved");
+    return await db.select().from(nbaFinalsSubmissions)
+      .where(conds)
+      .orderBy(nbaFinalsSubmissions.gameDate);
   }
 
   async getEventPerformance(days?: number, limit = 20) {

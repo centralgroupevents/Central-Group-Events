@@ -218,6 +218,16 @@ export async function registerRoutes(
     <loc>https://centralgroupevents.com/submit-world-cup-watch-party</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://centralgroupevents.com/nba-finals-2026-nj-watch-parties</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://centralgroupevents.com/submit-nba-finals-watch-party</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
   </url>${topicEntries}${postEntries}
 </urlset>`;
       console.log(`[sitemap] returning ${publishedPosts.length} blog entries + topic landings`);
@@ -1815,6 +1825,205 @@ ${blogList || "_No recent posts yet._"}
       res.json({ imported, invalid });
     } catch (err) {
       console.error("[wc-bulk] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── NBA Finals 2026 watch party submissions ──────────────────────────────
+  app.post("/api/nba-finals-submissions", formLimiter, async (req: Request, res: Response) => {
+    try {
+      const { insertNbaFinalsSubmissionSchema } = await import("@shared/schema");
+      const { getNbaGameByNumber } = await import("@shared/nba-finals-schedule");
+      const parsed = insertNbaFinalsSubmissionSchema.parse(req.body);
+      if (!getNbaGameByNumber(parsed.gameNumber)) {
+        return res.status(400).json({ message: "Unknown game number" });
+      }
+      const cleaned = { ...parsed, learnMoreUrl: normalizeUrl(parsed.learnMoreUrl) };
+      const created = await storage.createNbaFinalsSubmission(cleaned);
+
+      storage.upsertSubscriber(
+        parsed.submitterEmail.toLowerCase().trim(),
+        "nba-finals-watch-party",
+      ).catch(() => {});
+
+      transporter.sendMail({
+        from: `"CGE Watch Parties" <${process.env.GMAIL_USER}>`,
+        to: parsed.submitterEmail,
+        subject: `Watch party submission received — ${parsed.venueName}`,
+        html: `
+          <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px">
+            <h2 style="color:#9333ea">Thanks — we got your submission.</h2>
+            <p>We're reviewing your NBA Finals Game ${parsed.gameNumber} watch party at <strong>${escapeHtml(parsed.venueName)}</strong> in <strong>${escapeHtml(parsed.town)}</strong>.</p>
+            <p>Once approved (usually within 24-48 hours), it goes live at <a href="https://centralgroupevents.com/nba-finals-2026-nj-watch-parties">centralgroupevents.com/nba-finals-2026-nj-watch-parties</a> and you'll get a confirmation email.</p>
+            <p style="color:#777;font-size:12px;margin-top:32px">— Central Group Events</p>
+          </div>`,
+      }).catch(() => {});
+
+      transporter.sendMail({
+        from: `"CGE Website" <${process.env.GMAIL_USER}>`,
+        to: "centralgroupevents@gmail.com",
+        subject: `🏀 NBA Finals watch party submission: ${parsed.venueName}, ${parsed.town} (Game ${parsed.gameNumber})`,
+        html: `
+          <div style="font-family:Arial,Helvetica,sans-serif">
+            <h2>New NBA Finals watch party submission</h2>
+            <table style="border-collapse:collapse;font-size:14px">
+              <tr><td style="padding:4px 12px;color:#555">Venue</td><td>${escapeHtml(parsed.venueName)}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Town</td><td>${escapeHtml(parsed.town)}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Game</td><td>Game ${parsed.gameNumber}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Date</td><td>${escapeHtml(parsed.gameDate)}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Event name</td><td>${escapeHtml(parsed.eventName || "(none)")}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Instagram</td><td>${escapeHtml(parsed.instagramHandle || "(none)")}</td></tr>
+              <tr><td style="padding:4px 12px;color:#555">Submitter</td><td>${escapeHtml(parsed.submitterEmail)}</td></tr>
+            </table>
+            <p><a href="https://centralgroupevents.com/admin">Review in admin →</a></p>
+          </div>`,
+      }).catch(() => {});
+
+      res.status(201).json({ id: created.id, status: created.status });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message || "Invalid submission" });
+      }
+      console.error("[nba-submissions] create error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/nba-finals-submissions/approved", async (req: Request, res: Response) => {
+    try {
+      const gameRaw = req.query.game;
+      const game = typeof gameRaw === "string" ? parseInt(gameRaw, 10) : undefined;
+      const gameNumber = Number.isFinite(game as number) ? (game as number) : undefined;
+      const rows = await storage.getApprovedNbaFinalsSubmissions(gameNumber);
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/nba-finals-submissions", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const rows = await storage.listNbaFinalsSubmissions({ status });
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/nba-finals-submissions/:id/status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const { status, adminNotes } = req.body as { status?: string; adminNotes?: string };
+      if (!status || !["pending", "approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "status must be pending/approved/rejected" });
+      }
+      const updated = await storage.updateNbaFinalsSubmissionStatus(id, status, adminNotes);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+
+      if (status === "approved" && updated.submitterEmail) {
+        transporter.sendMail({
+          from: `"CGE Watch Parties" <${process.env.GMAIL_USER}>`,
+          to: updated.submitterEmail,
+          subject: `🟢 Your NBA Finals watch party is live — ${updated.venueName}`,
+          html: `
+            <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px">
+              <h2 style="color:#9333ea">You're live!</h2>
+              <p>Your NBA Finals Game ${updated.gameNumber} watch party at <strong>${escapeHtml(updated.venueName)}</strong> in <strong>${escapeHtml(updated.town)}</strong> has been approved.</p>
+              <p>It's now visible at: <a href="https://centralgroupevents.com/nba-finals-2026-nj-watch-parties">centralgroupevents.com/nba-finals-2026-nj-watch-parties</a></p>
+              <p style="color:#777;font-size:12px;margin-top:32px">— Central Group Events</p>
+            </div>`,
+        }).catch(() => {});
+      }
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/nba-finals-submissions/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const { getNbaGameNumberForDate } = await import("@shared/nba-finals-schedule");
+      const body = req.body as Record<string, any>;
+      const allowed: Record<string, unknown> = {};
+      const STRING_FIELDS = ["venueName", "town", "gameDate", "eventName", "instagramHandle", "learnMoreUrl", "adminNotes"];
+      for (const k of STRING_FIELDS) {
+        if (k in body) {
+          const v = body[k];
+          allowed[k] = v == null || v === "" ? null : String(v).slice(0, 500);
+        }
+      }
+      if ("venueName" in allowed && !allowed.venueName) return res.status(400).json({ message: "venueName cannot be empty" });
+      if ("town" in allowed && !allowed.town) return res.status(400).json({ message: "town cannot be empty" });
+      if ("gameDate" in allowed && allowed.gameDate) {
+        const gd = String(allowed.gameDate);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(gd)) return res.status(400).json({ message: "gameDate must be YYYY-MM-DD" });
+        const gn = getNbaGameNumberForDate(gd);
+        if (!gn) return res.status(400).json({ message: `${gd} doesn't match any scheduled NBA Finals game date` });
+        allowed.gameNumber = gn;
+      }
+      if ("learnMoreUrl" in allowed) {
+        allowed.learnMoreUrl = normalizeUrl(allowed.learnMoreUrl as string | null);
+      }
+      const updated = await storage.updateNbaFinalsSubmissionFields(id, allowed as any);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[nba-edit] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/nba-finals-submissions/bulk", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { adminBulkNbaFinalsRowSchema } = await import("@shared/schema");
+      const { getNbaGameNumberForDate } = await import("@shared/nba-finals-schedule");
+      const raw = req.body as unknown[];
+      if (!Array.isArray(raw)) return res.status(400).json({ message: "Expected an array of rows" });
+      const valid: any[] = [];
+      const invalid: { rowIndex: number; reason: string }[] = [];
+      for (let i = 0; i < raw.length; i++) {
+        try {
+          const parsed = adminBulkNbaFinalsRowSchema.parse(raw[i]);
+          const normalizedDate = parseFlexibleWcDate(parsed.gameDate);
+          if (!normalizedDate) {
+            invalid.push({ rowIndex: i, reason: `Could not parse date "${parsed.gameDate}".` });
+            continue;
+          }
+          const gameNumber = parsed.gameNumber ?? getNbaGameNumberForDate(normalizedDate);
+          if (!gameNumber) {
+            invalid.push({ rowIndex: i, reason: `Date ${normalizedDate} doesn't match a scheduled NBA Finals game date. Pass an explicit gameNumber to override.` });
+            continue;
+          }
+          valid.push({
+            gameNumber,
+            gameDate: normalizedDate,
+            venueName: parsed.venueName,
+            town: parsed.town,
+            eventName: parsed.eventName || null,
+            instagramHandle: parsed.instagramHandle || null,
+            learnMoreUrl: normalizeUrl(parsed.learnMoreUrl ?? null),
+            submitterEmail: "centralgroupevents@gmail.com",
+            status: "approved",
+            source: "admin-import",
+            reviewedAt: new Date(),
+          });
+        } catch (err) {
+          const reason = err instanceof z.ZodError ? err.errors[0]?.message || "Validation failed" : "Unknown error";
+          invalid.push({ rowIndex: i, reason });
+        }
+      }
+      let imported = 0;
+      for (const row of valid) {
+        await storage.createNbaFinalsSubmissionRaw(row);
+        imported++;
+      }
+      res.json({ imported, invalid });
+    } catch (err) {
+      console.error("[nba-bulk] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });

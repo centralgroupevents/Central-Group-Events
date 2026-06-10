@@ -260,6 +260,7 @@ const TABS = [
   { id: "blog", label: "Blog Posts", icon: BookOpen },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "world-cup", label: "World Cup", icon: Star },
+  { id: "nba-finals", label: "NBA Finals", icon: Star },
   { id: "team", label: "Team Members", icon: Users },
 ] as const;
 
@@ -2886,6 +2887,425 @@ function WorldCupTab() {
 }
 
 /* ─────────────────────────────────────────────────────────── */
+/*  NBA FINALS WATCH PARTIES TAB                              */
+/* ─────────────────────────────────────────────────────────── */
+interface NbaFinalsSubmissionRow {
+  id: number;
+  gameNumber: number;
+  gameDate: string;
+  venueName: string;
+  town: string;
+  eventName: string | null;
+  instagramHandle: string | null;
+  learnMoreUrl: string | null;
+  submitterEmail: string;
+  status: string;
+  adminNotes: string | null;
+  createdAt: string | null;
+}
+
+const NBA_IMPORT_FIELDS = [
+  { key: "gameDate",        label: "Game Date (YYYY-MM-DD)", required: true },
+  { key: "venueName",       label: "Venue Name",   required: true },
+  { key: "town",            label: "Town / City",  required: true },
+  { key: "eventName",       label: "Event Name",   required: false },
+  { key: "instagramHandle", label: "Instagram Handle", required: false },
+  { key: "learnMoreUrl",    label: "Learn-more URL", required: false },
+];
+
+const NBA_IMPORT_ALIASES: Record<string, string[]> = {
+  gameDate:        ["date", "gamedate", "game date", "event date"],
+  venueName:       ["venue", "venuename", "venue name", "location", "place"],
+  town:            ["town", "city", "area"],
+  eventName:       ["event", "eventname", "event name", "name", "title"],
+  instagramHandle: ["instagram", "ig", "handle", "insta"],
+  learnMoreUrl:    ["url", "link", "learnmoreurl", "ticket", "tickets"],
+};
+
+function nbaAutoMatch(headers: string[], key: string): string {
+  const aliases = NBA_IMPORT_ALIASES[key] || [key];
+  return headers.find((h) => aliases.some((a) => h.toLowerCase().trim() === a.toLowerCase())) ||
+         headers.find((h) => aliases.some((a) => h.toLowerCase().trim().includes(a.toLowerCase()))) || "";
+}
+
+function NbaFinalsTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [statusFilter, setStatusFilter] = useState<string>("pending");
+
+  // Import wizard state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importStep, setImportStep] = useState<"input" | "mapping">("input");
+  const [importRawHeaders, setImportRawHeaders] = useState<string[]>([]);
+  const [importRawRows, setImportRawRows] = useState<string[][]>([]);
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({});
+  const [importError, setImportError] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; invalid: { rowIndex: number; reason: string }[] } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit modal state
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ venueName: "", town: "", gameDate: "", eventName: "", instagramHandle: "", learnMoreUrl: "" });
+  const [editBusy, setEditBusy] = useState(false);
+
+  const { data: submissions = [], isLoading } = useQuery<NbaFinalsSubmissionRow[]>({
+    queryKey: ["/api/admin/nba-finals-submissions", statusFilter],
+    queryFn: async () => {
+      const url = statusFilter === "all"
+        ? "/api/admin/nba-finals-submissions"
+        : `/api/admin/nba-finals-submissions?status=${statusFilter}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/nba-finals-submissions/${id}/status`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/nba-finals-submissions"] });
+      toast({ title: "Updated" });
+    },
+    onError: () => toast({ title: "Update failed", variant: "destructive" }),
+  });
+
+  function openEdit(s: NbaFinalsSubmissionRow) {
+    setEditingId(s.id);
+    setEditForm({
+      venueName: s.venueName || "",
+      town: s.town || "",
+      gameDate: s.gameDate || "",
+      eventName: s.eventName || "",
+      instagramHandle: s.instagramHandle || "",
+      learnMoreUrl: s.learnMoreUrl || "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    setEditBusy(true);
+    try {
+      const payload: Record<string, string | null> = {
+        venueName: editForm.venueName.trim(),
+        town: editForm.town.trim(),
+        gameDate: editForm.gameDate.trim(),
+        eventName: editForm.eventName.trim() || null,
+        instagramHandle: editForm.instagramHandle.trim() || null,
+        learnMoreUrl: editForm.learnMoreUrl.trim() || null,
+      };
+      const res = await apiRequest("PATCH", `/api/admin/nba-finals-submissions/${editingId}`, payload);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Save failed");
+      qc.invalidateQueries({ queryKey: ["/api/admin/nba-finals-submissions"] });
+      toast({ title: "Saved" });
+      setEditingId(null);
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message || err), variant: "destructive" });
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  function downloadCsvTemplate() {
+    const headers = "gameDate,venueName,town,eventName,instagramHandle,learnMoreUrl";
+    const sample = "2026-06-12,The Sports Bar,Newark,Game 4 Watch Party,@yourvenue,https://posh.vip/e/example";
+    const blob = new Blob([headers + "\n" + sample + "\n"], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "nba-finals-watch-parties-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function resetImportWizard() {
+    setImportStep("input"); setImportRawHeaders([]); setImportRawRows([]); setImportMapping({});
+    setImportError(""); setImportResult(null); setImportBusy(false);
+  }
+
+  function buildInitialMapping(headers: string[]): Record<string, string> {
+    const mapping: Record<string, string> = {};
+    for (const { key } of NBA_IMPORT_FIELDS) mapping[key] = nbaAutoMatch(headers, key);
+    return mapping;
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError(""); setImportResult(null);
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array", cellDates: true });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const allRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, dateNF: "yyyy-mm-dd" }) as any[][];
+          const nonEmpty = allRows.filter((r) => r.some((c) => String(c).trim() !== ""));
+          if (nonEmpty.length < 2) { setImportError("File empty / only headers."); return; }
+          const headers = nonEmpty[0].map((h) => String(h).trim());
+          const dataRows = nonEmpty.slice(1).map((row) => row.map((c) => String(c).trim()));
+          setImportRawHeaders(headers); setImportRawRows(dataRows);
+          setImportMapping(buildInitialMapping(headers)); setImportStep("mapping");
+        } catch { setImportError("Could not read the spreadsheet."); }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse<string[]>(file, {
+        header: false, skipEmptyLines: true,
+        complete: (results) => {
+          const allRows = results.data as string[][];
+          if (allRows.length < 2) { setImportError("File empty / only headers."); return; }
+          const headers = allRows[0].map((h) => h.trim());
+          const dataRows = allRows.slice(1);
+          setImportRawHeaders(headers); setImportRawRows(dataRows);
+          setImportMapping(buildInitialMapping(headers)); setImportStep("mapping");
+        },
+        error: (err: Error) => setImportError(err.message),
+      });
+    }
+    e.target.value = "";
+  }
+
+  async function submitMappedImport() {
+    setImportBusy(true);
+    const mapped = importRawRows.map((row) => {
+      const obj: Record<string, string> = {};
+      for (const { key } of NBA_IMPORT_FIELDS) {
+        const col = importMapping[key];
+        if (col) {
+          const idx = importRawHeaders.indexOf(col);
+          obj[key] = idx >= 0 ? (row[idx] || "").trim() : "";
+        }
+      }
+      return obj;
+    }).map((r) => ({
+      gameDate: r.gameDate,
+      venueName: r.venueName,
+      town: r.town,
+      eventName: r.eventName || undefined,
+      instagramHandle: r.instagramHandle || undefined,
+      learnMoreUrl: r.learnMoreUrl || undefined,
+    }));
+    try {
+      const res = await apiRequest("POST", "/api/admin/nba-finals-submissions/bulk", mapped);
+      const result = await res.json();
+      setImportResult(result);
+      qc.invalidateQueries({ queryKey: ["/api/admin/nba-finals-submissions"] });
+      toast({ title: `Imported ${result.imported}` });
+    } catch (err) {
+      toast({ title: "Import failed", description: String(err), variant: "destructive" });
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
+  const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+        <span className="text-sm text-muted-foreground font-medium">Filter:</span>
+        <div className="flex gap-1.5 flex-wrap">
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${statusFilter === s ? "bg-primary border-primary text-white" : "border-white/10 text-white/40 hover:text-white/60"}`}
+            >
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-bold text-white">NBA Finals Watch Party Submissions <span className="text-muted-foreground font-normal text-sm ml-2">({submissions.length})</span></h2>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="border-white/20 text-white/70 h-8" onClick={downloadCsvTemplate}>
+              <Download className="w-3.5 h-3.5 mr-1.5" /> Template
+            </Button>
+            <Button size="sm" className="bg-primary hover:bg-primary/90 h-8" onClick={() => { resetImportWizard(); setShowImportModal(true); }}>
+              <Upload className="w-3.5 h-3.5 mr-1.5" /> Import CSV / XLSX
+            </Button>
+          </div>
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">
+            {[1,2,3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+          </div>
+        ) : submissions.length === 0 ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">No submissions match this filter.</div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {submissions.map((s) => (
+              <div key={s.id} className="px-6 py-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                      <h3 className="font-bold text-white">{s.eventName || s.venueName}</h3>
+                      {s.eventName && <span className="text-sm text-white/50">at {s.venueName}</span>}
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                        s.status === "approved" ? "border-green-500/40 text-green-400 bg-green-500/10" :
+                        s.status === "rejected" ? "border-red-500/40 text-red-400 bg-red-500/10" :
+                        "border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
+                      }`}>{s.status}</span>
+                    </div>
+                    <div className="text-sm text-white/70 space-y-0.5">
+                      <p>📍 {s.town}, NJ · 📅 {s.gameDate} · 🏀 Game {s.gameNumber}</p>
+                      <p className="text-xs text-white/50">
+                        <a href={`mailto:${s.submitterEmail}`} className="text-primary hover:underline">{s.submitterEmail}</a>
+                        {s.instagramHandle && <> · <a href={`https://instagram.com/${s.instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{s.instagramHandle.replace("@","")}</a></>}
+                        {s.learnMoreUrl && <> · <a href={s.learnMoreUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Learn-more link ↗</a></>}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="sm" variant="outline" onClick={() => openEdit(s)} className="border-white/15 text-white/70">
+                      <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
+                    </Button>
+                    {s.status !== "approved" && (
+                      <Button size="sm" onClick={() => updateMutation.mutate({ id: s.id, status: "approved" })} className="bg-green-500/15 border border-green-500/30 text-green-400 hover:bg-green-500/25">Approve</Button>
+                    )}
+                    {s.status !== "rejected" && (
+                      <Button size="sm" onClick={() => updateMutation.mutate({ id: s.id, status: "rejected" })} className="bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/25">Reject</Button>
+                    )}
+                    {s.status !== "pending" && (
+                      <Button size="sm" variant="outline" onClick={() => updateMutation.mutate({ id: s.id, status: "pending" })} className="border-white/15 text-white/60">Reopen</Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Import wizard modal */}
+      <Dialog open={showImportModal} onOpenChange={(o) => { setShowImportModal(o); if (!o) resetImportWizard(); }}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Import NBA Finals Watch Parties</DialogTitle>
+          </DialogHeader>
+          {importStep === "input" && !importResult && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">Upload a CSV or Excel file with one watch party per row. You'll map the columns next.</p>
+              <div className="border-2 border-dashed border-white/15 rounded-2xl p-8 text-center">
+                <Upload className="w-8 h-8 mx-auto text-white/40 mb-3" />
+                <input ref={importInputRef} type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden" onChange={handleImportFile} />
+                <Button onClick={() => importInputRef.current?.click()} className="bg-primary hover:bg-primary/90">Choose file</Button>
+                <p className="text-xs text-muted-foreground mt-3">CSV, XLSX, or XLS</p>
+              </div>
+              {importError && <p className="text-sm text-red-400">{importError}</p>}
+              <p className="text-xs text-muted-foreground">
+                Don't have a file yet? <button type="button" onClick={downloadCsvTemplate} className="text-primary hover:underline">Download a CSV template</button>.
+              </p>
+            </div>
+          )}
+          {importStep === "mapping" && !importResult && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">Map your file's columns to our fields. Required fields are marked <span className="text-red-400">*</span>.</p>
+              <div className="rounded-lg border border-white/10 overflow-hidden">
+                <table className="text-sm w-full">
+                  <thead><tr className="bg-white/5 border-b border-white/10 text-muted-foreground text-left"><th className="px-3 py-2 font-medium w-1/2">CGE Field</th><th className="px-3 py-2 font-medium w-1/2">Your Column</th></tr></thead>
+                  <tbody>
+                    {NBA_IMPORT_FIELDS.map(({ key, label, required }) => (
+                      <tr key={key} className="border-b border-white/5">
+                        <td className="px-3 py-2 text-white/80">{label}{required && <span className="text-red-400 ml-1">*</span>}</td>
+                        <td className="px-3 py-2">
+                          <Select value={importMapping[key] || "__none__"} onValueChange={(v) => setImportMapping({ ...importMapping, [key]: v === "__none__" ? "" : v })}>
+                            <SelectTrigger className="h-8 bg-black/40 border-white/10 text-xs"><SelectValue placeholder="— skip —" /></SelectTrigger>
+                            <SelectContent className="bg-secondary border-white/10 text-white">
+                              <SelectItem value="__none__">— skip —</SelectItem>
+                              {importRawHeaders.filter(h => h && h.trim().length > 0).map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <DialogFooter className="gap-2 pt-2">
+                <Button variant="outline" onClick={() => setImportStep("input")} className="border-white/20 text-white/70">Back</Button>
+                <Button onClick={submitMappedImport} disabled={importBusy || !importMapping["gameDate"] || !importMapping["venueName"] || !importMapping["town"]} className="bg-primary hover:bg-primary/90">
+                  {importBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing…</> : <>Import {importRawRows.length} row{importRawRows.length !== 1 ? "s" : ""}</>}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+          {importResult && (
+            <div className="py-4 space-y-4">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                <p className="text-green-400 text-sm font-medium">{importResult.imported} imported{importResult.invalid.length > 0 && `, ${importResult.invalid.length} skipped`}</p>
+              </div>
+              {importResult.invalid.length > 0 && (
+                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4 max-h-48 overflow-y-auto">
+                  <p className="text-xs font-semibold text-yellow-300 mb-2">Skipped rows:</p>
+                  <ul className="text-xs text-white/70 space-y-1">
+                    {importResult.invalid.map((iv, i) => <li key={i}>Row {iv.rowIndex + 1}: {iv.reason}</li>)}
+                  </ul>
+                </div>
+              )}
+              <DialogFooter>
+                <Button onClick={() => { setShowImportModal(false); resetImportWizard(); }} className="bg-primary hover:bg-primary/90">Done</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit modal */}
+      <Dialog open={editingId !== null} onOpenChange={(o) => { if (!o) setEditingId(null); }}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit NBA Finals watch party</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Venue name *</Label>
+              <Input value={editForm.venueName} onChange={(e) => setEditForm({ ...editForm, venueName: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Town *</Label>
+              <Input value={editForm.town} onChange={(e) => setEditForm({ ...editForm, town: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Game date *</Label>
+              <Input type="date" value={editForm.gameDate} onChange={(e) => setEditForm({ ...editForm, gameDate: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+              <p className="text-[11px] text-white/40">Must match an NBA Finals game date. Game number is auto-derived.</p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Event name <span className="text-white/40">(optional)</span></Label>
+              <Input value={editForm.eventName} onChange={(e) => setEditForm({ ...editForm, eventName: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Instagram handle <span className="text-white/40">(optional)</span></Label>
+              <Input value={editForm.instagramHandle} onChange={(e) => setEditForm({ ...editForm, instagramHandle: e.target.value })} placeholder="@venue" className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Learn-more URL <span className="text-white/40">(optional)</span></Label>
+              <Input value={editForm.learnMoreUrl} onChange={(e) => setEditForm({ ...editForm, learnMoreUrl: e.target.value })} placeholder="posh.vip/e/your-event" className="bg-black/40 border-white/10 h-10" />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditingId(null)} className="border-white/20 text-white/70">Cancel</Button>
+            <Button onClick={saveEdit} disabled={editBusy} className="bg-primary hover:bg-primary/90">
+              {editBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
 export default function Admin() {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -4528,6 +4948,7 @@ export default function Admin() {
         {activeTab === "this-week" && <ThisWeekTab />}
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "world-cup" && <WorldCupTab />}
+        {activeTab === "nba-finals" && <NbaFinalsTab />}
         {activeTab === "team" && <TeamTab currentRole={user.role} />}
       </div>
     </div>
