@@ -5,7 +5,8 @@ import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { WorldCupEmailBanner } from "@/components/WorldCupEmailBanner";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Instagram, MapPin } from "lucide-react";
+import { ChevronRight, Instagram, MapPin, Lock } from "lucide-react";
+import { getQueryFn } from "@/lib/queryClient";
 import {
   WORLD_CUP_2026_WEEKS,
   getMatchBySlot,
@@ -33,6 +34,8 @@ function formatDate(iso: string): string {
   });
 }
 
+const TEASER_LIMIT = 5;
+
 export default function WatchParties() {
   const [selectedWeek, setSelectedWeek] = useState<number | "all">("all");
 
@@ -48,10 +51,28 @@ export default function WatchParties() {
     },
   });
 
+  // Gate the full list behind an email — admin bypass via existing session cookie.
+  const { data: subVerify } = useQuery<{ access: boolean }>({
+    queryKey: ["/api/subscriber/verify"],
+  });
+  const { data: adminMe } = useQuery<{ email: string; role: string } | null>({
+    queryKey: ["/api/admin/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    retry: false,
+  });
+  const hasAccess = !!subVerify?.access || !!adminMe?.email;
+
+  // Limit visible submissions to a teaser when the visitor hasn't unlocked yet.
+  const visibleSubmissions = useMemo(() => {
+    if (!submissions) return [] as ApprovedSubmission[];
+    return hasAccess ? submissions : submissions.slice(0, TEASER_LIMIT);
+  }, [submissions, hasAccess]);
+  const hiddenCount = submissions ? Math.max(0, submissions.length - visibleSubmissions.length) : 0;
+
   const grouped = useMemo(() => {
-    if (!submissions) return [] as { date: string; items: ApprovedSubmission[] }[];
+    if (!visibleSubmissions.length) return [] as { date: string; items: ApprovedSubmission[] }[];
     const map = new Map<string, ApprovedSubmission[]>();
-    for (const s of submissions) {
+    for (const s of visibleSubmissions) {
       const arr = map.get(s.matchDate) || [];
       arr.push(s);
       map.set(s.matchDate, arr);
@@ -118,13 +139,16 @@ export default function WatchParties() {
             </Link>
           </div>
 
-          <div className="mt-6">
-            <WorldCupEmailBanner
-              source="world-cup-watch-parties"
-              headline="Get the NJ watch party schedule each week"
-              subhead="We email subscribers when new watch parties are approved + which matches are happening that week."
-            />
-          </div>
+          {!hasAccess && (
+            <div className="mt-6">
+              <WorldCupEmailBanner
+                source="world-cup-watch-parties"
+                headline="🔓 Unlock the full NJ watch party list"
+                subhead="Drop your email to see every approved venue — free, no spam. You'll also get our weekly NJ event newsletter."
+                buttonLabel="Unlock the list"
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -221,6 +245,26 @@ export default function WatchParties() {
                   </div>
                 </div>
               ))}
+
+              {/* Inline unlock prompt after the teaser list — only when gated AND there's more */}
+              {!hasAccess && hiddenCount > 0 && (
+                <div className="relative pt-6 mt-6 border-t border-white/10">
+                  <div className="bg-primary/10 border border-primary/30 rounded-2xl p-6 text-center" data-testid="wc-unlock-inline">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/20 border border-primary/40 mb-3">
+                      <Lock className="w-5 h-5 text-primary" />
+                    </div>
+                    <h3 className="text-xl font-black text-white mb-1">
+                      {hiddenCount} more watch {hiddenCount === 1 ? "party" : "parties"} hidden
+                    </h3>
+                    <p className="text-sm text-white/70 mb-4">
+                      Drop your email above to unlock the full list — free, no spam.
+                    </p>
+                    <a href="#" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="text-primary hover:underline text-sm font-semibold">
+                      ↑ Jump to the unlock form
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

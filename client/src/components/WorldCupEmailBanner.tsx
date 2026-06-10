@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +12,8 @@ interface Props {
   headline?: string;
   /** Optional custom subhead under the headline. */
   subhead?: string;
+  /** Optional CTA button label. Defaults to "Subscribe". */
+  buttonLabel?: string;
 }
 
 /**
@@ -19,8 +22,9 @@ interface Props {
  * with `referrer = source` for attribution. Existing subscribers don't
  * double-subscribe (ON CONFLICT DO NOTHING server-side).
  */
-export function WorldCupEmailBanner({ source, headline, subhead }: Props) {
+export function WorldCupEmailBanner({ source, headline, subhead, buttonLabel }: Props) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -43,6 +47,19 @@ export function WorldCupEmailBanner({ source, headline, subhead }: Props) {
         const body = await res.json().catch(() => ({}));
         throw new Error((body as { message?: string }).message || "Failed to subscribe");
       }
+      // Also call /api/subscriber/check so the access cookie is set — this lets
+      // gated pages (like /world-cup-2026-nj-watch-parties) immediately reveal
+      // their full content after submit.
+      await fetch("/api/subscriber/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, referrer: document.referrer }),
+        credentials: "include",
+      }).catch(() => {});
+      if (typeof window !== "undefined") {
+        localStorage.setItem("cge_newsletter_subscribed", "true");
+      }
+      await qc.invalidateQueries({ queryKey: ["/api/subscriber/verify"] });
       setSubmitted(true);
       toast({ title: "You're in", description: "Watch for NJ World Cup updates in your inbox." });
     } catch (err) {
@@ -91,7 +108,7 @@ export function WorldCupEmailBanner({ source, headline, subhead }: Props) {
           className="bg-primary hover:bg-primary/90 h-11 px-6 font-semibold whitespace-nowrap"
           data-testid={`wc-email-submit-${source}`}
         >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Subscribe"}
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (buttonLabel || "Subscribe")}
         </Button>
       </form>
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
