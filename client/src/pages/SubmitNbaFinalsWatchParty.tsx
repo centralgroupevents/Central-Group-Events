@@ -108,7 +108,7 @@ export default function SubmitNbaFinalsWatchParty() {
       <section className="pt-32 pb-24 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <h1 className="text-3xl md:text-4xl font-black mb-3">Submit your NBA Finals watch party</h1>
         <p className="text-white/70 mb-10 leading-relaxed">
-          Hosting a 2026 NBA Finals watch party for Games 4-7 at your NJ venue? Fill out the form below — once approved, your watch party is published on our public page so fans across NJ can find it.
+          Hosting a 2026 NBA Finals watch party for Games 3-7 at your NJ venue? Fill out the form below — once approved, your watch party is published on our public page so fans across NJ can find it.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
