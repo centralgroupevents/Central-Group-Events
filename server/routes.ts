@@ -1572,12 +1572,14 @@ ${blogList || "_No recent posts yet._"}
   // ── Link click tracking ───────────────────────────────────────────────
   app.get("/go", async (req: Request, res: Response) => {
     try {
-      const url = req.query.url as string;
+      const raw = req.query.url as string;
       const postIdRaw = req.query.postId as string;
       const eventIdRaw = req.query.eventId as string;
-      if (!url || !url.startsWith("http")) {
-        return res.status(400).json({ message: "Invalid URL" });
-      }
+      if (!raw) return res.status(400).json({ message: "Invalid URL" });
+      // Auto-prepend https:// for stored URLs that came in as bare domains
+      // (e.g. "posh.vip/e/foo", "www.venue.com"). Old rows pre-normalizeUrl()
+      // and any path that skipped the normalizer end up here.
+      const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/+/, "")}`;
       const postId = postIdRaw ? parseInt(postIdRaw, 10) : undefined;
       const eventId = eventIdRaw ? parseInt(eventIdRaw, 10) : undefined;
       const referer = (req.headers.referer || req.headers.referrer) as string | undefined;

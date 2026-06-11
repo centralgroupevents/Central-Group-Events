@@ -2357,6 +2357,54 @@ function normalizeEventDate(input: string): string {
 }
 
 /* ─────────────────────────────────────────────────────────── */
+/*  Shared sort helper for admin list tabs                     */
+/* ─────────────────────────────────────────────────────────── */
+type SortDirection = "asc" | "desc";
+interface SortState { field: string; direction: SortDirection }
+
+function sortRows<T extends Record<string, any>>(rows: T[], field: string, dir: SortDirection): T[] {
+  const arr = [...rows];
+  arr.sort((a, b) => {
+    const av = a[field];
+    const bv = b[field];
+    // Nulls/undefined sort last regardless of direction
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (av < bv) return dir === "asc" ? -1 : 1;
+    if (av > bv) return dir === "asc" ? 1 : -1;
+    return 0;
+  });
+  return arr;
+}
+
+function SortHeader({ columns, sort, onChange }: {
+  columns: { field: string; label: string }[];
+  sort: SortState;
+  onChange: (next: SortState) => void;
+}) {
+  return (
+    <div className="px-6 py-2 border-b border-white/10 bg-white/[0.02] flex gap-4 flex-wrap text-[11px]" data-testid="sort-header">
+      <span className="text-white/30 font-bold uppercase tracking-wider">Sort by:</span>
+      {columns.map((col) => {
+        const isActive = sort.field === col.field;
+        return (
+          <button
+            key={col.field}
+            onClick={() => onChange({ field: col.field, direction: isActive && sort.direction === "asc" ? "desc" : "asc" })}
+            className={`flex items-center gap-1 font-bold uppercase tracking-wider ${isActive ? "text-primary" : "text-white/40 hover:text-white/70"}`}
+            data-testid={`sort-${col.field}`}
+          >
+            {col.label}
+            {isActive && <span className="text-xs">{sort.direction === "asc" ? "↑" : "↓"}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
 /*  WORLD CUP WATCH PARTIES TAB                               */
 /* ─────────────────────────────────────────────────────────── */
 interface WorldCupSubmissionRow {
@@ -2663,6 +2711,17 @@ function WorldCupTab() {
     onError: () => toast({ title: "Bulk edit failed", variant: "destructive" }),
   });
 
+  // Sort state — defaults to newest submissions first.
+  const [sort, setSort] = useState<SortState>({ field: "createdAt", direction: "desc" });
+  const WC_SORT_COLUMNS = [
+    { field: "matchDate", label: "Match Date" },
+    { field: "venueName", label: "Venue" },
+    { field: "town", label: "Town" },
+    { field: "status", label: "Status" },
+    { field: "createdAt", label: "Submitted" },
+  ];
+  const sortedSubmissions = useMemo(() => sortRows(submissions, sort.field, sort.direction), [submissions, sort]);
+
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
@@ -2726,6 +2785,9 @@ function WorldCupTab() {
             </Button>
           </div>
         </div>
+        {submissions.length > 0 && (
+          <SortHeader columns={WC_SORT_COLUMNS} sort={sort} onChange={setSort} />
+        )}
         {isLoading ? (
           <div className="p-6 space-y-3">
             {[1,2,3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
@@ -2734,7 +2796,7 @@ function WorldCupTab() {
           <div className="py-10 px-6 text-center text-muted-foreground text-sm">No submissions match this filter.</div>
         ) : (
           <div className="divide-y divide-white/5">
-            {submissions.map((s) => {
+            {sortedSubmissions.map((s) => {
               const isRowSelected = selectedIds.has(s.id);
               return (
               <div key={s.id} className={`px-6 py-5 ${isRowSelected ? "bg-primary/5" : ""}`} data-testid={`wc-row-${s.id}`}>
@@ -3326,6 +3388,16 @@ function NbaFinalsTab() {
     onError: () => toast({ title: "Bulk edit failed", variant: "destructive" }),
   });
 
+  const [sort, setSort] = useState<SortState>({ field: "createdAt", direction: "desc" });
+  const NBA_SORT_COLUMNS = [
+    { field: "gameDate", label: "Game Date" },
+    { field: "venueName", label: "Venue" },
+    { field: "town", label: "Town" },
+    { field: "status", label: "Status" },
+    { field: "createdAt", label: "Submitted" },
+  ];
+  const sortedSubmissions = useMemo(() => sortRows(submissions, sort.field, sort.direction), [submissions, sort]);
+
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
@@ -3388,6 +3460,9 @@ function NbaFinalsTab() {
             </Button>
           </div>
         </div>
+        {submissions.length > 0 && (
+          <SortHeader columns={NBA_SORT_COLUMNS} sort={sort} onChange={setSort} />
+        )}
         {isLoading ? (
           <div className="p-6 space-y-3">
             {[1,2,3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
@@ -3396,7 +3471,7 @@ function NbaFinalsTab() {
           <div className="py-10 px-6 text-center text-muted-foreground text-sm">No submissions match this filter.</div>
         ) : (
           <div className="divide-y divide-white/5">
-            {submissions.map((s) => {
+            {sortedSubmissions.map((s) => {
               const isRowSelected = selectedIds.has(s.id);
               return (
               <div key={s.id} className={`px-6 py-5 ${isRowSelected ? "bg-primary/5" : ""}`}>
