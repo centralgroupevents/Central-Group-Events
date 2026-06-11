@@ -4059,6 +4059,7 @@ export default function Admin() {
     { key: "genre",           label: "Genre",            required: false },
     { key: "instagramHandle", label: "Instagram Handle", required: false },
     { key: "ticketLink",      label: "Ticket Link",      required: false },
+    { key: "imageUrl",        label: "Image URL",        required: false },
   ];
 
   const IMPORT_ALIASES: Record<string, string[]> = {
@@ -4074,6 +4075,7 @@ export default function Admin() {
     genre:           ["genre", "type", "music type", "category"],
     instagramHandle: ["instagram", "ig", "handle", "insta", "instagramhandle"],
     ticketLink:      ["ticket link", "ticketlink", "ticket", "tickets", "url", "link"],
+    imageUrl:        ["image", "image url", "imageurl", "image_url", "media", "media url", "mediaurl", "thumbnail", "thumb", "pic", "picture", "photo", "flyer", "img"],
   };
 
   function autoMatchHeader(headers: string[], cgeKey: string): string {
