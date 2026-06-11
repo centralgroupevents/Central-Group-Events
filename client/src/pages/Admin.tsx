@@ -2725,7 +2725,7 @@ function WorldCupTab() {
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0 max-w-full overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
         <span className="text-sm text-muted-foreground font-medium">Filter:</span>
         <div className="flex gap-1.5 flex-wrap">
@@ -3401,7 +3401,7 @@ function NbaFinalsTab() {
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0 max-w-full overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
         <span className="text-sm text-muted-foreground font-medium">Filter:</span>
         <div className="flex gap-1.5 flex-wrap">
