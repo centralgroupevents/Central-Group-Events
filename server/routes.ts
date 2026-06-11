@@ -79,7 +79,17 @@ async function rehostInstagramImage(srcUrl: string | null | undefined): Promise<
   const isIgCdn = /(cdninstagram\.com|fbcdn\.net)/i.test(url);
   if (!isIgCdn) return url;
   try {
-    const response = await fetch(url);
+    // IG CDN blocks bare server-side fetches (no User-Agent / Accept). Send
+    // browser-like headers so the CDN treats us as a browser. Without these,
+    // every IG URL returns 403 even when the same URL works in your browser.
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.instagram.com/",
+      },
+    });
     if (!response.ok) {
       console.warn(`[rehost] fetch ${response.status} for ${url.slice(0, 100)}…`);
       return "";
