@@ -3733,9 +3733,28 @@ export default function Admin() {
         const ids = Array.from(selectedEventIds);
         const res = await apiRequest("POST", "/api/events/bulk-image", { ids, imageUrl });
         const body = await res.json();
+        // Empty imageUrl in the response = rehost failed (expired IG token,
+        // non-image content-type, etc.) — server returns "" so we save nothing.
+        if (!body.imageUrl && imageUrl) {
+          toast({
+            title: "Image couldn't be saved",
+            description: "The URL likely expired or isn't an image. Right-click the Instagram image and pick 'Copy image address' for a fresh URL.",
+            variant: "destructive",
+          });
+          return;
+        }
         toast({ title: `Updated ${body.updated} event${body.updated !== 1 ? "s" : ""}` });
       } else {
-        await apiRequest("PUT", `/api/events/${target}`, { imageUrl });
+        const res = await apiRequest("PUT", `/api/events/${target}`, { imageUrl });
+        const updated = await res.json();
+        if (!updated.imageUrl && imageUrl) {
+          toast({
+            title: "Image couldn't be saved",
+            description: "The URL likely expired or isn't an image. Right-click the Instagram image and pick 'Copy image address' for a fresh URL.",
+            variant: "destructive",
+          });
+          return;
+        }
         toast({ title: "Image updated" });
       }
       await qc.invalidateQueries({ queryKey: ["/api/events"] });

@@ -68,17 +68,27 @@ function normalizeUrl(input: string | null | undefined): string | null {
 // after a few days (the IG CDN signs URLs with short-lived tokens). Pass-through
 // anything that isn't an IG/FB CDN URL, and fall back to the original on any
 // error so a single bad image never fails the whole import.
+// Re-hosts Instagram/Facebook CDN URLs on Cloudinary so the image persists.
+// On any failure (expired token, non-image content-type, network blip,
+// Cloudinary error) returns "" so the caller saves nothing and the placeholder
+// renders instead of a broken-image thumbnail. Non-IG URLs pass through.
 async function rehostInstagramImage(srcUrl: string | null | undefined): Promise<string> {
   if (!srcUrl) return "";
   const url = String(srcUrl).trim();
   if (!url) return "";
-  // Only re-host Instagram/Facebook CDN URLs. Cloudinary URLs, generic CDNs,
-  // and anything already permanent passes through untouched.
   const isIgCdn = /(cdninstagram\.com|fbcdn\.net)/i.test(url);
   if (!isIgCdn) return url;
   try {
     const response = await fetch(url);
-    if (!response.ok) return url;
+    if (!response.ok) {
+      console.warn(`[rehost] fetch ${response.status} for ${url.slice(0, 100)}…`);
+      return "";
+    }
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.startsWith("image/")) {
+      console.warn(`[rehost] non-image content-type "${contentType}" for ${url.slice(0, 100)}…`);
+      return "";
+    }
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
@@ -91,10 +101,11 @@ async function rehostInstagramImage(srcUrl: string | null | undefined): Promise<
       );
       stream.end(buffer);
     });
+    console.log(`[rehost] OK ${url.slice(0, 80)}… → ${result.secure_url}`);
     return result.secure_url;
   } catch (err) {
-    console.warn("[rehost] failed for", url, err);
-    return url;
+    console.warn("[rehost] failed for", url.slice(0, 100), err instanceof Error ? err.message : err);
+    return "";
   }
 }
 
