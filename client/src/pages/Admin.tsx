@@ -4946,7 +4946,7 @@ export default function Admin() {
                     <div className="space-y-1">
                       <Label className="text-xs text-white/70">Image URL (Instagram CDN, any image link)</Label>
                       <Input value={imageUrlInput} onChange={(e) => setImageUrlInput(e.target.value)} placeholder="https://scontent...cdninstagram.com/..." className="bg-black/40 border-white/10 h-10" data-testid="input-image-url" />
-                      <p className="text-[11px] text-white/40">Instagram CDN URLs get auto-re-hosted on Cloudinary so they don't expire.</p>
+                      <p className="text-[11px] text-yellow-300/70">⚠ Instagram blocks most server-side fetches even when the URL works in your browser. For reliable uploads, switch to the <strong>Upload file</strong> tab and save the image to your computer first.</p>
                     </div>
                   )}
                   <DialogFooter className="gap-2">

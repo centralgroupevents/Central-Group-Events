@@ -253,9 +253,14 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
                       </p>
                     </div>
                     <div className="flex items-center gap-4 shrink-0">
-                      <p className="text-sm text-accent font-medium hidden sm:block">
-                        {new Date(event.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
-                      </p>
+                      <div className="text-right hidden sm:block">
+                        <p className="text-sm text-accent font-medium" data-testid={`text-event-date-${event.id}`}>
+                          {new Date(event.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                        </p>
+                        {event.eventTime && (
+                          <p className="text-xs text-white/50 mt-0.5" data-testid={`text-event-time-${event.id}`}>{event.eventTime}</p>
+                        )}
+                      </div>
                       <Button
                         variant="outline"
                         size="sm"
