@@ -2822,9 +2822,9 @@ function WorldCupTab() {
                         "border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
                       }`}>{s.status}</span>
                     </div>
-                    <div className="text-sm text-white/70 space-y-0.5">
-                      <p>📍 {s.town}, NJ · 📅 {s.matchDate} · ⚽ {s.matchLabel || s.matchSlot || "(no match)"}</p>
-                      <p className="text-xs text-white/50">
+                    <div className="text-sm text-white/70 space-y-0.5 min-w-0">
+                      <p className="break-words">📍 {s.town}, NJ · 📅 {s.matchDate} · ⚽ {s.matchLabel || s.matchSlot || "(no match)"}</p>
+                      <p className="text-xs text-white/50 break-all">
                         <a href={`mailto:${s.submitterEmail}`} className="text-primary hover:underline">{s.submitterEmail}</a>
                         {s.instagramHandle && <> · <a href={`https://instagram.com/${s.instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{s.instagramHandle.replace("@","")}</a></>}
                         {s.learnMoreUrl && <> · <a href={s.learnMoreUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Learn-more link ↗</a></>}
@@ -3497,9 +3497,9 @@ function NbaFinalsTab() {
                         "border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
                       }`}>{s.status}</span>
                     </div>
-                    <div className="text-sm text-white/70 space-y-0.5">
-                      <p>📍 {s.town}, NJ · 📅 {s.gameDate} · 🏀 Game {s.gameNumber}</p>
-                      <p className="text-xs text-white/50">
+                    <div className="text-sm text-white/70 space-y-0.5 min-w-0">
+                      <p className="break-words">📍 {s.town}, NJ · 📅 {s.gameDate} · 🏀 Game {s.gameNumber}</p>
+                      <p className="text-xs text-white/50 break-all">
                         <a href={`mailto:${s.submitterEmail}`} className="text-primary hover:underline">{s.submitterEmail}</a>
                         {s.instagramHandle && <> · <a href={`https://instagram.com/${s.instagramHandle.replace("@","")}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">@{s.instagramHandle.replace("@","")}</a></>}
                         {s.learnMoreUrl && <> · <a href={s.learnMoreUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Learn-more link ↗</a></>}
@@ -4175,9 +4175,9 @@ export default function Admin() {
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       <SEO title="Admin Dashboard" description="" canonical="https://www.centralgroupevents.com/admin" noindex />
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 min-w-0 overflow-x-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
