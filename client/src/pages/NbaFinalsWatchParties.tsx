@@ -131,7 +131,7 @@ export default function NbaFinalsWatchParties() {
             2026 NBA Finals Watch Parties in NJ
           </h1>
           <p className="text-white/80 leading-relaxed mb-6">
-            Every NJ venue hosting a 2026 NBA Finals watch party for Games 4-7. Updated as new submissions are reviewed.
+            Every NJ venue hosting a 2026 NBA Finals watch party for Games 5-7. Updated as new submissions are reviewed.
           </p>
           <div className="flex flex-col sm:flex-row gap-3">
             <Link

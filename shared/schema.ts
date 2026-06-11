@@ -233,7 +233,7 @@ export const insertNbaFinalsSubmissionSchema = createInsertSchema(nbaFinalsSubmi
   .omit({ id: true, createdAt: true, reviewedAt: true, status: true, adminNotes: true, source: true })
   .extend({
     submitterEmail: z.string().email(),
-    gameNumber: z.number().int().min(4).max(7),
+    gameNumber: z.number().int().min(5).max(7),
     gameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     venueName: z.string().min(1).max(200),
     town: z.string().min(1).max(100),
@@ -244,7 +244,7 @@ export const insertNbaFinalsSubmissionSchema = createInsertSchema(nbaFinalsSubmi
 
 // Admin bulk-import schema for NBA Finals (looser — matches WC pattern).
 export const adminBulkNbaFinalsRowSchema = z.object({
-  gameNumber: z.number().int().min(4).max(7).optional(),
+  gameNumber: z.number().int().min(5).max(7).optional(),
   gameDate: z.string().min(1).max(120),
   venueName: z.string().min(1).max(200),
   town: z.string().min(1).max(100),
