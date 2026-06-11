@@ -128,6 +128,7 @@ export default function TopicLanding() {
             lockedCity={config.filter.city}
             lockedGenre={config.filter.genre}
             lockedDays={config.filter.days}
+            lockedRegion={config.filter.region}
           />
         </div>
       </section>

@@ -94,9 +94,9 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background text-foreground overflow-hidden">
       <SEO
-        title="Central Group Events — NJ's #1 Event Hub"
-        description="Discover the best events in New Jersey every week. North, Central, and South NJ nightlife, brunch spots, live music, R&B nights, and more. Submit or promote your event with CGE."
-        keywords="events in NJ, things to do in New Jersey, NJ nightlife, New Jersey events this weekend, events near me NJ, Newark events, Jersey City events, North NJ events, Central NJ events, South NJ events, NJ brunch, NJ live music, NJ R&B night, event promotion New Jersey"
+        title="Things to Do in NJ This Weekend — Curated Events Across NJ"
+        description="Find the best things to do in NJ every weekend — concerts, day parties, brunches, festivals, watch parties, and nightlife. New events added weekly across North, Central, and South Jersey. Curated by Central Group Events."
+        keywords="things to do in nj, things to do in new jersey this weekend, nj events this weekend, events near me nj, fun things to do in nj, nj nightlife, new jersey events, north nj events, central nj events, south nj events, nj brunch, nj live music, nj day parties, nj festivals, weekend events new jersey"
         canonical="https://centralgroupevents.com"
         jsonLd={[
           {
@@ -213,25 +213,25 @@ export default function Home() {
             North • Central • South NJ
           </motion.div>
           
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
             className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-6 leading-[1.1]"
           >
-            New Jersey's <br/>
+            Things to Do in NJ <br/>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-yellow-400 to-amber-400 text-glow">
-              Social Scene, Amplified.
+              This Weekend.
             </span>
           </motion.h1>
-          
-          <motion.p 
+
+          <motion.p
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
             className="mt-6 text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto font-light"
           >
-            We've promoted 100+ events across NJ every week. Newsletter. Reels. Paid Ads. SMS Blasts. Influencers. All in one package.
+            The curated weekly events guide for New Jersey — concerts, day parties, brunches, festivals, watch parties, and nightlife across North, Central, and South Jersey. Updated every week.
           </motion.p>
           
           <motion.div 

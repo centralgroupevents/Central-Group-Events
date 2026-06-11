@@ -27,6 +27,8 @@ interface EventBrowserProps {
   lockedGenre?: string[];
   /** When set, only events on these days of week render (e.g. ["Fri", "Sat", "Sun"]). */
   lockedDays?: string[];
+  /** When set, force a region (e.g. "North NJ") and hide the region tabs. */
+  lockedRegion?: string;
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -39,9 +41,9 @@ function getDayOfWeek(dateStr: string | null | undefined): string {
   return DAY_NAMES[date.getDay()] || "";
 }
 
-export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, pinFeatured = false, inlineAd, inlineAdAfterIndex = 4, lockedCity, lockedGenre, lockedDays }: EventBrowserProps) {
+export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, pinFeatured = false, inlineAd, inlineAdAfterIndex = 4, lockedCity, lockedGenre, lockedDays, lockedRegion }: EventBrowserProps) {
   const [, navigate] = useLocation();
-  const [activeRegion, setActiveRegion] = useState("All");
+  const [activeRegion, setActiveRegion] = useState(lockedRegion || "All");
   const [searchQuery, setSearchQuery] = useState("");
   const [dayOfWeek, setDayOfWeek] = useState("All Days");
   const [eventType, setEventType] = useState("All Types");
@@ -143,21 +145,25 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
         />
       </div>
 
-      {/* Region tabs + filter dropdowns */}
-      <Tabs defaultValue="All" className="w-full" onValueChange={(val) => { setActiveRegion(val); setSearchQuery(""); }}>
+      {/* Region tabs + filter dropdowns — tabs hidden when locked */}
+      <Tabs value={activeRegion} className="w-full" onValueChange={(val) => { if (!lockedRegion) { setActiveRegion(val); setSearchQuery(""); } }}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
-          <TabsList className="bg-white/5 border border-white/10 p-1 rounded-2xl flex overflow-x-auto hide-scrollbar">
-            {["All", "North NJ", "Central NJ", "South NJ"].map((region) => (
-              <TabsTrigger
-                key={region}
-                value={region}
-                data-testid={`tab-region-${region.replace(/\s/g, "-").toLowerCase()}`}
-                className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white px-6 py-2.5"
-              >
-                {region === "All" ? "All Regions" : region.replace(" NJ", "")}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          {!lockedRegion ? (
+            <TabsList className="bg-white/5 border border-white/10 p-1 rounded-2xl flex overflow-x-auto hide-scrollbar">
+              {["All", "North NJ", "Central NJ", "South NJ"].map((region) => (
+                <TabsTrigger
+                  key={region}
+                  value={region}
+                  data-testid={`tab-region-${region.replace(/\s/g, "-").toLowerCase()}`}
+                  className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white px-6 py-2.5"
+                >
+                  {region === "All" ? "All Regions" : region.replace(" NJ", "")}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          ) : (
+            <div />
+          )}
 
           <div className="flex gap-2 flex-wrap sm:flex-nowrap">
             <Select value={dayOfWeek} onValueChange={setDayOfWeek}>

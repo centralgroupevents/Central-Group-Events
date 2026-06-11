@@ -88,9 +88,9 @@ function breadcrumb(items: { name: string; url: string }[]) {
 }
 
 const HOME_META: SeoMeta = {
-  title: `Central Group Events — NJ's #1 Event Hub | ${SITE_NAME}`,
+  title: `Things to Do in NJ This Weekend — Curated Events Across NJ | ${SITE_NAME}`,
   description:
-    "Discover the best events in New Jersey every week. North, Central, and South NJ nightlife, brunch spots, live music, R&B nights, and more. Submit or promote your event with CGE.",
+    "Find the best things to do in NJ every weekend — concerts, day parties, brunches, festivals, watch parties, and nightlife. New events added weekly across North, Central, and South Jersey. Curated by Central Group Events.",
   canonical: SITE,
   image: DEFAULT_IMAGE,
   type: "website",

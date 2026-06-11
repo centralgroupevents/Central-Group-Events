@@ -23,6 +23,7 @@ export interface TopicConfig {
     city?: string;
     genre?: string[];
     days?: string[];
+    region?: "North NJ" | "Central NJ" | "South NJ";
   };
   introParagraphs: string[];
   faqItems?: { q: string; a: string }[];
@@ -321,6 +322,111 @@ const TIME_TOPICS: TopicConfig[] = [
   },
 ];
 
+// Regional "Things to Do in [Region] Jersey" hub pages — same shape as city
+// pages but filter by region instead of city. Target broad search queries like
+// "things to do in north jersey this weekend".
+const REGION_TOPICS: TopicConfig[] = [
+  {
+    slug: "things-to-do-in-north-jersey",
+    pageType: "tentpole",
+    h1: "Things to Do in North Jersey This Weekend",
+    metaTitle: "Things to Do in North Jersey This Weekend — Events Guide | Central Group Events",
+    metaDescription: "The complete weekly guide to events in North Jersey — concerts, day parties, brunches, festivals, watch parties, and nightlife in Newark, Jersey City, Hoboken, Montclair, and beyond. New events added every week.",
+    filter: { region: "North NJ" },
+    introParagraphs: [
+      "North Jersey has the densest weekly event calendar in the state — Manhattan-skyline rooftops in Jersey City, Ironbound nightlife in Newark, mile-square bars in Hoboken, Mayo PAC concerts in Morristown, MetLife Stadium shows in East Rutherford, and indie venues across Montclair and Bloomfield.",
+      "This page lists everything happening across North NJ this week and next — curated by Central Group Events. Filter by day or event type below, or jump straight to a specific city using the links at the bottom.",
+      "Hosting an event in North Jersey? Submit it for free at /book — once approved it lands on this page plus your city's dedicated page.",
+    ],
+    faqItems: [
+      {
+        q: "What counts as North Jersey?",
+        a: "North Jersey covers Bergen, Essex, Hudson, Morris, Passaic, Sussex, Union, and Warren counties — including Newark, Jersey City, Hoboken, Paterson, Montclair, Morristown, East Rutherford, and surrounding towns.",
+      },
+      {
+        q: "What's the best North Jersey city for nightlife?",
+        a: "Hoboken has the most bars per square mile, Jersey City has the most rooftop and waterfront venues, and Newark has the most diverse mix of R&B nights, lounges, and Ironbound restaurants. All three run heavy weekend calendars year-round.",
+      },
+      {
+        q: "Where are the biggest concerts in North Jersey?",
+        a: "MetLife Stadium in East Rutherford for stadium tours; the Prudential Center in Newark for arena shows; the Wellmont Theater in Montclair, Mayo PAC in Morristown, and NJPAC in Newark for mid-sized headliners.",
+      },
+      {
+        q: "How do I find events near a specific North Jersey city?",
+        a: "Scroll to the city links at the bottom of this page, or visit /things-to-do-in-{city-slug} directly (e.g., /things-to-do-in-jersey-city, /things-to-do-in-hoboken).",
+      },
+    ],
+    relatedCities: ["newark", "jersey-city", "hoboken", "montclair", "east-rutherford", "morristown", "paterson", "hackensack"],
+    alwaysIndex: true,
+  },
+  {
+    slug: "things-to-do-in-central-jersey",
+    pageType: "tentpole",
+    h1: "Things to Do in Central Jersey This Weekend",
+    metaTitle: "Things to Do in Central Jersey This Weekend — Events Guide | Central Group Events",
+    metaDescription: "The full weekly guide to events in Central Jersey — concerts, day parties, brunches, festivals, and nightlife in Asbury Park, New Brunswick, Princeton, Red Bank, Long Branch, and beyond. New events added every week.",
+    filter: { region: "Central NJ" },
+    introParagraphs: [
+      "Central Jersey blends college-town energy (New Brunswick, Princeton), Jersey Shore beach scenes (Asbury Park, Long Branch, Belmar, Seaside Heights, Point Pleasant), the state capital (Trenton), and Monmouth County nightlife (Red Bank, Holmdel). It's the part of NJ where the music venues actually outnumber the bars.",
+      "This page lists everything happening across Central NJ this week and next — curated by Central Group Events. Filter by day or event type below, or jump to a specific Central NJ city at the bottom.",
+      "Hosting an event in Central Jersey? Submit it for free at /book — once approved it appears here and on your city's dedicated page.",
+    ],
+    faqItems: [
+      {
+        q: "What counts as Central Jersey?",
+        a: "Central Jersey covers Hunterdon, Mercer, Middlesex, Monmouth, Ocean, and Somerset counties — including Trenton, New Brunswick, Princeton, Asbury Park, Red Bank, Long Branch, Toms River, and the Jersey Shore towns north of Atlantic County.",
+      },
+      {
+        q: "Is Central Jersey real?",
+        a: "Yes — and the state government formally recognized it as a tourism region in 2023. Locally, Central Jersey identity is strongest in Middlesex and Monmouth counties.",
+      },
+      {
+        q: "Where are the best concerts in Central Jersey?",
+        a: "PNC Bank Arts Center in Holmdel for outdoor headliners (May–October), the Stone Pony and Wonder Bar in Asbury Park for indie and rock, Starland Ballroom in Sayreville for mid-sized shows, and Count Basie Center in Red Bank for theater-scale performances.",
+      },
+      {
+        q: "How do I find events near a specific Central Jersey city?",
+        a: "Scroll to the city links at the bottom of this page, or visit /things-to-do-in-{city-slug} directly (e.g., /things-to-do-in-asbury-park, /things-to-do-in-new-brunswick).",
+      },
+    ],
+    relatedCities: ["asbury-park", "new-brunswick", "princeton", "red-bank", "long-branch", "trenton", "holmdel", "sayreville"],
+    alwaysIndex: true,
+  },
+  {
+    slug: "things-to-do-in-south-jersey",
+    pageType: "tentpole",
+    h1: "Things to Do in South Jersey This Weekend",
+    metaTitle: "Things to Do in South Jersey This Weekend — Events Guide | Central Group Events",
+    metaDescription: "The full weekly guide to events in South Jersey — Atlantic City nightlife, Wildwood and Cape May summers, Cherry Hill and Camden shows, and beach-town events across the South Jersey shore. New events added every week.",
+    filter: { region: "South NJ" },
+    introParagraphs: [
+      "South Jersey runs the state's biggest casino calendar (Atlantic City), the iconic shore boardwalks (Wildwood, Cape May, Ocean City), and Philadelphia-adjacent suburbs (Cherry Hill, Camden). It's where NJ's nightlife and beach scenes overlap heaviest in summer.",
+      "This page lists everything happening across South NJ this week and next — curated by Central Group Events. Filter by day or event type below, or jump to a specific South NJ city at the bottom.",
+      "Hosting an event in South Jersey? Submit it for free at /book — once approved it lands here and on your city's dedicated page.",
+    ],
+    faqItems: [
+      {
+        q: "What counts as South Jersey?",
+        a: "South Jersey covers Atlantic, Burlington, Camden, Cape May, Cumberland, Gloucester, and Salem counties — including Atlantic City, Cherry Hill, Camden, Wildwood, Cape May, Ocean City, and the rest of the South Jersey shore.",
+      },
+      {
+        q: "What's the South Jersey nightlife capital?",
+        a: "Atlantic City — by a wide margin. Borgata's Music Box, the Pool After Dark at Harrah's, beach concerts, boardwalk events, and a year-round calendar of headliners and DJs make it the most active South Jersey nightlife scene.",
+      },
+      {
+        q: "When is the best time to visit South Jersey?",
+        a: "Memorial Day through Labor Day for shore towns (Wildwood, Cape May, Ocean City). Year-round for Atlantic City and the Cherry Hill/Camden area. Major shore events concentrate in July and August.",
+      },
+      {
+        q: "How do I find events in a specific South Jersey town?",
+        a: "Scroll to the city links at the bottom of this page, or visit /things-to-do-in-{city-slug} directly (e.g., /things-to-do-in-atlantic-city, /things-to-do-in-wildwood).",
+      },
+    ],
+    relatedCities: ["atlantic-city", "wildwood", "cape-may", "ocean-city", "cherry-hill", "camden", "toms-river", "lakewood"],
+    alwaysIndex: true,
+  },
+];
+
 const TENTPOLE_TOPICS: TopicConfig[] = [
   {
     slug: "world-cup-2026-nj-guide",
@@ -374,6 +480,7 @@ const ALL_TOPICS: TopicConfig[] = [
     return EVENT_TYPES.map((type) => buildComboTopic(city, type));
   }),
   ...TIME_TOPICS,
+  ...REGION_TOPICS,
   ...TENTPOLE_TOPICS,
 ];
 
