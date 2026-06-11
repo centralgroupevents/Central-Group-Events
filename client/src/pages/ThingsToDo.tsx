@@ -68,6 +68,7 @@ function AdBanner({ slot, label }: { slot: AdSlot | null; label: string }) {
 
 function UnlockPrompt() {
   const qc = useQueryClient();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [region, setRegion] = useState("");
   const [loading, setLoading] = useState(false);
@@ -75,15 +76,19 @@ function UnlockPrompt() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = email.trim().toLowerCase();
-    if (!trimmed) return;
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedName = name.trim();
+    if (!trimmedEmail || !trimmedName || !region) {
+      setError("Please fill in your name, email, and NJ region.");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
       const subRes = await fetch("/api/subscribers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmed, region: region || undefined, name: "" }),
+        body: JSON.stringify({ email: trimmedEmail, region, name: trimmedName }),
         credentials: "include",
       });
       if (!subRes.ok && subRes.status !== 409) {
@@ -93,7 +98,7 @@ function UnlockPrompt() {
       const checkRes = await fetch("/api/subscriber/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmed, referrer: document.referrer }),
+        body: JSON.stringify({ email: trimmedEmail, referrer: document.referrer }),
         credentials: "include",
       });
       if (!checkRes.ok) throw new Error("Could not verify access. Try again.");
@@ -119,6 +124,15 @@ function UnlockPrompt() {
         </div>
         <form onSubmit={handleSubmit} className="space-y-3 text-left">
           <Input
+            type="text"
+            placeholder="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="bg-black/40 border-white/10 h-11 text-white rounded-xl"
+            data-testid="input-things-to-do-name"
+          />
+          <Input
             type="email"
             placeholder="your@email.com"
             value={email}
@@ -129,13 +143,13 @@ function UnlockPrompt() {
           />
           <Select value={region} onValueChange={setRegion}>
             <SelectTrigger className="h-11 bg-black/40 border-white/10 text-sm rounded-xl" data-testid="select-things-to-do-region">
-              <SelectValue placeholder="Region (optional)" />
+              <SelectValue placeholder="What part of NJ are you in?" />
             </SelectTrigger>
             <SelectContent className="bg-secondary border-white/10 text-white">
-              <SelectItem value="All">All</SelectItem>
               <SelectItem value="North NJ">North NJ</SelectItem>
               <SelectItem value="Central NJ">Central NJ</SelectItem>
               <SelectItem value="South NJ">South NJ</SelectItem>
+              <SelectItem value="All">All over / not sure</SelectItem>
             </SelectContent>
           </Select>
           {error && <p className="text-sm text-red-400">{error}</p>}
