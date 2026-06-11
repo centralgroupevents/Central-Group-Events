@@ -4094,7 +4094,7 @@ export default function Admin() {
     genre:           ["genre", "type", "music type", "category"],
     instagramHandle: ["instagram", "ig", "handle", "insta", "instagramhandle"],
     ticketLink:      ["ticket link", "ticketlink", "ticket", "tickets", "url", "link"],
-    imageUrl:        ["image", "image url", "imageurl", "image_url", "media", "media url", "mediaurl", "thumbnail", "thumb", "pic", "picture", "photo", "flyer", "img"],
+    imageUrl:        ["image", "image url", "imageurl", "image_url", "media", "media url", "mediaurl", "thumbnail", "thumb", "pic", "picture", "photo", "flyer", "img", "display", "display image", "display_image", "displayimage", "display url", "displayurl"],
   };
 
   function autoMatchHeader(headers: string[], cgeKey: string): string {
