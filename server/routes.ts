@@ -79,38 +79,23 @@ async function rehostInstagramImage(srcUrl: string | null | undefined): Promise<
   const isIgCdn = /(cdninstagram\.com|fbcdn\.net)/i.test(url);
   if (!isIgCdn) return url;
   try {
-    // IG CDN blocks bare server-side fetches (no User-Agent / Accept). Send
-    // browser-like headers so the CDN treats us as a browser. Without these,
-    // every IG URL returns 403 even when the same URL works in your browser.
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.instagram.com/",
-      },
+    // Hand the URL directly to Cloudinary — Cloudinary's own servers fetch the
+    // image, not ours. IG blocks our Replit IP with 403 even with browser
+    // headers, but Cloudinary's infrastructure usually gets through. If
+    // Cloudinary also fails, we get an error and fall through to "".
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
     });
-    if (!response.ok) {
-      console.warn(`[rehost] fetch ${response.status} for ${url.slice(0, 100)}…`);
+    const result = await cloudinary.uploader.upload(url, {
+      folder: "cge/events",
+      resource_type: "image",
+    });
+    if (!result?.secure_url) {
+      console.warn("[rehost] Cloudinary returned no secure_url for", url.slice(0, 100));
       return "";
     }
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.startsWith("image/")) {
-      console.warn(`[rehost] non-image content-type "${contentType}" for ${url.slice(0, 100)}…`);
-      return "";
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { folder: "cge/events", resource_type: "image" },
-        (error, result) => {
-          if (error || !result) reject(error ?? new Error("Cloudinary upload failed"));
-          else resolve(result as { secure_url: string });
-        }
-      );
-      stream.end(buffer);
-    });
     console.log(`[rehost] OK ${url.slice(0, 80)}… → ${result.secure_url}`);
     return result.secure_url;
   } catch (err) {
