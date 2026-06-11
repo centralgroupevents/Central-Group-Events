@@ -984,6 +984,30 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Apply one image URL to many events at once. URL goes through
+  // rehostInstagramImage so IG CDN URLs get re-hosted on Cloudinary first.
+  app.post("/api/events/bulk-image", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids, imageUrl } = req.body as { ids?: unknown[]; imageUrl?: string };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      if (typeof imageUrl !== "string") return res.status(400).json({ message: "imageUrl required" });
+      const numIds = ids.map((id) => Number(id)).filter((id) => !isNaN(id) && Number.isInteger(id));
+      if (numIds.length === 0) return res.status(400).json({ message: "No valid event IDs" });
+      const finalImageUrl = imageUrl ? await rehostInstagramImage(imageUrl) : "";
+      let updated = 0;
+      for (const id of numIds) {
+        try {
+          await storage.updateEvent(id, { imageUrl: finalImageUrl } as any);
+          updated++;
+        } catch { /* skip failed */ }
+      }
+      res.json({ updated, imageUrl: finalImageUrl });
+    } catch (err) {
+      console.error("[events-bulk-image] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.delete("/api/events/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string, 10);

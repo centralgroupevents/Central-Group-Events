@@ -237,8 +237,8 @@ export default function NbaFinalsWatchParties() {
                             return (
                               <div key={s.id} className="bg-secondary/30 border border-white/10 rounded-2xl p-5" data-testid={`nba-watch-party-${s.id}`}>
                                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
-                                  <h4 className="text-lg font-black text-white">{s.eventName || s.venueName}</h4>
-                                  {s.eventName && <p className="text-sm text-white/60">at {s.venueName}</p>}
+                                  <h4 className="text-lg font-black text-white">{s.venueName}</h4>
+                                  {s.eventName && <p className="text-sm text-white/60">{s.eventName}</p>}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70 mb-3">
                                   <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {s.town}, NJ</span>

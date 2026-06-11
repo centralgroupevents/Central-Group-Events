@@ -3710,6 +3710,67 @@ export default function Admin() {
   const [inlineSaved, setInlineSaved] = useState<{ id: number; field: string } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
+  // Image upload modal state — works for both single-event (imageEventId set) and bulk (imageEventId = "bulk").
+  const [imageTarget, setImageTarget] = useState<number | "bulk" | null>(null);
+  const [imageMode, setImageMode] = useState<"upload" | "url">("upload");
+  const [imageUrlInput, setImageUrlInput] = useState("");
+  const [imageBusy, setImageBusy] = useState(false);
+  const imageFileRef = useRef<HTMLInputElement>(null);
+
+  async function uploadImageFile(file: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: form, credentials: "include" });
+    if (!res.ok) throw new Error("Upload failed");
+    const body = await res.json();
+    return body.url as string;
+  }
+
+  async function applyImageToEvents(imageUrl: string, target: number | "bulk") {
+    setImageBusy(true);
+    try {
+      if (target === "bulk") {
+        const ids = Array.from(selectedEventIds);
+        const res = await apiRequest("POST", "/api/events/bulk-image", { ids, imageUrl });
+        const body = await res.json();
+        toast({ title: `Updated ${body.updated} event${body.updated !== 1 ? "s" : ""}` });
+      } else {
+        await apiRequest("PUT", `/api/events/${target}`, { imageUrl });
+        toast({ title: "Image updated" });
+      }
+      await qc.invalidateQueries({ queryKey: ["/api/events"] });
+      setImageTarget(null);
+      setImageUrlInput("");
+      setImageMode("upload");
+    } catch (err) {
+      toast({ title: "Failed to update image", description: String((err as Error).message || err), variant: "destructive" });
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
+  async function handleImageSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (imageTarget === null) return;
+    if (imageMode === "url") {
+      const url = imageUrlInput.trim();
+      if (!url) { toast({ title: "Paste an image URL first", variant: "destructive" }); return; }
+      await applyImageToEvents(url, imageTarget);
+    } else {
+      const file = imageFileRef.current?.files?.[0];
+      if (!file) { toast({ title: "Choose a file first", variant: "destructive" }); return; }
+      setImageBusy(true);
+      try {
+        const url = await uploadImageFile(file);
+        await applyImageToEvents(url, imageTarget);
+      } catch (err) {
+        toast({ title: "Upload failed", description: String((err as Error).message || err), variant: "destructive" });
+      } finally {
+        setImageBusy(false);
+      }
+    }
+  }
+
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -4234,19 +4295,28 @@ export default function Admin() {
               </div>
             </div>
 
-            {/* Batch delete bar */}
+            {/* Batch action bar */}
             {selectedEventIds.size > 0 && (
-              <div className="flex items-center gap-3 mb-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5">
-                <span className="text-sm text-red-300 font-medium">{selectedEventIds.size} event{selectedEventIds.size !== 1 ? "s" : ""} selected</span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => setShowDeleteConfirm(true)}
-                  className="ml-auto"
-                  data-testid="button-delete-selected-events"
-                >
-                  <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Selected ({selectedEventIds.size})
-                </Button>
+              <div className="flex items-center gap-3 mb-3 bg-primary/10 border border-primary/30 rounded-xl px-4 py-2.5 flex-wrap">
+                <span className="text-sm text-white font-medium">{selectedEventIds.size} event{selectedEventIds.size !== 1 ? "s" : ""} selected</span>
+                <div className="flex gap-2 ml-auto flex-wrap">
+                  <Button
+                    size="sm"
+                    onClick={() => { setImageMode("upload"); setImageUrlInput(""); setImageTarget("bulk"); }}
+                    className="bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30"
+                    data-testid="button-apply-image-selected-events"
+                  >
+                    <Upload className="w-3.5 h-3.5 mr-1.5" /> Apply Image
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    data-testid="button-delete-selected-events"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete Selected ({selectedEventIds.size})
+                  </Button>
+                </div>
                 <button
                   onClick={() => setSelectedEventIds(new Set())}
                   className="text-white/40 hover:text-white/70 transition-colors text-xs"
@@ -4408,6 +4478,18 @@ export default function Admin() {
                                 data-testid={`button-feature-event-${event.id}`}
                               >
                                 <Star className={`w-3.5 h-3.5 ${event.isFeatured ? "fill-current" : ""}`} />
+                              </button>
+                              <button
+                                onClick={() => { setImageMode(event.imageUrl ? "url" : "upload"); setImageUrlInput(event.imageUrl || ""); setImageTarget(event.id); }}
+                                className={`inline-flex items-center justify-center w-7 h-7 rounded transition-colors mr-1 ${event.imageUrl ? "text-primary/70 hover:text-primary hover:bg-primary/10" : "text-white/30 hover:text-white/70 hover:bg-white/10"}`}
+                                title={event.imageUrl ? "Replace image" : "Add image"}
+                                data-testid={`button-image-event-${event.id}`}
+                              >
+                                {event.imageUrl ? (
+                                  <img src={event.imageUrl} alt="" className="w-5 h-5 rounded object-cover" />
+                                ) : (
+                                  <Upload className="w-3.5 h-3.5" />
+                                )}
                               </button>
                               <button onClick={() => openEdit(event)} className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-white/10 text-white/50 hover:text-white transition-colors mr-1" title="Edit" data-testid={`button-edit-event-${event.id}`}>
                                 <Pencil className="w-3.5 h-3.5" />
@@ -4813,6 +4895,46 @@ export default function Admin() {
                     </Button>
                   </div>
                 )}
+              </DialogContent>
+            </Dialog>
+
+            {/* Image upload / replace modal — single event OR bulk (when imageTarget === "bulk") */}
+            <Dialog open={imageTarget !== null} onOpenChange={(o) => { if (!o) { setImageTarget(null); setImageUrlInput(""); } }}>
+              <DialogContent className="bg-secondary border-white/10 text-white max-w-md">
+                <DialogHeader>
+                  <DialogTitle>
+                    {imageTarget === "bulk"
+                      ? `Apply image to ${selectedEventIds.size} event${selectedEventIds.size !== 1 ? "s" : ""}`
+                      : "Add / replace event image"}
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleImageSubmit} className="space-y-4 py-2">
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setImageMode("upload")} className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${imageMode === "upload" ? "bg-primary border-primary text-white" : "border-white/15 text-white/60"}`}>Upload file</button>
+                    <button type="button" onClick={() => setImageMode("url")} className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${imageMode === "url" ? "bg-primary border-primary text-white" : "border-white/15 text-white/60"}`}>Paste URL</button>
+                  </div>
+                  {imageMode === "upload" ? (
+                    <div className="border-2 border-dashed border-white/15 rounded-xl p-6 text-center">
+                      <input ref={imageFileRef} type="file" accept="image/*" className="hidden" data-testid="input-image-file" onChange={() => setImageUrlInput("")} />
+                      <Button type="button" variant="outline" onClick={() => imageFileRef.current?.click()} className="border-white/20 text-white/80">
+                        <Upload className="w-3.5 h-3.5 mr-1.5" /> Choose image
+                      </Button>
+                      <p className="text-[11px] text-white/40 mt-2">JPG, PNG, WebP. Uploaded to Cloudinary.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Label className="text-xs text-white/70">Image URL (Instagram CDN, any image link)</Label>
+                      <Input value={imageUrlInput} onChange={(e) => setImageUrlInput(e.target.value)} placeholder="https://scontent...cdninstagram.com/..." className="bg-black/40 border-white/10 h-10" data-testid="input-image-url" />
+                      <p className="text-[11px] text-white/40">Instagram CDN URLs get auto-re-hosted on Cloudinary so they don't expire.</p>
+                    </div>
+                  )}
+                  <DialogFooter className="gap-2">
+                    <Button type="button" variant="outline" onClick={() => setImageTarget(null)} className="border-white/20 text-white/70">Cancel</Button>
+                    <Button type="submit" disabled={imageBusy} className="bg-primary hover:bg-primary/90" data-testid="button-submit-image">
+                      {imageBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : (imageTarget === "bulk" ? `Apply to ${selectedEventIds.size}` : "Save image")}
+                    </Button>
+                  </DialogFooter>
+                </form>
               </DialogContent>
             </Dialog>
 
