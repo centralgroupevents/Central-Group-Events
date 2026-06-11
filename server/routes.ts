@@ -64,6 +64,40 @@ function normalizeUrl(input: string | null | undefined): string | null {
 // Accepts YYYY-MM-DD, MM/DD/YYYY, MM/DD/YY, "Jun 11 2026", "Jun 11, 2026",
 // and date ranges (any "–", "-", "to", "through" separator) by taking the
 // start date. Returns "YYYY-MM-DD" or null if it can't make sense of it.
+// Re-host Instagram CDN images on our Cloudinary account so they don't expire
+// after a few days (the IG CDN signs URLs with short-lived tokens). Pass-through
+// anything that isn't an IG/FB CDN URL, and fall back to the original on any
+// error so a single bad image never fails the whole import.
+async function rehostInstagramImage(srcUrl: string | null | undefined): Promise<string> {
+  if (!srcUrl) return "";
+  const url = String(srcUrl).trim();
+  if (!url) return "";
+  // Only re-host Instagram/Facebook CDN URLs. Cloudinary URLs, generic CDNs,
+  // and anything already permanent passes through untouched.
+  const isIgCdn = /(cdninstagram\.com|fbcdn\.net)/i.test(url);
+  if (!isIgCdn) return url;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return url;
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: "cge/events", resource_type: "image" },
+        (error, result) => {
+          if (error || !result) reject(error ?? new Error("Cloudinary upload failed"));
+          else resolve(result as { secure_url: string });
+        }
+      );
+      stream.end(buffer);
+    });
+    return result.secure_url;
+  } catch (err) {
+    console.warn("[rehost] failed for", url, err);
+    return url;
+  }
+}
+
 function parseFlexibleWcDate(input: string): string | null {
   if (!input) return null;
   let raw = String(input).trim();
@@ -908,6 +942,7 @@ ${blogList || "_No recent posts yet._"}
     try {
       const { insertEventSchema } = await import("@shared/schema");
       const input = insertEventSchema.parse(req.body);
+      if (input.imageUrl) input.imageUrl = await rehostInstagramImage(input.imageUrl);
       const event = await storage.createEvent(input);
       res.status(201).json(event);
     } catch (err) {
@@ -922,7 +957,9 @@ ${blogList || "_No recent posts yet._"}
     try {
       const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid event id" });
-      const event = await storage.updateEvent(id, req.body);
+      const body = { ...req.body };
+      if (body.imageUrl) body.imageUrl = await rehostInstagramImage(body.imageUrl);
+      const event = await storage.updateEvent(id, body);
       res.status(200).json(event);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
@@ -985,6 +1022,11 @@ ${blogList || "_No recent posts yet._"}
           continue;
         }
         try {
+          // Accept several common column names for the image URL — Apify dumps
+          // usually have one of these. Re-host IG CDN URLs onto Cloudinary so
+          // they don't expire after a few days.
+          const rawImage = (row.imageUrl || row.image_url || row.image || row.media || row.mediaUrl || row.thumbnail || "").trim();
+          const finalImageUrl = rawImage ? await rehostInstagramImage(rawImage) : "";
           const parsed = insertEventSchema.parse({
             title,
             date,
@@ -998,7 +1040,7 @@ ${blogList || "_No recent posts yet._"}
             instagramHandle: row.instagramHandle || null,
             ticketLink: row.ticketLink || null,
             description: "",
-            imageUrl: "",
+            imageUrl: finalImageUrl,
           });
           validRows.push(parsed);
         } catch (err) {

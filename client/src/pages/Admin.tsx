@@ -4155,7 +4155,7 @@ export default function Admin() {
   }
 
   function downloadCsvTemplate() {
-    const headers = "name,date,time,venue,city,region,organizer,influencer,genre,instagramHandle,ticketLink";
+    const headers = "name,date,time,venue,city,region,organizer,influencer,genre,instagramHandle,ticketLink,imageUrl";
     const blob = new Blob([headers + "\n"], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

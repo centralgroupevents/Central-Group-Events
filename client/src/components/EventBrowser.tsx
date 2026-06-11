@@ -214,6 +214,21 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
                     data-testid={`row-event-${event.id}`}
                     className="flex items-center justify-between gap-4 px-6 py-5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
                   >
+                    {/* Thumbnail (Instagram post preview, re-hosted on Cloudinary at import time). */}
+                    {event.imageUrl ? (
+                      <img
+                        src={event.imageUrl}
+                        alt=""
+                        loading="lazy"
+                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover shrink-0 border border-white/10 bg-black/30"
+                        data-testid={`img-event-thumb-${event.id}`}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl shrink-0 bg-white/[0.04] border border-white/10 flex items-center justify-center text-white/30 text-xs" aria-hidden="true">
+                        <MapPin className="w-5 h-5" />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-base leading-snug truncate" data-testid={`text-event-title-${event.id}`}>{event.title}</p>
