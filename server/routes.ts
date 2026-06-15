@@ -159,6 +159,37 @@ const publicReadLimiter = rateLimit({
   message: { error: "Too many requests, please try again in a minute." },
 });
 
+// IndexNow — instant URL submission to Bing/Yandex/Seznam/Naver. Free, no
+// auth, no API setup. Key is published at /<KEY>.txt so search engines can
+// verify ownership. Override with INDEXNOW_KEY env var to rotate.
+const INDEXNOW_KEY = process.env.INDEXNOW_KEY || "7c2a9e5f3b8d1c6e4a2f9b8d5c3e1a7f";
+
+async function pingIndexNow(urls: string[]): Promise<{ ok: boolean; status?: number }> {
+  if (urls.length === 0) return { ok: true };
+  try {
+    const res = await fetch("https://api.indexnow.org/indexnow", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        host: "centralgroupevents.com",
+        key: INDEXNOW_KEY,
+        keyLocation: `https://centralgroupevents.com/${INDEXNOW_KEY}.txt`,
+        urlList: urls,
+      }),
+    });
+    // 200 or 202 both indicate success per the IndexNow spec.
+    if (res.ok || res.status === 202) {
+      console.log(`[indexnow] ${res.status} — pinged ${urls.length} URL(s): ${urls.join(", ")}`);
+      return { ok: true, status: res.status };
+    }
+    console.warn(`[indexnow] ${res.status} for ${urls.join(", ")}`);
+    return { ok: false, status: res.status };
+  } catch (err) {
+    console.warn("[indexnow] failed:", err instanceof Error ? err.message : err);
+    return { ok: false };
+  }
+}
+
 const bookingValidators = [
   body("email").isEmail().withMessage("Invalid email address").normalizeEmail(),
   body("phone").optional({ checkFalsy: true }).matches(/^[\d\s\-\+\(\)]+$/).withMessage("Invalid phone number"),
@@ -318,6 +349,14 @@ export async function registerRoutes(
   app.get("/google5fb54af821f6cd6d.html", (_req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.status(200).send("google-site-verification: google5fb54af821f6cd6d.html");
+  });
+
+  // IndexNow key file. The filename IS the key — that's the IndexNow ownership
+  // convention. Bing/Yandex/etc. fetch this to verify we own the host before
+  // accepting our URL submissions.
+  app.get(`/${INDEXNOW_KEY}.txt`, (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.status(200).send(INDEXNOW_KEY);
   });
 
   // ── /llms.txt — concise overview for AI crawlers (Anthropic-proposed convention)
@@ -1150,6 +1189,11 @@ ${blogList || "_No recent posts yet._"}
       const parsed = insertPageSchema.partial().parse(req.body);
       const updated = await storage.upsertPage(req.params.slug as string, parsed);
       res.json(updated);
+      // Auto-ping IndexNow when a published page is saved. Fire-and-forget so
+      // the admin save doesn't wait on Bing's response.
+      if (updated.published && updated.slug !== "things-to-do-in-nj") {
+        pingIndexNow([`https://centralgroupevents.com/${updated.slug}`]).catch(() => {});
+      }
     } catch (err) {
       res.status(400).json({ message: err instanceof Error ? err.message : "Invalid request" });
     }
@@ -1189,8 +1233,28 @@ ${blogList || "_No recent posts yet._"}
       const updated = await storage.renamePageSlug(req.params.slug as string, cleaned);
       if (!updated) return res.status(409).json({ message: "Rename conflict (target slug in use or source not found)" });
       res.json(updated);
+      // Ping the NEW URL — old URL is now a 301 so search engines will pick it
+      // up via crawl, but we want the new URL indexed fast.
+      if (updated.published) {
+        pingIndexNow([`https://centralgroupevents.com/${updated.slug}`]).catch(() => {});
+      }
     } catch (err) {
       console.error("[pages-rename] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Manual IndexNow ping for a specific page (admin button). Useful after
+  // major content updates when you want to nudge Bing/Yandex to re-crawl.
+  app.post("/api/admin/pages/:slug/ping-indexnow", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const page = await storage.getPageBySlug(req.params.slug as string);
+      if (!page) return res.status(404).json({ message: "Page not found" });
+      if (!page.published) return res.status(400).json({ message: "Page must be published before pinging" });
+      const result = await pingIndexNow([`https://centralgroupevents.com/${page.slug}`]);
+      res.json(result);
+    } catch (err) {
+      console.error("[indexnow-manual] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });

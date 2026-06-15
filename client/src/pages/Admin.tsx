@@ -4132,6 +4132,24 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
             </Button>
           </div>
 
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-3">
+            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Search engines</h3>
+            <p className="text-[11px] text-white/40">Auto-pings IndexNow (Bing + Yandex) every time you save a published page. Click below to re-ping on demand after a major content update.</p>
+            <Button variant="outline" className="w-full border-white/15 text-white/70" disabled={!published} onClick={async () => {
+              try {
+                const res = await apiRequest("POST", `/api/admin/pages/${slug}/ping-indexnow`);
+                const body = await res.json();
+                if (!res.ok) throw new Error(body.message || "Ping failed");
+                toast({ title: body.ok ? "Pinged Bing + Yandex" : `Ping returned ${body.status || "error"}`, description: body.ok ? "URL submitted to IndexNow — should crawl within minutes." : "Check the Replit console for details." });
+              } catch (err) {
+                toast({ title: "Ping failed", description: String((err as Error).message || err), variant: "destructive" });
+              }
+            }} data-testid="button-ping-indexnow">
+              {published ? "Re-ping search engines now" : "Publish to enable pinging"}
+            </Button>
+            <p className="text-[10px] text-white/40">Google deprecated their auto-ping in 2023 — for Google, use GSC's URL Inspection → Request indexing.</p>
+          </div>
+
           <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4">
             <Button variant="outline" className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10" onClick={async () => {
               if (!window.confirm(`Delete page "${slug}"? This cannot be undone.`)) return;
