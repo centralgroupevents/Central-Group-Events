@@ -1172,6 +1172,222 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // ── Landing-page submissions (per-page user-submitted events) ───────────
+  // Public: list approved submissions for a page (used by the embedded list)
+  app.get("/api/landing-pages/:slug/submissions/approved", async (req: Request, res: Response) => {
+    try {
+      const page = await storage.getPageBySlug(req.params.slug as string);
+      if (!page || !page.published) return res.status(404).json({ message: "Not found" });
+      const rows = await storage.getApprovedLandingPageSubmissions(page.id);
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Public: submit to a page (rate-limited; auto-subscribes submitter)
+  app.post("/api/landing-pages/:slug/submissions", formLimiter, async (req: Request, res: Response) => {
+    try {
+      const page = await storage.getPageBySlug(req.params.slug as string);
+      if (!page || !page.published || !page.submissionsEnabled) {
+        return res.status(404).json({ message: "Submissions are not enabled for this page" });
+      }
+      const { insertLandingPageSubmissionSchema } = await import("@shared/schema");
+      const parsed = insertLandingPageSubmissionSchema.parse({ ...req.body, pageId: page.id });
+      const cleaned = { ...parsed, learnMoreUrl: normalizeUrl(parsed.learnMoreUrl) };
+      const created = await storage.createLandingPageSubmission(cleaned);
+
+      // Auto-subscribe (non-blocking)
+      storage.upsertSubscriber(
+        parsed.submitterEmail.toLowerCase().trim(),
+        `page:${page.slug}`,
+      ).catch(() => {});
+
+      // Submitter auto-reply
+      transporter.sendMail({
+        from: `"CGE Submissions" <${process.env.GMAIL_USER}>`,
+        to: parsed.submitterEmail,
+        subject: `Submission received — ${parsed.venueName}`,
+        html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px">
+          <h2 style="color:#9333ea">Thanks — we got your submission.</h2>
+          <p>We're reviewing your event at <strong>${escapeHtml(parsed.venueName)}</strong> in <strong>${escapeHtml(parsed.town)}</strong> for the <strong>${escapeHtml(page.title)}</strong> page.</p>
+          <p>Once approved (usually within 24-48 hours), it goes live at <a href="https://centralgroupevents.com/${page.slug}">centralgroupevents.com/${page.slug}</a>.</p>
+          <p style="color:#777;font-size:12px;margin-top:32px">— Central Group Events</p>
+        </div>`,
+      }).catch(() => {});
+
+      // Admin alert
+      transporter.sendMail({
+        from: `"CGE Website" <${process.env.GMAIL_USER}>`,
+        to: "centralgroupevents@gmail.com",
+        subject: `📥 New submission on "${page.title}": ${parsed.venueName}, ${parsed.town}`,
+        html: `<div style="font-family:Arial,Helvetica,sans-serif">
+          <h2>New submission</h2>
+          <p>Page: <a href="https://centralgroupevents.com/${page.slug}">${escapeHtml(page.title)}</a></p>
+          <table style="border-collapse:collapse;font-size:14px">
+            <tr><td style="padding:4px 12px;color:#555">Venue</td><td>${escapeHtml(parsed.venueName)}</td></tr>
+            <tr><td style="padding:4px 12px;color:#555">Town</td><td>${escapeHtml(parsed.town)}</td></tr>
+            <tr><td style="padding:4px 12px;color:#555">Date</td><td>${escapeHtml(parsed.eventDate)}</td></tr>
+            <tr><td style="padding:4px 12px;color:#555">Event name</td><td>${escapeHtml(parsed.eventName || "(none)")}</td></tr>
+            <tr><td style="padding:4px 12px;color:#555">Submitter</td><td>${escapeHtml(parsed.submitterEmail)}</td></tr>
+          </table>
+          <p><a href="https://centralgroupevents.com/admin">Review in admin →</a></p>
+        </div>`,
+      }).catch(() => {});
+
+      res.status(201).json({ id: created.id, status: created.status });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message || "Invalid submission" });
+      }
+      console.error("[landing-submit] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: list submissions for a page
+  app.get("/api/admin/pages/:slug/submissions", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const page = await storage.getPageBySlug(req.params.slug as string);
+      if (!page) return res.status(404).json({ message: "Not found" });
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const rows = await storage.listLandingPageSubmissions(page.id, { status });
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: status update (approve / reject / reopen) on one submission
+  app.patch("/api/admin/landing-page-submissions/:id/status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const { status, adminNotes } = req.body as { status?: string; adminNotes?: string };
+      if (!status || !["pending", "approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "status must be pending/approved/rejected" });
+      }
+      const updated = await storage.updateLandingPageSubmissionStatus(id, status, adminNotes);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+
+      // Approval email
+      if (status === "approved" && updated.submitterEmail) {
+        const page = await storage.getPageById(updated.pageId);
+        if (page) {
+          transporter.sendMail({
+            from: `"CGE Submissions" <${process.env.GMAIL_USER}>`,
+            to: updated.submitterEmail,
+            subject: `🟢 Your submission is live — ${updated.venueName}`,
+            html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px">
+              <h2 style="color:#9333ea">You're live!</h2>
+              <p>Your event at <strong>${escapeHtml(updated.venueName)}</strong> in <strong>${escapeHtml(updated.town)}</strong> has been approved on <strong>${escapeHtml(page.title)}</strong>.</p>
+              <p>It's now visible at: <a href="https://centralgroupevents.com/${page.slug}">centralgroupevents.com/${page.slug}</a></p>
+              <p style="color:#777;font-size:12px;margin-top:32px">— Central Group Events</p>
+            </div>`,
+          }).catch(() => {});
+        }
+      }
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: edit any field on one submission
+  app.patch("/api/admin/landing-page-submissions/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ message: "Invalid id" });
+      const body = req.body as Record<string, any>;
+      const allowed: Record<string, unknown> = {};
+      const STRING_FIELDS = ["venueName", "town", "eventDate", "eventName", "instagramHandle", "learnMoreUrl", "region", "adminNotes"];
+      for (const k of STRING_FIELDS) {
+        if (k in body) {
+          const v = body[k];
+          allowed[k] = v == null || v === "" ? null : String(v).slice(0, 500);
+        }
+      }
+      if ("venueName" in allowed && !allowed.venueName) return res.status(400).json({ message: "venueName cannot be empty" });
+      if ("town" in allowed && !allowed.town) return res.status(400).json({ message: "town cannot be empty" });
+      if ("learnMoreUrl" in allowed) allowed.learnMoreUrl = normalizeUrl(allowed.learnMoreUrl as string | null);
+      const updated = await storage.updateLandingPageSubmissionFields(id, allowed as any);
+      if (!updated) return res.status(404).json({ message: "Not found" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[landing-edit] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: bulk status update (multi-select approve/reject/reopen)
+  app.post("/api/admin/landing-page-submissions/bulk-status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids, status } = req.body as { ids?: unknown; status?: string };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      if (!status || !["pending", "approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "status must be pending/approved/rejected" });
+      }
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const updated = await storage.bulkUpdateLandingPageSubmissionStatus(numIds, status);
+      res.json({ updated });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: bulk delete (multi-select)
+  app.post("/api/admin/landing-page-submissions/bulk-delete", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body as { ids?: unknown };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const deleted = await storage.bulkDeleteLandingPageSubmissions(numIds);
+      res.json({ deleted });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: bulk-import from CSV / XLSX (auto-approved). Free-text dates accepted.
+  app.post("/api/admin/pages/:slug/submissions/bulk-import", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const page = await storage.getPageBySlug(req.params.slug as string);
+      if (!page) return res.status(404).json({ message: "Page not found" });
+      const { adminBulkLandingPageRowSchema } = await import("@shared/schema");
+      const raw = req.body as unknown[];
+      if (!Array.isArray(raw)) return res.status(400).json({ message: "Expected an array of rows" });
+      const invalid: { rowIndex: number; reason: string }[] = [];
+      let imported = 0;
+      for (let i = 0; i < raw.length; i++) {
+        try {
+          const parsed = adminBulkLandingPageRowSchema.parse(raw[i]);
+          const normalizedDate = parseFlexibleWcDate(parsed.eventDate) || parsed.eventDate;
+          await storage.createLandingPageSubmissionRaw({
+            pageId: page.id,
+            eventDate: normalizedDate,
+            venueName: parsed.venueName,
+            town: parsed.town,
+            eventName: parsed.eventName || null,
+            instagramHandle: parsed.instagramHandle || null,
+            learnMoreUrl: normalizeUrl(parsed.learnMoreUrl ?? null),
+            submitterEmail: "centralgroupevents@gmail.com",
+            status: "approved",
+            source: "admin-import",
+            reviewedAt: new Date(),
+          });
+          imported++;
+        } catch (err) {
+          const reason = err instanceof z.ZodError ? err.errors[0]?.message || "Validation failed" : "Unknown error";
+          invalid.push({ rowIndex: i, reason });
+        }
+      }
+      res.json({ imported, invalid });
+    } catch (err) {
+      console.error("[landing-bulk] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── Admin auth routes ────────────────────────────────────────────────
 
   app.post("/api/admin/login", async (req: Request, res: Response) => {

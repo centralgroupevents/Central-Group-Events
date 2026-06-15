@@ -3852,6 +3852,9 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
     },
   });
 
+  // Tab switch inside the editor — Content (body + settings) or Submissions
+  const [view, setView] = useState<"content" | "submissions">("content");
+
   const [title, setTitle] = useState("");
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
@@ -3926,12 +3929,39 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
               <a href={`/${slug}`} target="_blank" rel="noopener noreferrer">Preview ↗</a>
             </Button>
           )}
-          <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={save} disabled={saving} data-testid="button-save-page">
-            {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save"}
-          </Button>
+          {view === "content" && (
+            <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={save} disabled={saving} data-testid="button-save-page">
+              {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save"}
+            </Button>
+          )}
         </div>
       </div>
 
+      {/* Tab switch — Content (body + settings) vs Submissions queue */}
+      <div className="flex gap-2 border-b border-white/10">
+        <button
+          onClick={() => setView("content")}
+          className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${view === "content" ? "border-primary text-white" : "border-transparent text-white/50 hover:text-white/80"}`}
+          data-testid="tab-page-content"
+        >
+          Content
+        </button>
+        {submissionsEnabled && (
+          <button
+            onClick={() => setView("submissions")}
+            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${view === "submissions" ? "border-primary text-white" : "border-transparent text-white/50 hover:text-white/80"}`}
+            data-testid="tab-page-submissions"
+          >
+            Submissions
+          </button>
+        )}
+      </div>
+
+      {view === "submissions" && page && (
+        <PageSubmissionsView pageId={page.id} slug={slug} />
+      )}
+
+      {view === "content" && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left/main: body */}
         <div className="lg:col-span-2 space-y-5">
@@ -4000,16 +4030,17 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
           </div>
 
           <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-4">
-            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Coming next PR</h3>
-            <label className="flex items-center justify-between gap-3 text-sm cursor-not-allowed opacity-50">
-              <span className="text-white/80">Email gate (require signup to view)</span>
-              <input type="checkbox" checked={gateEnabled} onChange={(e) => setGateEnabled(e.target.checked)} disabled className="h-4 w-4" />
-            </label>
-            <label className="flex items-center justify-between gap-3 text-sm cursor-not-allowed opacity-50">
+            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Engagement</h3>
+            <label className="flex items-center justify-between gap-3 text-sm cursor-pointer">
               <span className="text-white/80">Enable public submissions</span>
-              <input type="checkbox" checked={submissionsEnabled} onChange={(e) => setSubmissionsEnabled(e.target.checked)} disabled className="h-4 w-4" />
+              <input type="checkbox" checked={submissionsEnabled} onChange={(e) => setSubmissionsEnabled(e.target.checked)} className="h-4 w-4" data-testid="toggle-page-submissions" />
             </label>
-            <p className="text-[11px] text-white/40">These toggles save now but don't render yet — the gate UI and submissions sub-tab ship in PR B.</p>
+            <p className="text-[11px] text-white/40">Adds a public form at the bottom of the page so visitors can submit venues. Submissions appear in a new "Submissions" tab above for review.</p>
+            <label className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+              <span className="text-white/80">Email gate (cap list at 5 until unlock)</span>
+              <input type="checkbox" checked={gateEnabled} onChange={(e) => setGateEnabled(e.target.checked)} className="h-4 w-4" data-testid="toggle-page-gate" />
+            </label>
+            <p className="text-[11px] text-white/40">When on: anonymous visitors see the first 5 approved listings + an email-unlock banner. After they submit their email, the full list reveals. Admins always see everything.</p>
           </div>
 
           <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4">
@@ -4029,6 +4060,285 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
           </div>
         </aside>
       </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/*  PAGE SUBMISSIONS SUB-VIEW (review queue)                  */
+/* ─────────────────────────────────────────────────────────── */
+interface PageSubmissionRow {
+  id: number;
+  pageId: number;
+  submitterEmail: string;
+  submitterName: string | null;
+  submitterRegion: string | null;
+  eventDate: string;
+  venueName: string;
+  town: string;
+  eventName: string | null;
+  instagramHandle: string | null;
+  learnMoreUrl: string | null;
+  region: string | null;
+  status: string;
+  adminNotes: string | null;
+  createdAt: string | null;
+}
+
+function PageSubmissionsView({ pageId, slug }: { pageId: number; slug: string }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [statusFilter, setStatusFilter] = useState<string>("pending");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ venueName: "", town: "", eventDate: "", eventName: "", instagramHandle: "", learnMoreUrl: "", region: "" });
+  const [editBusy, setEditBusy] = useState(false);
+
+  const { data: submissions = [], isLoading } = useQuery<PageSubmissionRow[]>({
+    queryKey: ["/api/admin/pages", slug, "submissions", statusFilter],
+    queryFn: async () => {
+      const url = statusFilter === "all"
+        ? `/api/admin/pages/${slug}/submissions`
+        : `/api/admin/pages/${slug}/submissions?status=${statusFilter}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/landing-page-submissions/${id}/status`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/pages", slug, "submissions"] });
+      toast({ title: "Updated" });
+    },
+    onError: () => toast({ title: "Update failed", variant: "destructive" }),
+  });
+
+  async function bulkStatus(status: string) {
+    if (selectedIds.size === 0) return;
+    try {
+      const res = await apiRequest("POST", `/api/admin/landing-page-submissions/bulk-status`, {
+        ids: Array.from(selectedIds), status,
+      });
+      const body = await res.json();
+      toast({ title: `Updated ${body.updated}` });
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ["/api/admin/pages", slug, "submissions"] });
+    } catch (err) {
+      toast({ title: "Bulk update failed", description: String((err as Error).message), variant: "destructive" });
+    }
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} submission${selectedIds.size !== 1 ? "s" : ""}? Cannot be undone.`)) return;
+    try {
+      const res = await apiRequest("POST", `/api/admin/landing-page-submissions/bulk-delete`, {
+        ids: Array.from(selectedIds),
+      });
+      const body = await res.json();
+      toast({ title: `Deleted ${body.deleted}` });
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ["/api/admin/pages", slug, "submissions"] });
+    } catch (err) {
+      toast({ title: "Bulk delete failed", description: String((err as Error).message), variant: "destructive" });
+    }
+  }
+
+  function openEdit(s: PageSubmissionRow) {
+    setEditingId(s.id);
+    setEditForm({
+      venueName: s.venueName,
+      town: s.town,
+      eventDate: s.eventDate,
+      eventName: s.eventName || "",
+      instagramHandle: s.instagramHandle || "",
+      learnMoreUrl: s.learnMoreUrl || "",
+      region: s.region || "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    setEditBusy(true);
+    try {
+      const res = await apiRequest("PATCH", `/api/admin/landing-page-submissions/${editingId}`, {
+        venueName: editForm.venueName.trim(),
+        town: editForm.town.trim(),
+        eventDate: editForm.eventDate.trim(),
+        eventName: editForm.eventName.trim() || null,
+        instagramHandle: editForm.instagramHandle.trim() || null,
+        learnMoreUrl: editForm.learnMoreUrl.trim() || null,
+        region: editForm.region.trim() || null,
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Save failed");
+      qc.invalidateQueries({ queryKey: ["/api/admin/pages", slug, "submissions"] });
+      toast({ title: "Saved" });
+      setEditingId(null);
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
+
+  return (
+    <div className="space-y-4 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+        <span className="text-sm text-muted-foreground font-medium">Filter:</span>
+        <div className="flex gap-1.5 flex-wrap">
+          {STATUS_FILTERS.map((s) => (
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${statusFilter === s ? "bg-primary border-primary text-white" : "border-white/10 text-white/40 hover:text-white/60"}`}>
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selectedIds.size > 0 && (
+        <div className="bg-primary/15 border border-primary/40 rounded-xl px-4 py-3 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-white font-medium">{selectedIds.size} selected</span>
+          <div className="flex gap-2 flex-wrap ml-auto">
+            <Button size="sm" className="bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/30" onClick={() => bulkStatus("approved")}>Approve all</Button>
+            <Button size="sm" className="bg-red-500/20 border border-red-500/40 text-red-300 hover:bg-red-500/30" onClick={() => bulkStatus("rejected")}>Reject all</Button>
+            <Button size="sm" variant="outline" className="border-red-500/30 text-red-400" onClick={bulkDelete}>Delete all</Button>
+            <button onClick={() => setSelectedIds(new Set())} className="text-xs text-white/40 hover:text-white">Clear</button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-3 border-b border-white/10 flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={submissions.length > 0 && selectedIds.size === submissions.length}
+            onChange={(e) => {
+              if (e.target.checked) setSelectedIds(new Set(submissions.map((s) => s.id)));
+              else setSelectedIds(new Set());
+            }}
+            className="h-4 w-4"
+          />
+          <span className="text-sm font-bold text-white">Submissions <span className="text-muted-foreground font-normal text-xs ml-2">({submissions.length})</span></span>
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
+        ) : submissions.length === 0 ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">No submissions match this filter.</div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {submissions.map((s) => (
+              <div key={s.id} className="px-6 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0 flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(s.id)}
+                      onChange={(e) => {
+                        const next = new Set(selectedIds);
+                        if (e.target.checked) next.add(s.id);
+                        else next.delete(s.id);
+                        setSelectedIds(next);
+                      }}
+                      className="h-4 w-4 mt-1"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                        <h3 className="font-bold text-white">{s.venueName}</h3>
+                        {s.eventName && <span className="text-sm text-white/50">— {s.eventName}</span>}
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                          s.status === "approved" ? "border-green-500/40 text-green-400 bg-green-500/10" :
+                          s.status === "rejected" ? "border-red-500/40 text-red-400 bg-red-500/10" :
+                          "border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
+                        }`}>{s.status}</span>
+                      </div>
+                      <div className="text-sm text-white/70 space-y-0.5 min-w-0">
+                        <p className="break-words">📍 {s.town}, NJ · 📅 {s.eventDate}</p>
+                        <p className="text-xs text-white/50 break-all">
+                          {s.submitterName && <>{s.submitterName} · </>}
+                          <a href={`mailto:${s.submitterEmail}`} className="text-primary hover:underline">{s.submitterEmail}</a>
+                          {s.instagramHandle && <> · @{s.instagramHandle.replace("@", "")}</>}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="sm" variant="outline" onClick={() => openEdit(s)} className="border-white/15 text-white/70">
+                      <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
+                    </Button>
+                    {s.status !== "approved" && (
+                      <Button size="sm" onClick={() => updateStatus.mutate({ id: s.id, status: "approved" })} className="bg-green-500/15 border border-green-500/30 text-green-400 hover:bg-green-500/25">Approve</Button>
+                    )}
+                    {s.status !== "rejected" && (
+                      <Button size="sm" onClick={() => updateStatus.mutate({ id: s.id, status: "rejected" })} className="bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/25">Reject</Button>
+                    )}
+                    {s.status !== "pending" && (
+                      <Button size="sm" variant="outline" onClick={() => updateStatus.mutate({ id: s.id, status: "pending" })} className="border-white/15 text-white/60">Reopen</Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Dialog open={editingId !== null} onOpenChange={(o) => { if (!o) setEditingId(null); }}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit submission</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Venue name *</Label>
+              <Input value={editForm.venueName} onChange={(e) => setEditForm({ ...editForm, venueName: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Town *</Label>
+              <Input value={editForm.town} onChange={(e) => setEditForm({ ...editForm, town: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Event date *</Label>
+              <Input value={editForm.eventDate} onChange={(e) => setEditForm({ ...editForm, eventDate: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Event name</Label>
+              <Input value={editForm.eventName} onChange={(e) => setEditForm({ ...editForm, eventName: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Instagram</Label>
+              <Input value={editForm.instagramHandle} onChange={(e) => setEditForm({ ...editForm, instagramHandle: e.target.value })} placeholder="@venue" className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Learn-more URL</Label>
+              <Input value={editForm.learnMoreUrl} onChange={(e) => setEditForm({ ...editForm, learnMoreUrl: e.target.value })} className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Region override</Label>
+              <Select value={editForm.region} onValueChange={(v) => setEditForm({ ...editForm, region: v })}>
+                <SelectTrigger className="bg-black/40 border-white/10 h-10"><SelectValue placeholder="Auto-derive from town" /></SelectTrigger>
+                <SelectContent className="bg-secondary border-white/10 text-white">
+                  <SelectItem value="">Auto-derive from town</SelectItem>
+                  <SelectItem value="North NJ">North NJ</SelectItem>
+                  <SelectItem value="Central NJ">Central NJ</SelectItem>
+                  <SelectItem value="South NJ">South NJ</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setEditingId(null)} className="border-white/20 text-white/70">Cancel</Button>
+            <Button onClick={saveEdit} disabled={editBusy} className="bg-primary hover:bg-primary/90">
+              {editBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

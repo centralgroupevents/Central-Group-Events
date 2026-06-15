@@ -11,6 +11,7 @@ import {
   funnelEvents,
   worldCupSubmissions,
   nbaFinalsSubmissions,
+  landingPageSubmissions,
   comments,
   pages,
   type InsertSubscriber,
@@ -32,6 +33,8 @@ import {
   type InsertWorldCupSubmission,
   type NbaFinalsSubmission,
   type InsertNbaFinalsSubmission,
+  type LandingPageSubmission,
+  type InsertLandingPageSubmission,
 } from "@shared/schema";
 import { eq, desc, sql, count, and, isNull, gte, lt, inArray } from "drizzle-orm";
 import slugifyLib from "slugify";
@@ -97,6 +100,7 @@ export interface IStorage {
   listPages(): Promise<Page[]>;
   listPublishedLandingPages(): Promise<Page[]>;
   deletePage(slug: string): Promise<boolean>;
+  getPageById(id: number): Promise<Page | null>;
 
   // Admin users
   createAdminUser(data: Partial<InsertAdminUser>): Promise<AdminUser>;
@@ -151,6 +155,16 @@ export interface IStorage {
   updateNbaFinalsSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<NbaFinalsSubmission | undefined>;
   updateNbaFinalsSubmissionFields(id: number, fields: Partial<NbaFinalsSubmission>): Promise<NbaFinalsSubmission | undefined>;
   getApprovedNbaFinalsSubmissions(gameNumber?: number): Promise<NbaFinalsSubmission[]>;
+
+  // Generic landing-page submissions (any admin-created page that has submissionsEnabled)
+  createLandingPageSubmission(data: InsertLandingPageSubmission): Promise<LandingPageSubmission>;
+  createLandingPageSubmissionRaw(row: any): Promise<void>;
+  listLandingPageSubmissions(pageId: number, opts?: { status?: string }): Promise<LandingPageSubmission[]>;
+  updateLandingPageSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<LandingPageSubmission | undefined>;
+  updateLandingPageSubmissionFields(id: number, fields: Partial<LandingPageSubmission>): Promise<LandingPageSubmission | undefined>;
+  getApprovedLandingPageSubmissions(pageId: number): Promise<LandingPageSubmission[]>;
+  bulkUpdateLandingPageSubmissionStatus(ids: number[], status: string): Promise<number>;
+  bulkDeleteLandingPageSubmissions(ids: number[]): Promise<number>;
 
   // Bulk operations (admin multi-select)
   bulkUpdateWorldCupSubmissionStatus(ids: number[], status: string): Promise<number>;
@@ -465,6 +479,11 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
+  async getPageById(id: number): Promise<Page | null> {
+    const rows = await db.select().from(pages).where(eq(pages.id, id)).limit(1);
+    return rows[0] || null;
+  }
+
   // ── Admin users ───────────────────────────────────────────────────────
 
   async createAdminUser(data: Partial<InsertAdminUser>): Promise<AdminUser> {
@@ -764,6 +783,70 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(nbaFinalsSubmissions)
       .where(conds)
       .orderBy(nbaFinalsSubmissions.gameDate);
+  }
+
+  // ── Landing-page submissions (generic, per-page) ───────────────────────
+  async createLandingPageSubmission(data: InsertLandingPageSubmission): Promise<LandingPageSubmission> {
+    const [created] = await db.insert(landingPageSubmissions).values(data).returning();
+    return created;
+  }
+
+  async createLandingPageSubmissionRaw(row: any): Promise<void> {
+    await db.insert(landingPageSubmissions).values(row);
+  }
+
+  async listLandingPageSubmissions(pageId: number, opts?: { status?: string }): Promise<LandingPageSubmission[]> {
+    const conds = opts?.status
+      ? and(eq(landingPageSubmissions.pageId, pageId), eq(landingPageSubmissions.status, opts.status))
+      : eq(landingPageSubmissions.pageId, pageId);
+    return await db.select().from(landingPageSubmissions)
+      .where(conds)
+      .orderBy(desc(landingPageSubmissions.createdAt));
+  }
+
+  async updateLandingPageSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<LandingPageSubmission | undefined> {
+    const patch: Partial<LandingPageSubmission> = { status, reviewedAt: new Date() };
+    if (adminNotes !== undefined) patch.adminNotes = adminNotes;
+    const [updated] = await db.update(landingPageSubmissions)
+      .set(patch)
+      .where(eq(landingPageSubmissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateLandingPageSubmissionFields(id: number, fields: Partial<LandingPageSubmission>): Promise<LandingPageSubmission | undefined> {
+    if (Object.keys(fields).length === 0) {
+      const [row] = await db.select().from(landingPageSubmissions).where(eq(landingPageSubmissions.id, id));
+      return row;
+    }
+    const [updated] = await db.update(landingPageSubmissions)
+      .set(fields)
+      .where(eq(landingPageSubmissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getApprovedLandingPageSubmissions(pageId: number): Promise<LandingPageSubmission[]> {
+    return await db.select().from(landingPageSubmissions)
+      .where(and(eq(landingPageSubmissions.pageId, pageId), eq(landingPageSubmissions.status, "approved")))
+      .orderBy(landingPageSubmissions.eventDate);
+  }
+
+  async bulkUpdateLandingPageSubmissionStatus(ids: number[], status: string): Promise<number> {
+    if (ids.length === 0) return 0;
+    const updated = await db.update(landingPageSubmissions)
+      .set({ status, reviewedAt: new Date() })
+      .where(inArray(landingPageSubmissions.id, ids))
+      .returning({ id: landingPageSubmissions.id });
+    return updated.length;
+  }
+
+  async bulkDeleteLandingPageSubmissions(ids: number[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const deleted = await db.delete(landingPageSubmissions)
+      .where(inArray(landingPageSubmissions.id, ids))
+      .returning({ id: landingPageSubmissions.id });
+    return deleted.length;
   }
 
   // ── Bulk admin operations ─────────────────────────────────────────────

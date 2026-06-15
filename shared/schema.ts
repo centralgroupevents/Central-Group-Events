@@ -191,6 +191,29 @@ export const nbaFinalsSubmissions = pgTable("nba_finals_submissions", {
   reviewedAt: timestamp("reviewed_at"),
 });
 
+// Generic submissions table for admin-created landing pages. Keyed to the
+// page by FK; each page that has `submissionsEnabled` collects rows here.
+export const landingPageSubmissions = pgTable("landing_page_submissions", {
+  id: serial("id").primaryKey(),
+  pageId: integer("page_id").references(() => pages.id, { onDelete: "cascade" }).notNull(),
+  submitterEmail: text("submitter_email").notNull(),
+  submitterName: text("submitter_name"),
+  submitterRegion: text("submitter_region"),
+  eventDate: text("event_date").notNull(),
+  venueName: text("venue_name").notNull(),
+  town: text("town").notNull(),
+  eventName: text("event_name"),
+  instagramHandle: text("instagram_handle"),
+  learnMoreUrl: text("learn_more_url"),
+  // Admin override; NULL → client derives region from town.
+  region: text("region"),
+  status: text("status").notNull().default("pending"),
+  adminNotes: text("admin_notes"),
+  source: text("source").notNull().default("public-form"),
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
 export const comments = pgTable("comments", {
   id: serial("id").primaryKey(),
   postId: integer("post_id").references(() => posts.id).notNull(),
@@ -258,6 +281,35 @@ export const insertNbaFinalsSubmissionSchema = createInsertSchema(nbaFinalsSubmi
 export const adminBulkNbaFinalsRowSchema = z.object({
   gameNumber: z.number().int().min(5).max(7).optional(),
   gameDate: z.string().min(1).max(120),
+  venueName: z.string().min(1).max(200),
+  town: z.string().min(1).max(100),
+  eventName: z.string().max(200).optional().nullable(),
+  instagramHandle: z.string().max(80).optional().nullable(),
+  learnMoreUrl: z.string().max(500).optional().nullable().or(z.literal("")),
+});
+
+// Public submission schema for landing pages. Free-text date (the page may be
+// for a specific day, a range, or generic event series).
+export const insertLandingPageSubmissionSchema = createInsertSchema(landingPageSubmissions)
+  .omit({ id: true, createdAt: true, reviewedAt: true, status: true, adminNotes: true, source: true })
+  .extend({
+    pageId: z.number().int().positive(),
+    submitterEmail: z.string().email(),
+    submitterName: z.string().max(120).optional().nullable(),
+    submitterRegion: z.string().max(80).optional().nullable(),
+    eventDate: z.string().min(1).max(120),
+    venueName: z.string().min(1).max(200),
+    town: z.string().min(1).max(100),
+    eventName: z.string().max(200).optional().nullable(),
+    instagramHandle: z.string().max(80).optional().nullable(),
+    learnMoreUrl: z.string().max(500).optional().nullable().or(z.literal("")),
+    region: z.string().max(80).optional().nullable(),
+  });
+
+// Admin bulk-import row (loose — admin is source of truth, dates accepted as
+// any string and normalized server-side via parseFlexibleWcDate).
+export const adminBulkLandingPageRowSchema = z.object({
+  eventDate: z.string().min(1).max(120),
   venueName: z.string().min(1).max(200),
   town: z.string().min(1).max(100),
   eventName: z.string().max(200).optional().nullable(),
@@ -349,6 +401,8 @@ export type WorldCupSubmission = typeof worldCupSubmissions.$inferSelect;
 export type InsertWorldCupSubmission = z.infer<typeof insertWorldCupSubmissionSchema>;
 
 export type NbaFinalsSubmission = typeof nbaFinalsSubmissions.$inferSelect;
+export type LandingPageSubmission = typeof landingPageSubmissions.$inferSelect;
+export type InsertLandingPageSubmission = z.infer<typeof insertLandingPageSubmissionSchema>;
 export type InsertNbaFinalsSubmission = z.infer<typeof insertNbaFinalsSubmissionSchema>;
 
 export type Comment = typeof comments.$inferSelect;
