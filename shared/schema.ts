@@ -86,7 +86,22 @@ export const pages = pgTable("pages", {
   sitemapPriority: text("sitemap_priority").notNull().default("0.7"),
   // JSON-encoded array of {q, a} for FAQPage JSON-LD
   faqItems: text("faq_items").notNull().default("[]"),
+  // Separate OG/social-card image (1200x630). Falls back to heroImageUrl
+  // when not set. Lets you optimize the social preview vs the page hero.
+  ogImageUrl: text("og_image_url"),
+  // Public-render hit counter (incremented on each /api/landing-pages/:slug fetch).
+  viewCount: integer("view_count").notNull().default(0),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Redirect table for slug renames. When admin renames a published page's
+// slug, the old slug gets logged here so requests for /<old> 301 to /<new>
+// — preserving inbound Google traffic.
+export const pageRedirects = pgTable("page_redirects", {
+  id: serial("id").primaryKey(),
+  oldSlug: text("old_slug").unique().notNull(),
+  newSlug: text("new_slug").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // ─── New tables ────────────────────────────────────────────────────────────

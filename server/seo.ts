@@ -359,7 +359,8 @@ export async function getMetaForRoute(rawPath: string): Promise<SeoMeta> {
         title: landingPage.metaTitle || `${landingPage.title} | ${SITE_NAME}`,
         description: landingPage.metaDescription || `${landingPage.title} — curated by Central Group Events.`,
         canonical,
-        image: landingPage.heroImageUrl || DEFAULT_IMAGE,
+        // OG image priority: admin-set ogImageUrl > heroImageUrl > site default
+        image: (landingPage as any).ogImageUrl || landingPage.heroImageUrl || DEFAULT_IMAGE,
         type: "website",
         noindex: !landingPage.indexable,
         jsonLd,

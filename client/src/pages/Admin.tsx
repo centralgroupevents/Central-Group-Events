@@ -3740,6 +3740,19 @@ function PagesTab() {
     }
   }
 
+  async function duplicatePageRow(slug: string) {
+    try {
+      const res = await apiRequest("POST", `/api/admin/pages/${slug}/duplicate`);
+      const created = await res.json();
+      if (!res.ok) throw new Error(created.message || "Duplicate failed");
+      qc.invalidateQueries({ queryKey: ["/api/admin/pages"] });
+      toast({ title: `Duplicated as "${created.slug}" (draft)` });
+      setEditingSlug(created.slug);
+    } catch (err) {
+      toast({ title: "Duplicate failed", description: String((err as Error).message), variant: "destructive" });
+    }
+  }
+
   async function deletePage(slug: string) {
     if (!window.confirm(`Delete page "${slug}"? This cannot be undone.`)) return;
     try {
@@ -3790,7 +3803,12 @@ function PagesTab() {
                       <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-white/15 text-white/50">noindex</span>
                     )}
                   </div>
-                  <p className="text-xs text-white/50 break-all">/{p.slug}</p>
+                  <p className="text-xs text-white/50 break-all">
+                    /{p.slug}
+                    {typeof (p as any).viewCount === "number" && (p as any).viewCount > 0 && (
+                      <span className="ml-3 text-white/40">· {(p as any).viewCount.toLocaleString()} views</span>
+                    )}
+                  </p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   {p.published && (
@@ -3798,6 +3816,9 @@ function PagesTab() {
                       <a href={`/${p.slug}`} target="_blank" rel="noopener noreferrer">View ↗</a>
                     </Button>
                   )}
+                  <Button size="sm" variant="outline" className="border-white/15 text-white/70" onClick={() => duplicatePageRow(p.slug)} data-testid={`button-duplicate-page-${p.slug}`}>
+                    <Copy className="w-3.5 h-3.5 mr-1.5" /> Duplicate
+                  </Button>
                   <Button size="sm" variant="outline" className="border-white/15 text-white/70" onClick={() => setEditingSlug(p.slug)} data-testid={`button-edit-page-${p.slug}`}>
                     <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
                   </Button>
@@ -3860,6 +3881,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
   const [metaDescription, setMetaDescription] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
   const [heroImageAlt, setHeroImageAlt] = useState("");
+  const [ogImageUrl, setOgImageUrl] = useState("");
   const [editorContent, setEditorContent] = useState("");
   const [indexable, setIndexable] = useState(true);
   const [published, setPublished] = useState(false);
@@ -3867,6 +3889,11 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
   const [submissionsEnabled, setSubmissionsEnabled] = useState(false);
   const [faqJson, setFaqJson] = useState("[]");
   const [saving, setSaving] = useState(false);
+  // Auto-save tracking: lastSavedAt + dirty flag drive the silent debounced
+  // save and the inline "Auto-saved Xpm" indicator next to the Save button.
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving">("idle");
 
   // Sync server state into form once page loads.
   useEffect(() => {
@@ -3876,6 +3903,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
     setMetaDescription(page.metaDescription || "");
     setHeroImageUrl(page.heroImageUrl || "");
     setHeroImageAlt((page as any).heroImageAlt || "");
+    setOgImageUrl((page as any).ogImageUrl || "");
     setEditorContent(page.editorContent || "");
     setIndexable(page.indexable);
     setPublished(page.published);
@@ -3884,10 +3912,9 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
     setFaqJson(page.faqItems || "[]");
   }, [page]);
 
-  async function save() {
-    setSaving(true);
+  async function save(opts: { silent?: boolean } = {}) {
+    if (opts.silent) setAutoSaveStatus("saving"); else setSaving(true);
     try {
-      // Validate FAQ JSON before sending.
       try { JSON.parse(faqJson || "[]"); } catch { throw new Error("FAQ items must be valid JSON"); }
       await apiRequest("PUT", `/api/pages/${slug}`, {
         title,
@@ -3895,6 +3922,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
         metaDescription,
         heroImageUrl: heroImageUrl || null,
         heroImageAlt: heroImageAlt || "",
+        ogImageUrl: ogImageUrl || null,
         editorContent,
         indexable,
         published,
@@ -3904,13 +3932,28 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
       });
       qc.invalidateQueries({ queryKey: ["/api/pages", slug] });
       qc.invalidateQueries({ queryKey: ["/api/admin/pages"] });
-      toast({ title: "Saved" });
+      setLastSavedAt(new Date());
+      setDirty(false);
+      if (!opts.silent) toast({ title: "Saved" });
     } catch (err) {
-      toast({ title: "Save failed", description: String((err as Error).message || err), variant: "destructive" });
+      if (!opts.silent) toast({ title: "Save failed", description: String((err as Error).message || err), variant: "destructive" });
     } finally {
-      setSaving(false);
+      if (opts.silent) setAutoSaveStatus("idle"); else setSaving(false);
     }
   }
+
+  // Mark dirty when any saved field changes (excluding view-state like
+  // `view` tab toggle and the auto-save status flags themselves).
+  useEffect(() => { setDirty(true); }, [title, metaTitle, metaDescription, heroImageUrl, heroImageAlt, ogImageUrl, editorContent, indexable, published, gateEnabled, submissionsEnabled, faqJson]);
+
+  // Debounced silent auto-save every ~20s when there are unsaved changes.
+  // Resets the timer on every keystroke so we save AFTER you stop typing.
+  useEffect(() => {
+    if (!dirty || isLoading || !page) return;
+    const timer = setTimeout(() => { save({ silent: true }); }, 20000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, title, metaTitle, metaDescription, heroImageUrl, heroImageAlt, ogImageUrl, editorContent, indexable, published, gateEnabled, submissionsEnabled, faqJson]);
 
   if (isLoading || !page) {
     return <div className="text-center py-12 text-white/50">Loading…</div>;
@@ -3933,9 +3976,16 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
             </Button>
           )}
           {view === "content" && (
-            <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={save} disabled={saving} data-testid="button-save-page">
-              {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save"}
-            </Button>
+            <>
+              <span className="text-[11px] text-white/40 self-center" data-testid="text-autosave-status">
+                {autoSaveStatus === "saving" ? "Auto-saving…" :
+                 lastSavedAt ? `Auto-saved ${lastSavedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` :
+                 dirty ? "Unsaved changes" : ""}
+              </span>
+              <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={() => save()} disabled={saving} data-testid="button-save-page">
+                {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save"}
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -4038,6 +4088,13 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
               <p className="text-[10px] text-white/40">For screen readers + image SEO. Be specific: "Crowd at MetLife Stadium watching World Cup match" beats "stadium".</p>
             </div>
             {heroImageUrl && <img src={heroImageUrl} alt={heroImageAlt || ""} className="w-full rounded-lg border border-white/10" />}
+          </div>
+
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-2">
+            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Social share image</h3>
+            <Input value={ogImageUrl} onChange={(e) => setOgImageUrl(e.target.value)} placeholder="Optional — defaults to hero" className="bg-black/40 border-white/10 h-9 text-sm" data-testid="input-page-og-image" />
+            <p className="text-[10px] text-white/40">1200×630 image shown when someone shares this page on Twitter / iMessage / Slack. Defaults to the hero image, but a dedicated OG image usually crops better.</p>
+            {ogImageUrl && <img src={ogImageUrl} alt="" className="w-full rounded-lg border border-white/10" />}
           </div>
 
           <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-4">

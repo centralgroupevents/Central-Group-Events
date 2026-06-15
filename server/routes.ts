@@ -1157,6 +1157,36 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Duplicate an existing page as a new draft (Tier 1 QoL). New slug is
+  // `<source>-copy` (or `-copy-N` if taken); published flag forced to false.
+  app.post("/api/admin/pages/:slug/duplicate", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const created = await storage.duplicatePage(req.params.slug as string);
+      if (!created) return res.status(404).json({ message: "Source page not found" });
+      res.status(201).json(created);
+    } catch (err) {
+      console.error("[pages-duplicate] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Rename a page's slug. Body: { newSlug }. Auto-creates a redirect from
+  // old → new so existing inbound Google traffic doesn't 404.
+  app.post("/api/admin/pages/:slug/rename", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { newSlug } = req.body as { newSlug?: string };
+      if (!newSlug || typeof newSlug !== "string") return res.status(400).json({ message: "newSlug required" });
+      const cleaned = newSlug.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+      if (!cleaned) return res.status(400).json({ message: "newSlug must contain a-z, 0-9, or -" });
+      const updated = await storage.renamePageSlug(req.params.slug as string, cleaned);
+      if (!updated) return res.status(409).json({ message: "Rename conflict (target slug in use or source not found)" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[pages-rename] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Delete a landing page. Returns 404 if the slug doesn't exist or is a
   // protected page (e.g. things-to-do-in-nj which has its own hardcoded route).
   app.delete("/api/admin/pages/:slug", requireAuth(), async (req: Request, res: Response) => {
@@ -1173,8 +1203,18 @@ ${blogList || "_No recent posts yet._"}
   // public PageRenderer when the URL doesn't match a programmatic topic.
   app.get("/api/landing-pages/:slug", publicReadLimiter, async (req: Request, res: Response) => {
     try {
-      const page = await storage.getPageBySlug(req.params.slug as string);
+      const slug = req.params.slug as string;
+      // Check redirect first — if this slug was renamed, send a 410-equivalent
+      // hint with the new slug so the client can client-side navigate. The
+      // SPA-level server redirect (further down) handles 301 for HTML.
+      const redirectTo = await storage.getPageRedirect(slug);
+      if (redirectTo) {
+        return res.status(301).json({ redirect: `/${redirectTo}` });
+      }
+      const page = await storage.getPageBySlug(slug);
       if (!page || !page.published) return res.status(404).json({ message: "Not found" });
+      // Fire-and-forget view increment (don't block the response on the write).
+      storage.incrementPageViewCount(slug).catch(() => {});
       res.json(page);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });

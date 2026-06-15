@@ -12,6 +12,7 @@ import {
   worldCupSubmissions,
   nbaFinalsSubmissions,
   landingPageSubmissions,
+  pageRedirects,
   comments,
   pages,
   type InsertSubscriber,
@@ -107,6 +108,10 @@ export interface IStorage {
   listPublishedLandingPages(): Promise<Page[]>;
   deletePage(slug: string): Promise<boolean>;
   getPageById(id: number): Promise<Page | null>;
+  duplicatePage(sourceSlug: string): Promise<Page | null>;
+  incrementPageViewCount(slug: string): Promise<void>;
+  renamePageSlug(currentSlug: string, newSlug: string): Promise<Page | null>;
+  getPageRedirect(oldSlug: string): Promise<string | null>;
 
   // Admin users
   createAdminUser(data: Partial<InsertAdminUser>): Promise<AdminUser>;
@@ -495,6 +500,67 @@ export class DatabaseStorage implements IStorage {
   async getPageById(id: number): Promise<Page | null> {
     const rows = await db.select().from(pages).where(eq(pages.id, id)).limit(1);
     return rows[0] || null;
+  }
+
+  // Clone an existing page as a new draft. New slug = `<source>-copy`, or
+  // `<source>-copy-2`, `<source>-copy-3` etc. if `-copy` already taken.
+  async duplicatePage(sourceSlug: string): Promise<Page | null> {
+    const source = await this.getPageBySlug(sourceSlug);
+    if (!source) return null;
+    let newSlug = `${sourceSlug}-copy`;
+    let n = 2;
+    while (await this.getPageBySlug(newSlug)) {
+      newSlug = `${sourceSlug}-copy-${n++}`;
+      if (n > 50) return null; // pathological safety
+    }
+    const { id: _ignoreId, updatedAt: _ignoreUpdated, viewCount: _ignoreViews, ...rest } = source as any;
+    const [created] = await db.insert(pages).values({
+      ...rest,
+      slug: newSlug,
+      title: `${source.title} (copy)`,
+      published: false,
+      viewCount: 0,
+    }).returning();
+    pageCache.delete(newSlug);
+    return created;
+  }
+
+  async incrementPageViewCount(slug: string): Promise<void> {
+    await db.update(pages)
+      .set({ viewCount: sql`${pages.viewCount} + 1` })
+      .where(eq(pages.slug, slug));
+    // Don't invalidate cache — viewCount drift in the cache is acceptable,
+    // and invalidating would mean every page-view triggers a DB re-read on
+    // the next load. Cache expires naturally after 5 min and corrects itself.
+  }
+
+  async renamePageSlug(currentSlug: string, newSlug: string): Promise<Page | null> {
+    if (currentSlug === newSlug) return this.getPageBySlug(currentSlug);
+    if (newSlug === "things-to-do-in-nj") return null; // can't take the legacy slug
+    // Conflict guard: don't allow renaming to an in-use slug
+    const conflict = await this.getPageBySlug(newSlug);
+    if (conflict) return null;
+    const [updated] = await db.update(pages)
+      .set({ slug: newSlug, updatedAt: new Date() })
+      .where(eq(pages.slug, currentSlug))
+      .returning();
+    if (!updated) return null;
+    // Insert redirect for the old slug → new slug. Skip if a row already
+    // exists (e.g., already-renamed-once-and-back); update target instead.
+    const existing = await db.select().from(pageRedirects).where(eq(pageRedirects.oldSlug, currentSlug)).limit(1);
+    if (existing[0]) {
+      await db.update(pageRedirects).set({ newSlug }).where(eq(pageRedirects.oldSlug, currentSlug));
+    } else {
+      await db.insert(pageRedirects).values({ oldSlug: currentSlug, newSlug });
+    }
+    pageCache.delete(currentSlug);
+    pageCache.delete(newSlug);
+    return updated;
+  }
+
+  async getPageRedirect(oldSlug: string): Promise<string | null> {
+    const rows = await db.select().from(pageRedirects).where(eq(pageRedirects.oldSlug, oldSlug)).limit(1);
+    return rows[0]?.newSlug || null;
   }
 
   // ── Admin users ───────────────────────────────────────────────────────
