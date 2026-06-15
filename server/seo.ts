@@ -390,6 +390,14 @@ export function injectSeoIntoHtml(html: string, meta: SeoMeta): string {
     .map((s) => `<script type="application/ld+json">${JSON.stringify(s)}</script>`)
     .join("\n    ");
 
+  // SSR H1 + intro paragraph. Bingbot (and any pre-JS crawler) needs an H1
+  // and content in the initial HTML response. Our React app renders a styled
+  // hero AFTER hydration — but until React runs, the body is just <div id="root">.
+  // Inject a visually-hidden header before the React mount so the initial
+  // HTML response has real content. Position-off-screen rather than display:none
+  // since search engines treat display:none content as "hidden = ignored."
+  const ssrHeader = `<header style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;" data-ssr-seo="1"><h1>${title}</h1><p>${desc}</p></header>`;
+
   return html
     .replace(/<title>[\s\S]*?<\/title>/, `<title>${title}</title>`)
     .replace(/<meta name="description"[^>]*\/>/, `<meta name="description" content="${desc}" />`)
@@ -404,5 +412,7 @@ export function injectSeoIntoHtml(html: string, meta: SeoMeta): string {
     .replace(/<meta name="twitter:title"[^>]*\/>/, `<meta name="twitter:title" content="${title}" />`)
     .replace(/<meta name="twitter:description"[^>]*\/>/, `<meta name="twitter:description" content="${desc}" />`)
     .replace(/<meta name="twitter:image"[^>]*\/>/, `<meta name="twitter:image" content="${img}" />`)
-    .replace("</head>", jsonLdHtml ? `    ${jsonLdHtml}\n  </head>` : "</head>");
+    .replace("</head>", jsonLdHtml ? `    ${jsonLdHtml}\n  </head>` : "</head>")
+    // Inject the SSR header right after <body> so it's first in the body source.
+    .replace(/<body([^>]*)>/, `<body$1>\n    ${ssrHeader}`);
 }
