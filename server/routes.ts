@@ -1437,6 +1437,52 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Admin: per-page email blast to approved submitters. Body: { subject, html }
+  // Sends sequentially with a small delay between sends so Gmail's per-second
+  // rate limit doesn't trip. Returns { sent, failed, total }.
+  app.post("/api/admin/pages/:slug/email-blast", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const page = await storage.getPageBySlug(req.params.slug as string);
+      if (!page) return res.status(404).json({ message: "Page not found" });
+      const { subject, html } = req.body as { subject?: string; html?: string };
+      if (!subject || typeof subject !== "string" || !subject.trim()) {
+        return res.status(400).json({ message: "subject is required" });
+      }
+      if (!html || typeof html !== "string" || !html.trim()) {
+        return res.status(400).json({ message: "html body is required" });
+      }
+      const approved = await storage.getApprovedLandingPageSubmissions(page.id);
+      const recipients = Array.from(new Set(approved.map((s) => s.submitterEmail).filter(Boolean)));
+      if (recipients.length === 0) {
+        return res.status(400).json({ message: "No approved submitters to email." });
+      }
+      let sent = 0;
+      let failed = 0;
+      for (const to of recipients) {
+        try {
+          await transporter.sendMail({
+            from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+            to,
+            subject: subject.slice(0, 200),
+            html: `${html}
+              <hr style="margin-top:32px;border:0;border-top:1px solid #eee" />
+              <p style="color:#999;font-size:11px">You're receiving this because you submitted a venue on <a href="https://centralgroupevents.com/${page.slug}">${escapeHtml(page.title)}</a> at Central Group Events. Reply to unsubscribe.</p>`,
+          });
+          sent++;
+          // Small delay between sends to stay within Gmail's burst limits.
+          await new Promise((r) => setTimeout(r, 250));
+        } catch (err) {
+          console.warn("[email-blast] send failed for", to, err);
+          failed++;
+        }
+      }
+      res.json({ sent, failed, total: recipients.length });
+    } catch (err) {
+      console.error("[email-blast] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── Admin auth routes ────────────────────────────────────────────────
 
   app.post("/api/admin/login", async (req: Request, res: Response) => {

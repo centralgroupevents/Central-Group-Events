@@ -4111,6 +4111,27 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
             <p className="text-[11px] text-white/40">When on: anonymous visitors see the first 5 approved listings + an email-unlock banner. After they submit their email, the full list reveals. Admins always see everything.</p>
           </div>
 
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-3">
+            <h3 className="font-bold text-white text-sm uppercase tracking-wider">URL slug</h3>
+            <p className="text-[11px] text-white/40">Renaming creates an automatic 301 redirect from the old URL to the new one — inbound Google traffic stays intact.</p>
+            <Button variant="outline" className="w-full border-white/15 text-white/70" onClick={async () => {
+              const next = window.prompt(`Rename slug from "${slug}" to:`, slug);
+              if (!next || next === slug) return;
+              try {
+                const res = await apiRequest("POST", `/api/admin/pages/${slug}/rename`, { newSlug: next });
+                const body = await res.json();
+                if (!res.ok) throw new Error(body.message || "Rename failed");
+                qc.invalidateQueries({ queryKey: ["/api/admin/pages"] });
+                toast({ title: `Renamed to "${body.slug}"`, description: "Old URL now 301-redirects to the new one." });
+                onClose(); // close + user can reopen the renamed page from the list
+              } catch (err) {
+                toast({ title: "Rename failed", description: String((err as Error).message || err), variant: "destructive" });
+              }
+            }} data-testid="button-rename-page">
+              Rename URL slug
+            </Button>
+          </div>
+
           <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4">
             <Button variant="outline" className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10" onClick={async () => {
               if (!window.confirm(`Delete page "${slug}"? This cannot be undone.`)) return;
@@ -4154,6 +4175,31 @@ interface PageSubmissionRow {
   createdAt: string | null;
 }
 
+// Field map for the page-submissions CSV import wizard. Keeps in sync with the
+// server's `adminBulkLandingPageRowSchema`.
+const PAGE_SUB_IMPORT_FIELDS = [
+  { key: "eventDate",       label: "Event Date", required: true },
+  { key: "venueName",       label: "Venue Name", required: true },
+  { key: "town",            label: "Town / City", required: true },
+  { key: "eventName",       label: "Event Name", required: false },
+  { key: "instagramHandle", label: "Instagram Handle", required: false },
+  { key: "learnMoreUrl",    label: "Learn-more URL", required: false },
+];
+const PAGE_SUB_IMPORT_ALIASES: Record<string, string[]> = {
+  eventDate:       ["date", "event date", "eventdate", "event_date", "when"],
+  venueName:       ["venue", "venue name", "venuename", "location", "place"],
+  town:            ["town", "city", "area"],
+  eventName:       ["event", "event name", "eventname", "name", "title"],
+  instagramHandle: ["instagram", "ig", "handle", "insta", "instagramhandle"],
+  learnMoreUrl:    ["url", "link", "learnmoreurl", "learn-more", "ticket", "tickets", "display", "image url"],
+};
+
+function pageSubAutoMatch(headers: string[], key: string): string {
+  const aliases = PAGE_SUB_IMPORT_ALIASES[key] || [key];
+  return headers.find((h) => aliases.some((a) => h.toLowerCase().trim() === a.toLowerCase())) ||
+         headers.find((h) => aliases.some((a) => h.toLowerCase().trim().includes(a.toLowerCase()))) || "";
+}
+
 function PageSubmissionsView({ pageId, slug }: { pageId: number; slug: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -4162,6 +4208,24 @@ function PageSubmissionsView({ pageId, slug }: { pageId: number; slug: string })
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ venueName: "", town: "", eventDate: "", eventName: "", instagramHandle: "", learnMoreUrl: "", region: "" });
   const [editBusy, setEditBusy] = useState(false);
+
+  // Import wizard state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importStep, setImportStep] = useState<"input" | "mapping">("input");
+  const [importRawHeaders, setImportRawHeaders] = useState<string[]>([]);
+  const [importRawRows, setImportRawRows] = useState<string[][]>([]);
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({});
+  const [importError, setImportError] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; invalid: { rowIndex: number; reason: string }[] } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Email-blast state
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailResult, setEmailResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
 
   const { data: submissions = [], isLoading } = useQuery<PageSubmissionRow[]>({
     queryKey: ["/api/admin/pages", slug, "submissions", statusFilter],
@@ -4256,6 +4320,112 @@ function PageSubmissionsView({ pageId, slug }: { pageId: number; slug: string })
     }
   }
 
+  function resetImportWizard() {
+    setImportStep("input"); setImportRawHeaders([]); setImportRawRows([]); setImportMapping({});
+    setImportError(""); setImportResult(null); setImportBusy(false);
+  }
+
+  function buildPageSubInitialMapping(headers: string[]): Record<string, string> {
+    const m: Record<string, string> = {};
+    for (const { key } of PAGE_SUB_IMPORT_FIELDS) m[key] = pageSubAutoMatch(headers, key);
+    return m;
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError(""); setImportResult(null);
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array", cellDates: true });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const allRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, dateNF: "yyyy-mm-dd" }) as any[][];
+          const nonEmpty = allRows.filter((r) => r.some((c) => String(c).trim() !== ""));
+          if (nonEmpty.length < 2) { setImportError("File empty / only headers."); return; }
+          const headers = nonEmpty[0].map((h) => String(h).trim());
+          const dataRows = nonEmpty.slice(1).map((row) => row.map((c) => String(c).trim()));
+          setImportRawHeaders(headers); setImportRawRows(dataRows);
+          setImportMapping(buildPageSubInitialMapping(headers)); setImportStep("mapping");
+        } catch { setImportError("Could not read the spreadsheet."); }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse<string[]>(file, {
+        header: false, skipEmptyLines: true,
+        complete: (results) => {
+          const allRows = results.data as string[][];
+          if (allRows.length < 2) { setImportError("File empty / only headers."); return; }
+          const headers = allRows[0].map((h) => h.trim());
+          const dataRows = allRows.slice(1);
+          setImportRawHeaders(headers); setImportRawRows(dataRows);
+          setImportMapping(buildPageSubInitialMapping(headers)); setImportStep("mapping");
+        },
+        error: (err: Error) => setImportError(err.message),
+      });
+    }
+    e.target.value = "";
+  }
+
+  async function submitMappedImport() {
+    setImportBusy(true);
+    const mapped = importRawRows.map((row) => {
+      const obj: Record<string, string> = {};
+      for (const { key } of PAGE_SUB_IMPORT_FIELDS) {
+        const col = importMapping[key];
+        if (col) {
+          const idx = importRawHeaders.indexOf(col);
+          obj[key] = idx >= 0 ? (row[idx] || "").trim() : "";
+        }
+      }
+      return obj;
+    }).map((r) => ({
+      eventDate: r.eventDate,
+      venueName: r.venueName,
+      town: r.town,
+      eventName: r.eventName || undefined,
+      instagramHandle: r.instagramHandle || undefined,
+      learnMoreUrl: r.learnMoreUrl || undefined,
+    }));
+    try {
+      const res = await apiRequest("POST", `/api/admin/pages/${slug}/submissions/bulk-import`, mapped);
+      const result = await res.json();
+      setImportResult(result);
+      qc.invalidateQueries({ queryKey: ["/api/admin/pages", slug, "submissions"] });
+      toast({ title: `Imported ${result.imported}` });
+    } catch (err) {
+      toast({ title: "Import failed", description: String(err), variant: "destructive" });
+    } finally {
+      setImportBusy(false);
+    }
+  }
+
+  async function sendEmailBlast() {
+    if (!emailSubject.trim() || !emailBody.trim()) {
+      toast({ title: "Subject and body are required", variant: "destructive" });
+      return;
+    }
+    setEmailBusy(true);
+    setEmailResult(null);
+    try {
+      const res = await apiRequest("POST", `/api/admin/pages/${slug}/email-blast`, {
+        subject: emailSubject,
+        html: emailBody,
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message || "Send failed");
+      setEmailResult(body);
+      toast({ title: `Sent ${body.sent}/${body.total}` });
+    } catch (err) {
+      toast({ title: "Email blast failed", description: String((err as Error).message || err), variant: "destructive" });
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
   const STATUS_FILTERS = ["pending", "approved", "rejected", "all"];
 
   return (
@@ -4268,6 +4438,14 @@ function PageSubmissionsView({ pageId, slug }: { pageId: number; slug: string })
               {s.charAt(0).toUpperCase() + s.slice(1)}
             </button>
           ))}
+        </div>
+        <div className="flex gap-2 sm:ml-auto">
+          <Button size="sm" variant="outline" className="border-white/20 text-white/70 h-8" onClick={() => { resetImportWizard(); setShowImportModal(true); }}>
+            <Upload className="w-3.5 h-3.5 mr-1.5" /> Import CSV / XLSX
+          </Button>
+          <Button size="sm" variant="outline" className="border-white/20 text-white/70 h-8" onClick={() => { setEmailSubject(""); setEmailBody(""); setEmailResult(null); setShowEmailModal(true); }}>
+            <Send className="w-3.5 h-3.5 mr-1.5" /> Email submitters
+          </Button>
         </div>
       </div>
 
@@ -4405,6 +4583,120 @@ function PageSubmissionsView({ pageId, slug }: { pageId: number; slug: string })
               {editBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* CSV / XLSX import wizard for page submissions */}
+      <Dialog open={showImportModal} onOpenChange={(o) => { setShowImportModal(o); if (!o) resetImportWizard(); }}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Import submissions for this page</DialogTitle></DialogHeader>
+          {importStep === "input" && !importResult && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">Upload a CSV or Excel file with one venue per row. Required columns: date, venue name, town. You'll map the columns next. Imported rows are auto-approved.</p>
+              <div className="border-2 border-dashed border-white/15 rounded-2xl p-8 text-center">
+                <Upload className="w-8 h-8 mx-auto text-white/40 mb-3" />
+                <input ref={importInputRef} type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden" onChange={handleImportFile} />
+                <Button onClick={() => importInputRef.current?.click()} className="bg-primary hover:bg-primary/90">Choose file</Button>
+                <p className="text-xs text-muted-foreground mt-3">CSV, XLSX, or XLS</p>
+              </div>
+              {importError && <p className="text-sm text-red-400">{importError}</p>}
+            </div>
+          )}
+          {importStep === "mapping" && !importResult && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">Map your file's columns to our fields. Required fields are marked <span className="text-red-400">*</span>.</p>
+              <div className="rounded-lg border border-white/10 overflow-hidden">
+                <table className="text-sm w-full">
+                  <thead><tr className="bg-white/5 border-b border-white/10 text-muted-foreground text-left"><th className="px-3 py-2 font-medium w-1/2">CGE Field</th><th className="px-3 py-2 font-medium w-1/2">Your Column</th></tr></thead>
+                  <tbody>
+                    {PAGE_SUB_IMPORT_FIELDS.map(({ key, label, required }) => (
+                      <tr key={key} className="border-b border-white/5">
+                        <td className="px-3 py-2 text-white/80">{label}{required && <span className="text-red-400 ml-1">*</span>}</td>
+                        <td className="px-3 py-2">
+                          <Select value={importMapping[key] || "__none__"} onValueChange={(v) => setImportMapping({ ...importMapping, [key]: v === "__none__" ? "" : v })}>
+                            <SelectTrigger className="h-8 bg-black/40 border-white/10 text-xs"><SelectValue placeholder="— skip —" /></SelectTrigger>
+                            <SelectContent className="bg-secondary border-white/10 text-white">
+                              <SelectItem value="__none__">— skip —</SelectItem>
+                              {importRawHeaders.filter(h => h && h.trim().length > 0).map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <DialogFooter className="gap-2 pt-2">
+                <Button variant="outline" onClick={() => setImportStep("input")} className="border-white/20 text-white/70">Back</Button>
+                <Button onClick={submitMappedImport} disabled={importBusy || !importMapping["eventDate"] || !importMapping["venueName"] || !importMapping["town"]} className="bg-primary hover:bg-primary/90">
+                  {importBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing…</> : <>Import {importRawRows.length} row{importRawRows.length !== 1 ? "s" : ""}</>}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+          {importResult && (
+            <div className="py-4 space-y-4">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                <p className="text-green-400 text-sm font-medium">{importResult.imported} imported{importResult.invalid.length > 0 && `, ${importResult.invalid.length} skipped`}</p>
+              </div>
+              {importResult.invalid.length > 0 && (
+                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4 max-h-48 overflow-y-auto">
+                  <p className="text-xs font-semibold text-yellow-300 mb-2">Skipped rows:</p>
+                  <ul className="text-xs text-white/70 space-y-1">
+                    {importResult.invalid.map((iv, i) => <li key={i}>Row {iv.rowIndex + 1}: {iv.reason}</li>)}
+                  </ul>
+                </div>
+              )}
+              <DialogFooter>
+                <Button onClick={() => { setShowImportModal(false); resetImportWizard(); }} className="bg-primary hover:bg-primary/90">Done</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Email-blast modal — sends to all approved submitters for this page */}
+      <Dialog open={showEmailModal} onOpenChange={(o) => { setShowEmailModal(o); if (!o) { setEmailResult(null); } }}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Email approved submitters</DialogTitle></DialogHeader>
+          {!emailResult ? (
+            <div className="space-y-3 py-2">
+              <p className="text-xs text-white/50">Sends an email to every approved submitter for this page. Each recipient is addressed individually (they don't see each other). Auto-appends a "you got this because you submitted on [page]" footer.</p>
+              <div className="space-y-1">
+                <Label className="text-xs text-white/70">Subject *</Label>
+                <Input value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} maxLength={200} placeholder="Update on your submission" className="bg-black/40 border-white/10 h-10" />
+                <p className="text-[10px] text-white/40">{emailSubject.length}/200</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-white/70">Body (HTML) *</Label>
+                <textarea
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  rows={10}
+                  placeholder="<p>Hi everyone,</p><p>Quick update...</p>"
+                  className="w-full bg-black/40 border border-white/10 rounded-md p-2 text-sm text-white/80 font-mono"
+                />
+                <p className="text-[10px] text-white/40">Supports HTML. Plain newlines won't auto-wrap — use {`<p>`} or {`<br/>`}.</p>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setShowEmailModal(false)} className="border-white/20 text-white/70">Cancel</Button>
+                <Button onClick={sendEmailBlast} disabled={emailBusy} className="bg-primary hover:bg-primary/90">
+                  {emailBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending…</> : "Send"}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="py-4 space-y-4">
+              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                <p className="text-green-400 text-sm font-bold">Sent {emailResult.sent} of {emailResult.total}</p>
+                {emailResult.failed > 0 && <p className="text-yellow-400 text-xs mt-1">{emailResult.failed} failed (check Replit console for which addresses).</p>}
+              </div>
+              <DialogFooter>
+                <Button onClick={() => { setShowEmailModal(false); setEmailResult(null); }} className="bg-primary hover:bg-primary/90">Done</Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
