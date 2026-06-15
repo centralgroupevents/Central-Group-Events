@@ -150,6 +150,15 @@ const formLimiter = rateLimit({
   message: { error: "Too many submissions, please try again later." },
 });
 
+// Generous limit for public read endpoints (landing-page lookup, approved
+// submissions). Stops scraper abuse without affecting real visitors.
+const publicReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  message: { error: "Too many requests, please try again in a minute." },
+});
+
 const bookingValidators = [
   body("email").isEmail().withMessage("Invalid email address").normalizeEmail(),
   body("phone").optional({ checkFalsy: true }).matches(/^[\d\s\-\+\(\)]+$/).withMessage("Invalid phone number"),
@@ -1162,7 +1171,7 @@ ${blogList || "_No recent posts yet._"}
 
   // Public-by-slug fetch — returns the page ONLY if published. Used by the
   // public PageRenderer when the URL doesn't match a programmatic topic.
-  app.get("/api/landing-pages/:slug", async (req: Request, res: Response) => {
+  app.get("/api/landing-pages/:slug", publicReadLimiter, async (req: Request, res: Response) => {
     try {
       const page = await storage.getPageBySlug(req.params.slug as string);
       if (!page || !page.published) return res.status(404).json({ message: "Not found" });
@@ -1174,7 +1183,7 @@ ${blogList || "_No recent posts yet._"}
 
   // ── Landing-page submissions (per-page user-submitted events) ───────────
   // Public: list approved submissions for a page (used by the embedded list)
-  app.get("/api/landing-pages/:slug/submissions/approved", async (req: Request, res: Response) => {
+  app.get("/api/landing-pages/:slug/submissions/approved", publicReadLimiter, async (req: Request, res: Response) => {
     try {
       const page = await storage.getPageBySlug(req.params.slug as string);
       if (!page || !page.published) return res.status(404).json({ message: "Not found" });

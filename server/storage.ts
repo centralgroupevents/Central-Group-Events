@@ -40,6 +40,12 @@ import { eq, desc, sql, count, and, isNull, gte, lt, inArray } from "drizzle-orm
 import slugifyLib from "slugify";
 import { regionSection, normalizeRegion } from "@shared/region";
 
+// In-process slug→page cache. Every /:slug request hits getPageBySlug() twice
+// (once from SSR meta lookup, once from the React render). Caching for 5 min
+// keeps the DB free of repeated identical reads. Invalidated on upsert/delete.
+const PAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+const pageCache = new Map<string, { page: Page | null; expiresAt: number }>();
+
 function stageTimestampField(status: string): "contactedAt" | "paidAt" | "completedAt" | null {
   if (status === "Contacted") return "contactedAt";
   if (status === "Paid") return "paidAt";
@@ -437,8 +443,12 @@ export class DatabaseStorage implements IStorage {
   // ── Pages ─────────────────────────────────────────────────────────────
 
   async getPageBySlug(slug: string): Promise<Page | null> {
+    const cached = pageCache.get(slug);
+    if (cached && cached.expiresAt > Date.now()) return cached.page;
     const rows = await db.select().from(pages).where(eq(pages.slug, slug)).limit(1);
-    return rows[0] || null;
+    const page = rows[0] || null;
+    pageCache.set(slug, { page, expiresAt: Date.now() + PAGE_CACHE_TTL_MS });
+    return page;
   }
 
   async upsertPage(slug: string, data: Partial<InsertPage>): Promise<Page> {
@@ -449,12 +459,14 @@ export class DatabaseStorage implements IStorage {
         .set({ ...data, slug, updatedAt: new Date() })
         .where(eq(pages.slug, slug))
         .returning();
+      pageCache.delete(slug);
       return updated;
     }
     const [created] = await db
       .insert(pages)
       .values({ slug, title: data.title ?? "", editorContent: data.editorContent ?? "", ...data })
       .returning();
+    pageCache.delete(slug);
     return created;
   }
 
@@ -476,6 +488,7 @@ export class DatabaseStorage implements IStorage {
   async deletePage(slug: string): Promise<boolean> {
     if (slug === "things-to-do-in-nj") return false; // protect legacy page
     const result = await db.delete(pages).where(eq(pages.slug, slug)).returning({ id: pages.id });
+    pageCache.delete(slug);
     return result.length > 0;
   }
 

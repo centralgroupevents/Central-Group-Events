@@ -23,12 +23,14 @@ interface LandingPage {
   metaTitle: string;
   metaDescription: string;
   heroImageUrl: string | null;
+  heroImageAlt: string;
   editorContent: string;
   indexable: boolean;
   gateEnabled: boolean;
   submissionsEnabled: boolean;
   published: boolean;
   faqItems: string;
+  updatedAt: string | null;
 }
 
 interface ApprovedSubmission {
@@ -136,13 +138,18 @@ export function PageRenderer({ slug }: Props) {
 
       <section className="pt-6 pb-10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-6" data-testid="text-page-title">
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-3" data-testid="text-page-title">
             {page.title}
           </h1>
+          {page.updatedAt && (
+            <p className="text-xs text-white/40 mb-6" data-testid="text-page-updated">
+              Updated {new Date(page.updatedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+            </p>
+          )}
           {page.heroImageUrl && (
             <img
               src={page.heroImageUrl}
-              alt=""
+              alt={page.heroImageAlt || ""}
               className="w-full rounded-3xl border border-white/10 mb-8"
               loading="lazy"
               data-testid="img-page-hero"

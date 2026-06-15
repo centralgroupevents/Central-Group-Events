@@ -64,6 +64,10 @@ export const pages = pgTable("pages", {
   slug: text("slug").unique().notNull(),
   title: text("title").notNull().default(""),
   heroImageUrl: text("hero_image_url"),
+  // Required for screen readers + SEO. Descriptive sentence of what's in the
+  // image. Required by the admin form when heroImageUrl is set; falls back to
+  // empty if missing (still better than no field).
+  heroImageAlt: text("hero_image_alt").notNull().default(""),
   editorContent: text("editor_content").notNull().default(""),
   // Each ad slot stored as JSON-encoded text: { imageUrl, linkUrl, alt }.
   adSlotTop: text("ad_slot_top"),

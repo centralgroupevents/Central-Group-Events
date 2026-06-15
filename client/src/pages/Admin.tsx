@@ -3859,6 +3859,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
   const [heroImageUrl, setHeroImageUrl] = useState("");
+  const [heroImageAlt, setHeroImageAlt] = useState("");
   const [editorContent, setEditorContent] = useState("");
   const [indexable, setIndexable] = useState(true);
   const [published, setPublished] = useState(false);
@@ -3874,6 +3875,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
     setMetaTitle(page.metaTitle || "");
     setMetaDescription(page.metaDescription || "");
     setHeroImageUrl(page.heroImageUrl || "");
+    setHeroImageAlt((page as any).heroImageAlt || "");
     setEditorContent(page.editorContent || "");
     setIndexable(page.indexable);
     setPublished(page.published);
@@ -3892,6 +3894,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
         metaTitle,
         metaDescription,
         heroImageUrl: heroImageUrl || null,
+        heroImageAlt: heroImageAlt || "",
         editorContent,
         indexable,
         published,
@@ -4023,10 +4026,18 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
             <p className="text-[11px] text-white/40">Off = page renders with a noindex tag and is excluded from the sitemap.</p>
           </div>
 
-          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-4">
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-3">
             <h3 className="font-bold text-white text-sm uppercase tracking-wider">Hero image</h3>
-            <Input value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)} placeholder="Paste Cloudinary URL" className="bg-black/40 border-white/10 h-9 text-sm" />
-            {heroImageUrl && <img src={heroImageUrl} alt="" className="w-full rounded-lg border border-white/10" />}
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">URL</Label>
+              <Input value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)} placeholder="Paste Cloudinary URL" className="bg-black/40 border-white/10 h-9 text-sm" data-testid="input-page-hero-url" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Alt text {heroImageUrl && <span className="text-red-400">*</span>}</Label>
+              <Input value={heroImageAlt} onChange={(e) => setHeroImageAlt(e.target.value)} placeholder="Describe what's in the image" className="bg-black/40 border-white/10 h-9 text-sm" data-testid="input-page-hero-alt" />
+              <p className="text-[10px] text-white/40">For screen readers + image SEO. Be specific: "Crowd at MetLife Stadium watching World Cup match" beats "stadium".</p>
+            </div>
+            {heroImageUrl && <img src={heroImageUrl} alt={heroImageAlt || ""} className="w-full rounded-lg border border-white/10" />}
           </div>
 
           <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-4">
