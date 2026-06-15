@@ -312,6 +312,14 @@ export async function registerRoutes(
     );
   });
 
+  // Google Search Console HTML-file ownership verification (backup #2 to the
+  // HTML-tag method in client/index.html). Serves the exact token Google expects
+  // at https://centralgroupevents.com/google5fb54af821f6cd6d.html.
+  app.get("/google5fb54af821f6cd6d.html", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.status(200).send("google-site-verification: google5fb54af821f6cd6d.html");
+  });
+
   // ── /llms.txt — concise overview for AI crawlers (Anthropic-proposed convention)
   app.get("/llms.txt", (_req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
