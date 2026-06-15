@@ -22,7 +22,38 @@ import { SEO } from "@/components/SEO";
 import { EventBrowser } from "@/components/EventBrowser";
 import { EventsJsonLd } from "@/components/EventsJsonLd";
 import { SubscribeModal } from "@/components/SubscribeModal";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
+
+// FAQ items for the homepage. Doubles as data for the FAQPage JSON-LD (rich
+// snippets in Google) AND the visible accordion. Wording targets the most
+// common search-query intents (regions, costs, event types, how to submit).
+const HOMEPAGE_FAQS = [
+  {
+    q: "What is Central Group Events?",
+    a: "Central Group Events (CGE) is New Jersey's #1 event discovery and promotion hub. We curate and promote 100+ events weekly across North, Central, and South NJ — covering brunches, day parties, concerts, festivals, watch parties, comedy, nightlife, and pop-ups. Visitors browse what's happening this weekend; venues and organizers book promotion packages to reach our audience.",
+  },
+  {
+    q: "What kinds of events do you cover and promote in NJ?",
+    a: "Brunches, day parties, club nights, concerts, festivals, comedy shows, watch parties, networking events, lounge events, and pop-ups. If it's a public, attendee-facing event happening in New Jersey, we can list it and (for paid packages) promote it to our weekly newsletter, Instagram audience, and SMS list.",
+  },
+  {
+    q: "Which New Jersey regions do you cover?",
+    a: "All of NJ — North NJ (Newark, Jersey City, Hoboken, Paterson, Elizabeth, Montclair, Bayonne), Central NJ (Trenton, New Brunswick, Edison, Plainfield, Princeton, East Brunswick), and South NJ (Atlantic City, Cherry Hill, Camden, Vineland, Ocean City). Filter the events list by region to see what's happening near you.",
+  },
+  {
+    q: "How do I submit my event or book promotion?",
+    a: "Pick a package on the Pricing section above and use the booking form, or visit /book directly. Packages range from a free calendar listing (Basic) through Starter ($70), Growth ($150 with reels + SMS blast), and Custom ($300+ with influencer reposts). Submit at least 7 days before your event so we have time to schedule slots.",
+  },
+  {
+    q: "How much does event promotion in NJ cost?",
+    a: "Four tiers: Basic (free calendar listing), Starter ($70 per event), Growth ($150 per event with Instagram reel, premium newsletter placement, and SMS blast), and Custom ($300+ per event with influencer reposts, strategy call, and dedicated campaign timeline). Detailed breakdown on the Pricing section above.",
+  },
+  {
+    q: "How fast will my event get posted after I book?",
+    a: "Our team confirms your booking + invoicing within 24 hours of submission. Content typically goes live the week of your event, on the agreed posting date. For best results, book at least 7 days out; for holiday weekends or peak-demand windows, 2 weeks ahead is recommended.",
+  },
+];
 
 // Re-defining schemas here for the form resolvers to match the API contract
 const newsletterSchema = z.object({
@@ -184,6 +215,15 @@ export default function Home() {
             "name": "Central Group Events",
             "description": "NJ events discovery and event promotion",
             "publisher": { "@id": "https://centralgroupevents.com/#organization" },
+          },
+          {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": HOMEPAGE_FAQS.map((f) => ({
+              "@type": "Question",
+              "name": f.q,
+              "acceptedAnswer": { "@type": "Answer", "text": f.a },
+            })),
           },
         ]}
       />
@@ -716,6 +756,41 @@ export default function Home() {
               </svg>
               @centralgroupevents
             </a>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* FAQ SECTION — adds substantive content for Bing/Google + FAQPage JSON-LD rich snippets */}
+      <section id="faq" className="py-24 border-y border-white/5 bg-black/20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div {...fadeIn} className="text-center mb-12">
+            <h2 className="text-sm font-bold text-primary tracking-widest uppercase mb-3">FAQ</h2>
+            <h3 className="text-3xl md:text-4xl font-black mb-3">Frequently asked questions</h3>
+            <p className="text-muted-foreground text-lg">Everything you need to know about CGE and promoting events in NJ.</p>
+          </motion.div>
+          <motion.div {...fadeIn}>
+            <Accordion type="single" collapsible className="space-y-3">
+              {HOMEPAGE_FAQS.map((f, i) => (
+                <AccordionItem
+                  key={i}
+                  value={`faq-${i}`}
+                  className="bg-secondary/30 border border-white/10 rounded-2xl px-5 data-[state=open]:bg-secondary/40"
+                  data-testid={`home-faq-${i}`}
+                >
+                  <AccordionTrigger className="text-left font-bold text-white hover:no-underline py-5">
+                    {f.q}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-white/70 leading-relaxed pb-5">
+                    {f.a}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+            <p className="text-center text-sm text-muted-foreground mt-8">
+              Have a different question? Email{" "}
+              <a href="mailto:centralgroupevents@gmail.com" className="text-primary hover:underline">centralgroupevents@gmail.com</a>{" "}
+              or visit our <a href="/faq" className="text-primary hover:underline">full FAQ</a>.
+            </p>
           </motion.div>
         </div>
       </section>
