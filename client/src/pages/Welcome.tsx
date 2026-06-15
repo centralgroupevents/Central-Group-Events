@@ -9,7 +9,7 @@ export default function Welcome() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const redirect = params.get("redirect") || "/blog";
+    const redirect = params.get("redirect") || "/things-to-do-in-nj";
     const timer = setTimeout(() => {
       setLocation(redirect);
     }, 3000);

@@ -528,8 +528,8 @@ ${blogList || "_No recent posts yet._"}
               </p>
 
               <div style="text-align: center; margin-bottom: 40px;">
-                <a href="https://centralgroupevents.com/blog" style="display: inline-block; background: #8B2FC9; color: #ffffff; text-decoration: none; font-weight: bold; font-size: 15px; padding: 14px 32px; border-radius: 10px;">
-                  View This Week's Events
+                <a href="https://centralgroupevents.com/things-to-do-in-nj" style="display: inline-block; background: #8B2FC9; color: #ffffff; text-decoration: none; font-weight: bold; font-size: 15px; padding: 14px 32px; border-radius: 10px;">
+                  See What's Happening in NJ
                 </a>
               </div>
 
@@ -1973,7 +1973,7 @@ ${blogList || "_No recent posts yet._"}
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
                 <h1 style="color: #8B2FC9;">Welcome to the CGE insider list!</h1>
                 <p>You now have full access to all CGE newsletter posts.</p>
-                <p>Head back to the post you were reading or visit <a href="https://centralgroupevents.com/blog" style="color: #8B2FC9;">centralgroupevents.com/blog</a> to see everything.</p>
+                <p>Head over to <a href="https://centralgroupevents.com/things-to-do-in-nj" style="color: #8B2FC9;">centralgroupevents.com/things-to-do-in-nj</a> to see what's happening across NJ this week.</p>
                 <p style="color: #555; font-size: 12px; margin-top: 24px;">Central Group Events • centralgroupevents@gmail.com</p>
               </div>
             `,
