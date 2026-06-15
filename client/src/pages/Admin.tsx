@@ -259,6 +259,7 @@ const TABS = [
   { id: "bookings", label: "Bookings", icon: ClipboardList },
   { id: "subscribers", label: "Subscribers", icon: Mail },
   { id: "blog", label: "Blog Posts", icon: BookOpen },
+  { id: "pages", label: "Pages", icon: BookOpen },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "world-cup", label: "World Cup", icon: Star },
   { id: "nba-finals", label: "NBA Finals", icon: Star },
@@ -3679,6 +3680,360 @@ function NbaFinalsTab() {
 }
 
 /* ─────────────────────────────────────────────────────────── */
+/*  PAGES TAB — admin-created landing pages CMS               */
+/* ─────────────────────────────────────────────────────────── */
+interface PageRow {
+  id: number;
+  slug: string;
+  title: string;
+  metaTitle: string;
+  metaDescription: string;
+  heroImageUrl: string | null;
+  editorContent: string;
+  indexable: boolean;
+  gateEnabled: boolean;
+  submissionsEnabled: boolean;
+  published: boolean;
+  sitemapPriority: string;
+  faqItems: string;
+  updatedAt: string | null;
+}
+
+function PagesTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newSlug, setNewSlug] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+
+  const { data: allPages = [], isLoading } = useQuery<PageRow[]>({
+    queryKey: ["/api/admin/pages"],
+  });
+  // Hide the legacy /things-to-do-in-nj row from the Pages tab — it has its
+  // own dedicated admin view under the "This Week" tab.
+  const pages = allPages.filter((p) => p.slug !== "things-to-do-in-nj");
+
+  async function createPage() {
+    const slug = newSlug.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const title = newTitle.trim();
+    if (!slug || !title) {
+      toast({ title: "Slug and title are required", variant: "destructive" });
+      return;
+    }
+    try {
+      await apiRequest("PUT", `/api/pages/${slug}`, {
+        title,
+        metaTitle: title,
+        metaDescription: "",
+        editorContent: "",
+        published: false,
+        indexable: true,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/admin/pages"] });
+      toast({ title: "Page created (draft)" });
+      setShowCreate(false);
+      setNewSlug(""); setNewTitle("");
+      setEditingSlug(slug);
+    } catch (err) {
+      toast({ title: "Create failed", description: String((err as Error).message || err), variant: "destructive" });
+    }
+  }
+
+  async function deletePage(slug: string) {
+    if (!window.confirm(`Delete page "${slug}"? This cannot be undone.`)) return;
+    try {
+      await apiRequest("DELETE", `/api/admin/pages/${slug}`);
+      qc.invalidateQueries({ queryKey: ["/api/admin/pages"] });
+      toast({ title: "Deleted" });
+      if (editingSlug === slug) setEditingSlug(null);
+    } catch (err) {
+      toast({ title: "Delete failed", description: String((err as Error).message || err), variant: "destructive" });
+    }
+  }
+
+  // Edit view: full-screen-ish form for the selected page.
+  if (editingSlug) {
+    return <PageEditor slug={editingSlug} onClose={() => setEditingSlug(null)} onDeleted={() => setEditingSlug(null)} />;
+  }
+
+  return (
+    <div className="space-y-4 min-w-0 max-w-full overflow-x-hidden">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-white">Pages</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Create and manage landing pages with SEO meta, hero image, body content, and FAQ.</p>
+        </div>
+        <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={() => setShowCreate(true)} data-testid="button-create-page">
+          <Plus className="w-3.5 h-3.5 mr-1.5" /> New Page
+        </Button>
+      </div>
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        {isLoading ? (
+          <div className="p-6 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : pages.length === 0 ? (
+          <div className="py-10 px-6 text-center text-sm text-muted-foreground">No pages yet. Click "New Page" to start.</div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {pages.map((p) => (
+              <div key={p.slug} className="px-6 py-4 flex items-center justify-between gap-4 flex-wrap" data-testid={`row-page-${p.slug}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                    <h3 className="font-bold text-white">{p.title || "(untitled)"}</h3>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                      p.published ? "border-green-500/40 text-green-400 bg-green-500/10" : "border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
+                    }`}>
+                      {p.published ? "Published" : "Draft"}
+                    </span>
+                    {!p.indexable && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-white/15 text-white/50">noindex</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-white/50 break-all">/{p.slug}</p>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {p.published && (
+                    <Button size="sm" variant="outline" className="border-white/15 text-white/60" asChild>
+                      <a href={`/${p.slug}`} target="_blank" rel="noopener noreferrer">View ↗</a>
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" className="border-white/15 text-white/70" onClick={() => setEditingSlug(p.slug)} data-testid={`button-edit-page-${p.slug}`}>
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit
+                  </Button>
+                  <Button size="sm" variant="outline" className="border-red-500/30 text-red-400 hover:bg-red-500/10" onClick={() => deletePage(p.slug)} data-testid={`button-delete-page-${p.slug}`}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Create modal */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create new page</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Title *</Label>
+              <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="2026 NJ Summer Festival Guide" className="bg-black/40 border-white/10 h-10" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">URL slug *</Label>
+              <Input value={newSlug} onChange={(e) => setNewSlug(e.target.value)} placeholder="2026-summer-festival-guide" className="bg-black/40 border-white/10 h-10 font-mono text-sm" />
+              <p className="text-[11px] text-white/40">Will be reachable at <span className="font-mono">centralgroupevents.com/{newSlug || "your-slug"}</span></p>
+            </div>
+            <p className="text-[11px] text-white/40">Created as a draft. You can edit and publish on the next screen.</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowCreate(false)} className="border-white/20 text-white/70">Cancel</Button>
+            <Button onClick={createPage} className="bg-primary hover:bg-primary/90" data-testid="button-confirm-create-page">Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/* ── Per-page edit form (separate component so each render gets its own data) */
+function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () => void; onDeleted: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: page, isLoading } = useQuery<PageRow>({
+    queryKey: ["/api/pages", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/pages/${slug}`);
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  const [title, setTitle] = useState("");
+  const [metaTitle, setMetaTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [heroImageUrl, setHeroImageUrl] = useState("");
+  const [editorContent, setEditorContent] = useState("");
+  const [indexable, setIndexable] = useState(true);
+  const [published, setPublished] = useState(false);
+  const [gateEnabled, setGateEnabled] = useState(false);
+  const [submissionsEnabled, setSubmissionsEnabled] = useState(false);
+  const [faqJson, setFaqJson] = useState("[]");
+  const [saving, setSaving] = useState(false);
+
+  // Sync server state into form once page loads.
+  useEffect(() => {
+    if (!page) return;
+    setTitle(page.title);
+    setMetaTitle(page.metaTitle || "");
+    setMetaDescription(page.metaDescription || "");
+    setHeroImageUrl(page.heroImageUrl || "");
+    setEditorContent(page.editorContent || "");
+    setIndexable(page.indexable);
+    setPublished(page.published);
+    setGateEnabled(page.gateEnabled);
+    setSubmissionsEnabled(page.submissionsEnabled);
+    setFaqJson(page.faqItems || "[]");
+  }, [page]);
+
+  async function save() {
+    setSaving(true);
+    try {
+      // Validate FAQ JSON before sending.
+      try { JSON.parse(faqJson || "[]"); } catch { throw new Error("FAQ items must be valid JSON"); }
+      await apiRequest("PUT", `/api/pages/${slug}`, {
+        title,
+        metaTitle,
+        metaDescription,
+        heroImageUrl: heroImageUrl || null,
+        editorContent,
+        indexable,
+        published,
+        gateEnabled,
+        submissionsEnabled,
+        faqItems: faqJson,
+      });
+      qc.invalidateQueries({ queryKey: ["/api/pages", slug] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/pages"] });
+      toast({ title: "Saved" });
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message || err), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (isLoading || !page) {
+    return <div className="text-center py-12 text-white/50">Loading…</div>;
+  }
+
+  return (
+    <div className="space-y-6 min-w-0 max-w-full overflow-x-hidden">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <Button size="sm" variant="outline" className="border-white/20 text-white/70" onClick={onClose}>← Back to Pages</Button>
+          <div>
+            <h2 className="text-xl font-bold text-white">{title || "(untitled)"}</h2>
+            <p className="text-xs text-muted-foreground">/{slug}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {published && (
+            <Button size="sm" variant="outline" className="border-white/15 text-white/60" asChild>
+              <a href={`/${slug}`} target="_blank" rel="noopener noreferrer">Preview ↗</a>
+            </Button>
+          )}
+          <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={save} disabled={saving} data-testid="button-save-page">
+            {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left/main: body */}
+        <div className="lg:col-span-2 space-y-5">
+          <div className="space-y-1.5">
+            <Label className="text-white/80">Title (shown as H1 on the page)</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} className="bg-black/40 border-white/10 h-11 text-lg font-semibold" data-testid="input-page-title" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-white/80">Body content</Label>
+            <p className="text-[11px] text-white/40">Rich text — paste from Google Docs / Word, format with the toolbar. Embedded events list will be added in a follow-up.</p>
+            <RichTextEditor content={editorContent} onChange={setEditorContent} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-white/80">FAQ items (JSON array)</Label>
+            <p className="text-[11px] text-white/40">Format: <span className="font-mono">[{`{"q": "Question?", "a": "Answer."}`}]</span>. Generates FAQPage JSON-LD for Google.</p>
+            <textarea
+              value={faqJson}
+              onChange={(e) => setFaqJson(e.target.value)}
+              rows={4}
+              className="w-full bg-black/40 border border-white/10 rounded-md p-2 font-mono text-xs text-white/80"
+              data-testid="input-page-faq"
+            />
+          </div>
+        </div>
+
+        {/* Right sidebar: settings */}
+        <aside className="space-y-5">
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-4">
+            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Publish</h3>
+            <label className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+              <span className="text-white/80">Published</span>
+              <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} data-testid="toggle-page-published" className="h-4 w-4" />
+            </label>
+            <p className="text-[11px] text-white/40">Drafts are visible only to admins (logged-in). Publishing puts the page live and adds it to the sitemap.</p>
+          </div>
+
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-4">
+            <h3 className="font-bold text-white text-sm uppercase tracking-wider">SEO</h3>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Meta title <span className="text-white/30">(≤60 chars)</span></Label>
+              <Input value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} maxLength={70} placeholder="(defaults to title)" className="bg-black/40 border-white/10 h-9 text-sm" />
+              <p className="text-[10px] text-white/40">{metaTitle.length}/60</p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Meta description <span className="text-white/30">(≤160 chars)</span></Label>
+              <textarea
+                value={metaDescription}
+                onChange={(e) => setMetaDescription(e.target.value)}
+                maxLength={180}
+                rows={3}
+                className="w-full bg-black/40 border border-white/10 rounded-md p-2 text-sm text-white/80"
+              />
+              <p className="text-[10px] text-white/40">{metaDescription.length}/160</p>
+            </div>
+            <label className="flex items-center justify-between gap-3 text-sm cursor-pointer">
+              <span className="text-white/80">Index in Google</span>
+              <input type="checkbox" checked={indexable} onChange={(e) => setIndexable(e.target.checked)} data-testid="toggle-page-indexable" className="h-4 w-4" />
+            </label>
+            <p className="text-[11px] text-white/40">Off = page renders with a noindex tag and is excluded from the sitemap.</p>
+          </div>
+
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-4">
+            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Hero image</h3>
+            <Input value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)} placeholder="Paste Cloudinary URL" className="bg-black/40 border-white/10 h-9 text-sm" />
+            {heroImageUrl && <img src={heroImageUrl} alt="" className="w-full rounded-lg border border-white/10" />}
+          </div>
+
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-4">
+            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Coming next PR</h3>
+            <label className="flex items-center justify-between gap-3 text-sm cursor-not-allowed opacity-50">
+              <span className="text-white/80">Email gate (require signup to view)</span>
+              <input type="checkbox" checked={gateEnabled} onChange={(e) => setGateEnabled(e.target.checked)} disabled className="h-4 w-4" />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm cursor-not-allowed opacity-50">
+              <span className="text-white/80">Enable public submissions</span>
+              <input type="checkbox" checked={submissionsEnabled} onChange={(e) => setSubmissionsEnabled(e.target.checked)} disabled className="h-4 w-4" />
+            </label>
+            <p className="text-[11px] text-white/40">These toggles save now but don't render yet — the gate UI and submissions sub-tab ship in PR B.</p>
+          </div>
+
+          <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4">
+            <Button variant="outline" className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10" onClick={async () => {
+              if (!window.confirm(`Delete page "${slug}"? This cannot be undone.`)) return;
+              try {
+                await apiRequest("DELETE", `/api/admin/pages/${slug}`);
+                qc.invalidateQueries({ queryKey: ["/api/admin/pages"] });
+                toast({ title: "Deleted" });
+                onDeleted();
+              } catch (err) {
+                toast({ title: "Delete failed", description: String((err as Error).message || err), variant: "destructive" });
+              }
+            }} data-testid="button-delete-page-from-editor">
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete page
+            </Button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
 export default function Admin() {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -5465,6 +5820,7 @@ export default function Admin() {
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "world-cup" && <WorldCupTab />}
         {activeTab === "nba-finals" && <NbaFinalsTab />}
+        {activeTab === "pages" && <PagesTab />}
         {activeTab === "team" && <TeamTab currentRole={user.role} />}
       </div>
     </div>

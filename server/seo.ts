@@ -321,6 +321,54 @@ export async function getMetaForRoute(rawPath: string): Promise<SeoMeta> {
     };
   }
 
+  // Admin-created landing pages — pulled from the `pages` table. Slug matches
+  // the URL after the leading /. Only published pages get meta; unpublished
+  // fall through to the default below (homepage meta, canonical = this path).
+  try {
+    const landingPage = await storage.getPageBySlug(topicSlug);
+    if (landingPage && landingPage.published) {
+      const canonical = `${SITE}/${landingPage.slug}`;
+      const jsonLd: object[] = [
+        {
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            { "@type": "ListItem", "position": 1, "name": "Home", "item": `${SITE}/` },
+            { "@type": "ListItem", "position": 2, "name": landingPage.title, "item": canonical },
+          ],
+        },
+      ];
+      let faqParsed: { q: string; a: string }[] = [];
+      try {
+        faqParsed = JSON.parse(landingPage.faqItems || "[]");
+      } catch {
+        // Bad JSON in the field — skip FAQ schema rather than crash the page.
+      }
+      if (Array.isArray(faqParsed) && faqParsed.length > 0) {
+        jsonLd.push({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          "mainEntity": faqParsed.map((item) => ({
+            "@type": "Question",
+            "name": item.q,
+            "acceptedAnswer": { "@type": "Answer", "text": item.a },
+          })),
+        });
+      }
+      return {
+        title: landingPage.metaTitle || `${landingPage.title} | ${SITE_NAME}`,
+        description: landingPage.metaDescription || `${landingPage.title} — curated by Central Group Events.`,
+        canonical,
+        image: landingPage.heroImageUrl || DEFAULT_IMAGE,
+        type: "website",
+        noindex: !landingPage.indexable,
+        jsonLd,
+      };
+    }
+  } catch {
+    // DB error — fall through to default homepage meta. Don't crash SSR.
+  }
+
   // Default: serve homepage meta but mark canonical to the actual path so we
   // don't accidentally canonicalize unknown URLs to root.
   return { ...HOME_META, canonical: `${SITE}${path}` };

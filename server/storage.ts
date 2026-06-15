@@ -94,6 +94,9 @@ export interface IStorage {
   // Pages
   getPageBySlug(slug: string): Promise<Page | null>;
   upsertPage(slug: string, data: Partial<InsertPage>): Promise<Page>;
+  listPages(): Promise<Page[]>;
+  listPublishedLandingPages(): Promise<Page[]>;
+  deletePage(slug: string): Promise<boolean>;
 
   // Admin users
   createAdminUser(data: Partial<InsertAdminUser>): Promise<AdminUser>;
@@ -439,6 +442,27 @@ export class DatabaseStorage implements IStorage {
       .values({ slug, title: data.title ?? "", editorContent: data.editorContent ?? "", ...data })
       .returning();
     return created;
+  }
+
+  // List all pages (admin-only). Used by the Pages admin tab.
+  async listPages(): Promise<Page[]> {
+    return await db.select().from(pages).orderBy(desc(pages.updatedAt));
+  }
+
+  // List published landing pages (excludes the legacy /things-to-do-in-nj page
+  // which uses its own hardcoded route). Used for sitemap + public listing.
+  async listPublishedLandingPages(): Promise<Page[]> {
+    return await db
+      .select()
+      .from(pages)
+      .where(and(eq(pages.published, true), sql`${pages.slug} != 'things-to-do-in-nj'`))
+      .orderBy(desc(pages.updatedAt));
+  }
+
+  async deletePage(slug: string): Promise<boolean> {
+    if (slug === "things-to-do-in-nj") return false; // protect legacy page
+    const result = await db.delete(pages).where(eq(pages.slug, slug)).returning({ id: pages.id });
+    return result.length > 0;
   }
 
   // ── Admin users ───────────────────────────────────────────────────────

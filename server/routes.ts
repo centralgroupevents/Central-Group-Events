@@ -196,10 +196,24 @@ export async function registerRoutes(
     console.log("[sitemap] GET /sitemap.xml hit");
     try {
       const { getAllTopics, countMatchingEvents } = await import("@shared/seo-topics");
-      const [publishedPosts, allEvents] = await Promise.all([
+      const [publishedPosts, allEvents, landingPages] = await Promise.all([
         storage.getPublishedPosts(),
         storage.getEvents(undefined, false),
+        storage.listPublishedLandingPages(),
       ]);
+
+      const landingPageEntries = landingPages
+        .filter((p) => p.indexable)
+        .map(
+          (p) => `
+  <url>
+    <loc>https://centralgroupevents.com/${p.slug}</loc>
+    <lastmod>${(p.updatedAt instanceof Date ? p.updatedAt : new Date()).toISOString().split("T")[0]}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>${p.sitemapPriority || "0.7"}</priority>
+  </url>`,
+        )
+        .join("");
 
       const postEntries = publishedPosts
         .map(
@@ -268,7 +282,7 @@ export async function registerRoutes(
     <loc>https://centralgroupevents.com/submit-nba-finals-watch-party</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
-  </url>${topicEntries}${postEntries}
+  </url>${topicEntries}${landingPageEntries}${postEntries}
 </urlset>`;
       console.log(`[sitemap] returning ${publishedPosts.length} blog entries + topic landings`);
       res.setHeader("Content-Type", "application/xml; charset=utf-8");
@@ -1121,6 +1135,40 @@ ${blogList || "_No recent posts yet._"}
       res.json(updated);
     } catch (err) {
       res.status(400).json({ message: err instanceof Error ? err.message : "Invalid request" });
+    }
+  });
+
+  // List all pages (admin Pages tab). Returns drafts + published.
+  app.get("/api/admin/pages", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const all = await storage.listPages();
+      res.json(all);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Delete a landing page. Returns 404 if the slug doesn't exist or is a
+  // protected page (e.g. things-to-do-in-nj which has its own hardcoded route).
+  app.delete("/api/admin/pages/:slug", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const ok = await storage.deletePage(req.params.slug as string);
+      if (!ok) return res.status(404).json({ message: "Not found or protected" });
+      res.json({ deleted: true });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Public-by-slug fetch — returns the page ONLY if published. Used by the
+  // public PageRenderer when the URL doesn't match a programmatic topic.
+  app.get("/api/landing-pages/:slug", async (req: Request, res: Response) => {
+    try {
+      const page = await storage.getPageBySlug(req.params.slug as string);
+      if (!page || !page.published) return res.status(404).json({ message: "Not found" });
+      res.json(page);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 

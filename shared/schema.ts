@@ -70,6 +70,18 @@ export const pages = pgTable("pages", {
   adSlotMid: text("ad_slot_mid"),
   adSlotBottom: text("ad_slot_bottom"),
   adSlotSidebar: text("ad_slot_sidebar"),
+  // Landing-page CMS fields (used for admin-created pages with their own /:slug URL).
+  // The legacy /things-to-do-in-nj row ignores these and keeps using its hardcoded
+  // route + component; new admin-created pages render dynamically via these fields.
+  metaTitle: text("meta_title").notNull().default(""),
+  metaDescription: text("meta_description").notNull().default(""),
+  indexable: boolean("indexable").notNull().default(true),
+  gateEnabled: boolean("gate_enabled").notNull().default(false),
+  submissionsEnabled: boolean("submissions_enabled").notNull().default(false),
+  published: boolean("published").notNull().default(false),
+  sitemapPriority: text("sitemap_priority").notNull().default("0.7"),
+  // JSON-encoded array of {q, a} for FAQPage JSON-LD
+  faqItems: text("faq_items").notNull().default("[]"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

@@ -16,6 +16,7 @@ import {
   getRelatedTypeLinks,
 } from "@shared/seo-topics";
 import NotFound from "@/pages/not-found";
+import { PageRenderer } from "@/components/PageRenderer";
 
 const SITE = "https://centralgroupevents.com";
 
@@ -25,8 +26,11 @@ export default function TopicLanding() {
   const slug = params?.slug || "";
   const config = getTopicConfig(slug);
 
+  // If the slug isn't a programmatic topic, fall through to the admin-created
+  // landing pages (DB-backed). PageRenderer renders NotFound itself if the slug
+  // doesn't match any published landing page either.
   if (!config) {
-    return <NotFound />;
+    return <PageRenderer slug={slug} />;
   }
 
   const canonical = `${SITE}/${config.slug}`;
