@@ -81,6 +81,8 @@ export interface IStorage {
 
   importSubscribers(rows: Array<{ email: string; name?: string; region?: string; referrer?: string }>): Promise<{ imported: number; skipped: number }>;
   deleteSubscriber(id: number): Promise<void>;
+  bulkDeleteSubscribers(ids: number[]): Promise<number>;
+  bulkEditSubscribers(ids: number[], fields: { region?: string | null; referrer?: string | null }): Promise<number>;
 
   // Bookings
   createBooking(booking: InsertBooking): Promise<Booking>;
@@ -267,6 +269,29 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSubscriber(id: number): Promise<void> {
     await db.delete(newsletterSubscribers).where(eq(newsletterSubscribers.id, id));
+  }
+
+  async bulkDeleteSubscribers(ids: number[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const deleted = await db.delete(newsletterSubscribers)
+      .where(inArray(newsletterSubscribers.id, ids))
+      .returning({ id: newsletterSubscribers.id });
+    return deleted.length;
+  }
+
+  // Bulk-edit region and/or referrer (source) on selected subscribers.
+  // Missing fields = no change; explicit null = clear the column.
+  async bulkEditSubscribers(ids: number[], fields: { region?: string | null; referrer?: string | null }): Promise<number> {
+    if (ids.length === 0) return 0;
+    const patch: Partial<Subscriber> = {};
+    if ("region" in fields) patch.region = fields.region ?? null;
+    if ("referrer" in fields) patch.referrer = fields.referrer ?? null;
+    if (Object.keys(patch).length === 0) return 0;
+    const updated = await db.update(newsletterSubscribers)
+      .set(patch)
+      .where(inArray(newsletterSubscribers.id, ids))
+      .returning({ id: newsletterSubscribers.id });
+    return updated.length;
   }
 
   async upsertSubscriber(email: string, referrer?: string, name?: string): Promise<{ subscriber: Subscriber; isNew: boolean }> {

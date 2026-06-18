@@ -470,6 +470,15 @@ function SubscribersTab() {
   const [importMapping, setImportMapping] = useState<{ email: string; name: string; source: string }>({ email: "", name: "", source: "" });
   const [importError, setImportError] = useState("");
 
+  // ── Multi-select + bulk-edit state ────────────────────────
+  const [selectedSubIds, setSelectedSubIds] = useState<Set<number>>(new Set());
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  // Empty string = "leave unchanged" for both fields. Sentinel "__clear__"
+  // sends an explicit null to the server (sets the column to NULL).
+  const [bulkRegion, setBulkRegion] = useState("");
+  const [bulkSource, setBulkSource] = useState("");
+  const [bulkEditBusy, setBulkEditBusy] = useState(false);
+
   const { data: subscribers = [], isLoading } = useQuery<Subscriber[]>({
     queryKey: ["/api/admin/subscribers"],
   });
@@ -707,6 +716,51 @@ function SubscribersTab() {
     setImportError("");
   }
 
+  // ── Bulk actions ────────────────────────────────────────
+  async function bulkDeleteSubscribers() {
+    if (selectedSubIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedSubIds.size} subscriber${selectedSubIds.size !== 1 ? "s" : ""}? Cannot be undone.`)) return;
+    try {
+      const res = await apiRequest("POST", "/api/admin/subscribers/bulk-delete", { ids: Array.from(selectedSubIds) });
+      const body = await res.json();
+      toast({ title: `Deleted ${body.deleted}` });
+      setSelectedSubIds(new Set());
+      qc.invalidateQueries({ queryKey: ["/api/admin/subscribers"] });
+    } catch (err) {
+      toast({ title: "Bulk delete failed", description: String((err as Error).message), variant: "destructive" });
+    }
+  }
+
+  async function saveBulkEdit() {
+    if (selectedSubIds.size === 0) return;
+    // Build payload: missing field = no change. Sentinel "__clear__" = null.
+    const payload: { ids: number[]; region?: string | null; referrer?: string | null } = {
+      ids: Array.from(selectedSubIds),
+    };
+    if (bulkRegion) payload.region = bulkRegion === "__clear__" ? null : bulkRegion;
+    if (bulkSource) payload.referrer = bulkSource === "__clear__" ? null : bulkSource;
+    if (payload.region === undefined && payload.referrer === undefined) {
+      toast({ title: "Pick a region or source to update", variant: "destructive" });
+      return;
+    }
+    setBulkEditBusy(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/subscribers/bulk-edit", payload);
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.message || "Bulk edit failed");
+      toast({ title: `Updated ${body.updated}` });
+      setShowBulkEditModal(false);
+      setBulkRegion("");
+      setBulkSource("");
+      setSelectedSubIds(new Set());
+      qc.invalidateQueries({ queryKey: ["/api/admin/subscribers"] });
+    } catch (err) {
+      toast({ title: "Bulk edit failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBulkEditBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {/* ── Stat cards ─────────────────────────────────────── */}
@@ -818,10 +872,38 @@ function SubscribersTab() {
             <p>{hasActiveFilter ? "No subscribers match the active filters." : "No subscribers yet."}</p>
           </div>
         ) : (
+          <>
+          {/* Bulk action bar — appears when at least one subscriber is selected */}
+          {selectedSubIds.size > 0 && (
+            <div className="bg-primary/15 border border-primary/40 rounded-xl px-4 py-3 mb-3 flex flex-wrap items-center gap-3" data-testid="subscribers-bulk-bar">
+              <span className="text-sm text-white font-medium">{selectedSubIds.size} selected</span>
+              <div className="flex gap-2 flex-wrap ml-auto">
+                <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={() => { setBulkRegion(""); setBulkSource(""); setShowBulkEditModal(true); }} data-testid="button-bulk-edit-subscribers">
+                  <Pencil className="w-3.5 h-3.5 mr-1.5" /> Edit selected
+                </Button>
+                <Button size="sm" variant="outline" className="border-red-500/30 text-red-400 hover:bg-red-500/10" onClick={bulkDeleteSubscribers} data-testid="button-bulk-delete-subscribers">
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete selected
+                </Button>
+                <button onClick={() => setSelectedSubIds(new Set())} className="text-xs text-white/40 hover:text-white">Clear</button>
+              </div>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 bg-secondary/60 text-muted-foreground text-left select-none">
+                  <th className="px-3 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && filtered.every((s) => selectedSubIds.has(s.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedSubIds(new Set(filtered.map((s) => s.id)));
+                        else setSelectedSubIds(new Set());
+                      }}
+                      className="h-4 w-4"
+                      data-testid="checkbox-subscribers-select-all"
+                    />
+                  </th>
                   {(
                     [
                       { col: "email" as SubSortCol, label: "Email" },
@@ -849,8 +931,22 @@ function SubscribersTab() {
                   <tr
                     key={sub.id}
                     data-testid={`row-subscriber-${sub.id}`}
-                    className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}
+                    className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""} ${selectedSubIds.has(sub.id) ? "bg-primary/5" : ""}`}
                   >
+                    <td className="px-3 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selectedSubIds.has(sub.id)}
+                        onChange={(e) => {
+                          const next = new Set(selectedSubIds);
+                          if (e.target.checked) next.add(sub.id);
+                          else next.delete(sub.id);
+                          setSelectedSubIds(next);
+                        }}
+                        className="h-4 w-4"
+                        data-testid={`checkbox-subscriber-${sub.id}`}
+                      />
+                    </td>
                     <td className="px-4 py-3 font-medium text-white">
                       <a href={`mailto:${sub.email}`} className="hover:text-primary transition-colors">{sub.email}</a>
                     </td>
@@ -885,8 +981,57 @@ function SubscribersTab() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
+
+      {/* ── Bulk-edit modal — multi-select region/source on selected subscribers ── */}
+      <Dialog open={showBulkEditModal} onOpenChange={(o) => { setShowBulkEditModal(o); if (!o) { setBulkRegion(""); setBulkSource(""); } }}>
+        <DialogContent className="bg-secondary border-white/10 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit {selectedSubIds.size} subscriber{selectedSubIds.size !== 1 ? "s" : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-xs text-white/50">Leave a field blank to keep its current value. Pick "Clear this field" to set it to empty.</p>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Region</Label>
+              <Select value={bulkRegion} onValueChange={setBulkRegion}>
+                <SelectTrigger className="bg-black/40 border-white/10 h-10" data-testid="select-bulk-region">
+                  <SelectValue placeholder="— leave unchanged —" />
+                </SelectTrigger>
+                <SelectContent className="bg-secondary border-white/10 text-white">
+                  <SelectItem value="All">All</SelectItem>
+                  <SelectItem value="North NJ">North NJ</SelectItem>
+                  <SelectItem value="Central NJ">Central NJ</SelectItem>
+                  <SelectItem value="South NJ">South NJ</SelectItem>
+                  <SelectItem value="__clear__">Clear this field</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Source (referrer)</Label>
+              <Input
+                value={bulkSource === "__clear__" ? "" : bulkSource}
+                onChange={(e) => setBulkSource(e.target.value)}
+                placeholder="e.g. instagram-summer-campaign, world-cup-watch-parties, etc."
+                className="bg-black/40 border-white/10 h-10"
+                data-testid="input-bulk-source"
+              />
+              <div className="flex items-center gap-3 text-[11px] text-white/40">
+                <span>Leave blank to keep current.</span>
+                <button type="button" onClick={() => setBulkSource("__clear__")} className="text-primary hover:underline">Clear this field</button>
+                {bulkSource === "__clear__" && <span className="text-yellow-400">Will clear source for selected.</span>}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowBulkEditModal(false)} className="border-white/20 text-white/70">Cancel</Button>
+            <Button onClick={saveBulkEdit} disabled={bulkEditBusy} className="bg-primary hover:bg-primary/90" data-testid="button-save-bulk-edit">
+              {bulkEditBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : `Update ${selectedSubIds.size}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Import Modal ───────────────────────────────────── */}
       <Dialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) resetImportModal(); }}>

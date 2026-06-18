@@ -1768,6 +1768,39 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Bulk delete subscribers (multi-select).
+  app.post("/api/admin/subscribers/bulk-delete", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body as { ids?: unknown };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const deleted = await storage.bulkDeleteSubscribers(numIds);
+      res.json({ deleted });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Bulk-edit region and/or source on selected subscribers.
+  // Body: { ids: number[], region?: string | null, referrer?: string | null }
+  // Use null to clear a field, undefined / omit to leave unchanged.
+  app.post("/api/admin/subscribers/bulk-edit", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids, region, referrer } = req.body as { ids?: unknown; region?: string | null; referrer?: string | null };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      const numIds = ids.map((id) => Number(id)).filter((n) => Number.isInteger(n));
+      const fields: { region?: string | null; referrer?: string | null } = {};
+      if (region !== undefined) fields.region = region === null || region === "" ? null : String(region).trim();
+      if (referrer !== undefined) fields.referrer = referrer === null || referrer === "" ? null : String(referrer).trim();
+      if (Object.keys(fields).length === 0) return res.status(400).json({ message: "Provide at least one of region or referrer" });
+      const updated = await storage.bulkEditSubscribers(numIds, fields);
+      res.json({ updated });
+    } catch (err) {
+      console.error("[subscribers-bulk-edit] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.delete("/api/subscribers/:id", requireAuth(), async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string, 10);
