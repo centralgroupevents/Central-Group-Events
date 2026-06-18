@@ -1814,64 +1814,95 @@ function AnalyticsTab() {
         )}
       </div>
 
-      {/* Top Outbound Links table */}
-      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="font-bold text-white">Top Outbound Links</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Lifetime clicks per destination URL</p>
-          </div>
-          {!!data?.linkClicks?.length && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-white/20 text-white/70 h-8"
-              onClick={() => downloadCsv(
-                "outbound-links.csv",
-                ["URL", "Source Page", "Clicks"],
-                data.linkClicks.map((c) => [decodeURIComponent(c.url), c.sourcePage ?? "", c.count]),
+      {/* Top Outbound Links table — capped to top 15; CSV exports the full list */}
+      {(() => {
+        const TOP_LIMIT = 15;
+        const allClicks = data?.linkClicks ?? [];
+        const topClicks = allClicks.slice(0, TOP_LIMIT);
+        const overflow = Math.max(0, allClicks.length - TOP_LIMIT);
+        return (
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-white">Top 15 Outbound Links</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Lifetime clicks per destination URL · top {TOP_LIMIT} shown
+                </p>
+              </div>
+              {!!allClicks.length && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-white/20 text-white/70 h-8"
+                  onClick={() => downloadCsv(
+                    "outbound-links.csv",
+                    ["URL", "Source Page", "Clicks"],
+                    allClicks.map((c) => [decodeURIComponent(c.url), c.sourcePage ?? "", c.count]),
+                  )}
+                  data-testid="button-export-outbound-links"
+                >
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> CSV (all {allClicks.length})
+                </Button>
               )}
-              data-testid="button-export-outbound-links"
-            >
-              <Download className="w-3.5 h-3.5 mr-1.5" /> CSV
-            </Button>
-          )}
-        </div>
-        {isLoading ? (
-          <div className="p-6 space-y-3">
-            {[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+            {isLoading ? (
+              <div className="p-6 space-y-3">
+                {[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : !allClicks.length ? (
+              <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+                No outbound clicks yet. Clicks are tracked when readers click ticket links, blog post links, or page submission links.
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10 text-muted-foreground text-left">
+                        <th className="px-6 py-3 font-medium w-10">#</th>
+                        <th className="px-4 py-3 font-medium">URL</th>
+                        <th className="px-4 py-3 font-medium">Source Page</th>
+                        <th className="px-4 py-3 font-medium text-right">Clicks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topClicks.map((c, i) => (
+                        <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                          <td className="px-6 py-4 text-muted-foreground tabular-nums">{i + 1}</td>
+                          <td className="px-4 py-4 text-primary truncate max-w-xs">
+                            <a
+                              href={decodeURIComponent(c.url)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:underline"
+                              title={decodeURIComponent(c.url)}
+                            >
+                              {decodeURIComponent(c.url)}
+                            </a>
+                          </td>
+                          <td className="px-4 py-4 text-muted-foreground text-xs truncate max-w-[200px]">
+                            {c.sourcePage ? (
+                              <span title={c.sourcePage}>{c.sourcePage.replace(/^https?:\/\/[^/]+/, "")}</span>
+                            ) : "—"}
+                          </td>
+                          <td className="px-4 py-4 text-right text-white/80 font-medium tabular-nums">
+                            {c.count.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {overflow > 0 && (
+                  <div className="px-6 py-3 border-t border-white/10 text-[11px] text-muted-foreground text-center">
+                    + {overflow.toLocaleString()} more destination{overflow === 1 ? "" : "s"} not shown — export CSV for the full list
+                  </div>
+                )}
+              </>
+            )}
           </div>
-        ) : !data?.linkClicks?.length ? (
-          <div className="py-10 px-6 text-center text-muted-foreground text-sm">
-            No outbound clicks yet. Clicks are tracked when readers click links inside published posts.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/10 text-muted-foreground text-left">
-                  <th className="px-6 py-3 font-medium">URL</th>
-                  <th className="px-4 py-3 font-medium">Source Page</th>
-                  <th className="px-4 py-3 font-medium text-right">Clicks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.linkClicks.map((c, i) => (
-                  <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
-                    <td className="px-6 py-4 text-primary truncate max-w-xs">{decodeURIComponent(c.url)}</td>
-                    <td className="px-4 py-4 text-muted-foreground text-xs truncate max-w-[200px]">
-                      {c.sourcePage ? (
-                        <span title={c.sourcePage}>{c.sourcePage.replace(/^https?:\/\/[^/]+/, "")}</span>
-                      ) : "—"}
-                    </td>
-                    <td className="px-4 py-4 text-right text-white/80">{c.count.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* Member Sources table */}
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
