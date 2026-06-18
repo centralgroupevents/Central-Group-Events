@@ -3948,6 +3948,11 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
   const [submissionsEnabled, setSubmissionsEnabled] = useState(false);
   const [faqJson, setFaqJson] = useState("[]");
   const [saving, setSaving] = useState(false);
+  const [listingHeaderField, setListingHeaderField] = useState<string>("venueName");
+  // Hero upload + image-load tracking
+  const heroFileRef = useRef<HTMLInputElement>(null);
+  const [heroUploadBusy, setHeroUploadBusy] = useState(false);
+  const [heroImgError, setHeroImgError] = useState(false);
   // Auto-save tracking: lastSavedAt + dirty flag drive the silent debounced
   // save and the inline "Auto-saved Xpm" indicator next to the Save button.
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -3969,6 +3974,8 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
     setGateEnabled(page.gateEnabled);
     setSubmissionsEnabled(page.submissionsEnabled);
     setFaqJson(page.faqItems || "[]");
+    setListingHeaderField((page as any).listingHeaderField || "venueName");
+    setHeroImgError(false);
   }, [page]);
 
   async function save(opts: { silent?: boolean } = {}) {
@@ -3982,6 +3989,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
         heroImageUrl: heroImageUrl || null,
         heroImageAlt: heroImageAlt || "",
         ogImageUrl: ogImageUrl || null,
+        listingHeaderField,
         editorContent,
         indexable,
         published,
@@ -4003,7 +4011,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
 
   // Mark dirty when any saved field changes (excluding view-state like
   // `view` tab toggle and the auto-save status flags themselves).
-  useEffect(() => { setDirty(true); }, [title, metaTitle, metaDescription, heroImageUrl, heroImageAlt, ogImageUrl, editorContent, indexable, published, gateEnabled, submissionsEnabled, faqJson]);
+  useEffect(() => { setDirty(true); }, [title, metaTitle, metaDescription, heroImageUrl, heroImageAlt, ogImageUrl, editorContent, indexable, published, gateEnabled, submissionsEnabled, faqJson, listingHeaderField]);
 
   // Debounced silent auto-save every ~20s when there are unsaved changes.
   // Resets the timer on every keystroke so we save AFTER you stop typing.
@@ -4012,7 +4020,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
     const timer = setTimeout(() => { save({ silent: true }); }, 20000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, title, metaTitle, metaDescription, heroImageUrl, heroImageAlt, ogImageUrl, editorContent, indexable, published, gateEnabled, submissionsEnabled, faqJson]);
+  }, [dirty, title, metaTitle, metaDescription, heroImageUrl, heroImageAlt, ogImageUrl, editorContent, indexable, published, gateEnabled, submissionsEnabled, faqJson, listingHeaderField]);
 
   if (isLoading || !page) {
     return <div className="text-center py-12 text-white/50">Loading…</div>;
@@ -4139,14 +4147,53 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
             <h3 className="font-bold text-white text-sm uppercase tracking-wider">Hero image</h3>
             <div className="space-y-1">
               <Label className="text-xs text-white/70">URL</Label>
-              <Input value={heroImageUrl} onChange={(e) => setHeroImageUrl(e.target.value)} placeholder="Paste Cloudinary URL" className="bg-black/40 border-white/10 h-9 text-sm" data-testid="input-page-hero-url" />
+              <Input value={heroImageUrl} onChange={(e) => { setHeroImageUrl(e.target.value); setHeroImgError(false); }} placeholder="Paste any image URL" className="bg-black/40 border-white/10 h-9 text-sm" data-testid="input-page-hero-url" />
+              <div className="flex items-center gap-2">
+                <input ref={heroFileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setHeroUploadBusy(true);
+                  try {
+                    const form = new FormData();
+                    form.append("file", file);
+                    const res = await fetch("/api/upload", { method: "POST", body: form, credentials: "include" });
+                    if (!res.ok) throw new Error("Upload failed");
+                    const body = await res.json();
+                    setHeroImageUrl(body.url);
+                    setHeroImgError(false);
+                    toast({ title: "Uploaded" });
+                  } catch (err) {
+                    toast({ title: "Upload failed", description: String((err as Error).message), variant: "destructive" });
+                  } finally {
+                    setHeroUploadBusy(false);
+                    e.target.value = "";
+                  }
+                }} />
+                <Button size="sm" variant="outline" className="border-white/15 text-white/70 h-8 text-xs" disabled={heroUploadBusy} onClick={() => heroFileRef.current?.click()} data-testid="button-upload-hero">
+                  {heroUploadBusy ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Uploading…</> : <><Upload className="w-3 h-3 mr-1.5" />Upload file instead</>}
+                </Button>
+                <p className="text-[10px] text-white/40">Uploaded files go to Cloudinary and never break.</p>
+              </div>
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-white/70">Alt text {heroImageUrl && <span className="text-red-400">*</span>}</Label>
               <Input value={heroImageAlt} onChange={(e) => setHeroImageAlt(e.target.value)} placeholder="Describe what's in the image" className="bg-black/40 border-white/10 h-9 text-sm" data-testid="input-page-hero-alt" />
               <p className="text-[10px] text-white/40">For screen readers + image SEO. Be specific: "Crowd at MetLife Stadium watching World Cup match" beats "stadium".</p>
             </div>
-            {heroImageUrl && <img src={heroImageUrl} alt={heroImageAlt || ""} className="w-full rounded-lg border border-white/10" />}
+            {heroImageUrl && (
+              <>
+                <img
+                  src={heroImageUrl}
+                  alt={heroImageAlt || ""}
+                  className={`w-full rounded-lg border ${heroImgError ? "border-red-500/40" : "border-white/10"}`}
+                  onError={() => setHeroImgError(true)}
+                  onLoad={() => setHeroImgError(false)}
+                />
+                {heroImgError && (
+                  <p className="text-[11px] text-red-400">⚠ Browser couldn't load this URL — could be hot-link protection, CORS, or the host blocking direct embedding. Try "Upload file instead" above for guaranteed display.</p>
+                )}
+              </>
+            )}
           </div>
 
           <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-2">
@@ -4154,6 +4201,22 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
             <Input value={ogImageUrl} onChange={(e) => setOgImageUrl(e.target.value)} placeholder="Optional — defaults to hero" className="bg-black/40 border-white/10 h-9 text-sm" data-testid="input-page-og-image" />
             <p className="text-[10px] text-white/40">1200×630 image shown when someone shares this page on Twitter / iMessage / Slack. Defaults to the hero image, but a dedicated OG image usually crops better.</p>
             {ogImageUrl && <img src={ogImageUrl} alt="" className="w-full rounded-lg border border-white/10" />}
+          </div>
+
+          <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-3">
+            <h3 className="font-bold text-white text-sm uppercase tracking-wider">Listing card layout</h3>
+            <div className="space-y-1">
+              <Label className="text-xs text-white/70">Bigger font on each submission card</Label>
+              <Select value={listingHeaderField} onValueChange={setListingHeaderField}>
+                <SelectTrigger className="bg-black/40 border-white/10 h-9 text-sm" data-testid="select-listing-header-field"><SelectValue /></SelectTrigger>
+                <SelectContent className="bg-secondary border-white/10 text-white">
+                  <SelectItem value="venueName">Venue name (default)</SelectItem>
+                  <SelectItem value="eventName">Event name</SelectItem>
+                  <SelectItem value="eventDate">Event date</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-white/40">For a festival page where the event itself is the headline (e.g. "Juneteenth Celebration"), pick Event name. Other fields render smaller below.</p>
+            </div>
           </div>
 
           <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-4">

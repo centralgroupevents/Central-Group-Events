@@ -91,6 +91,11 @@ export const pages = pgTable("pages", {
   ogImageUrl: text("og_image_url"),
   // Public-render hit counter (incremented on each /api/landing-pages/:slug fetch).
   viewCount: integer("view_count").notNull().default(0),
+  // Controls which field on each submission card renders as the prominent
+  // big H3. Values: "venueName" (default) | "eventName" | "eventDate".
+  // Useful for pages where the EVENT is the headline (a festival named
+  // "Juneteenth Celebration" hosted at "City Hall Lawn") vs the VENUE.
+  listingHeaderField: text("listing_header_field").notNull().default("venueName"),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

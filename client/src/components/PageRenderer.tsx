@@ -31,6 +31,8 @@ interface LandingPage {
   published: boolean;
   faqItems: string;
   updatedAt: string | null;
+  /** Which submission field renders as the prominent H3. */
+  listingHeaderField?: "venueName" | "eventName" | "eventDate";
 }
 
 interface ApprovedSubmission {
@@ -189,15 +191,31 @@ export function PageRenderer({ slug }: Props) {
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <h2 className="text-2xl font-black mb-4">Approved listings</h2>
             <div className="space-y-3">
-              {visibleSubmissions.map((s) => (
+              {visibleSubmissions.map((s) => {
+                // Page admin chooses which field is the big H3; others render
+                // smaller below. Defaults to "venueName" for backwards-compat.
+                const headerField = page.listingHeaderField || "venueName";
+                const dateLabel = formatDateLoose(s.eventDate);
+                const headerText =
+                  headerField === "eventName" ? (s.eventName || s.venueName) :
+                  headerField === "eventDate" ? dateLabel :
+                  s.venueName;
+                // Render the other two fields as subline + meta-row, in a
+                // stable order so the card layout doesn't shift per row.
+                const showVenueLine = headerField !== "venueName";
+                const showEventLine = headerField !== "eventName" && !!s.eventName;
+                const showDateLine = headerField !== "eventDate";
+                return (
                 <div key={s.id} className="bg-secondary/30 border border-white/10 rounded-2xl p-5" data-testid={`page-submission-${s.id}`}>
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
-                    <h3 className="text-lg font-black text-white">{s.venueName}</h3>
-                    {s.eventName && <p className="text-sm text-white/60">— {s.eventName}</p>}
+                    <h3 className="text-lg font-black text-white">{headerText}</h3>
+                    {showEventLine && headerField === "venueName" && <p className="text-sm text-white/60">— {s.eventName}</p>}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70 mb-3">
+                    {showVenueLine && <span className="inline-flex items-center gap-1.5 text-white/80 font-semibold">{s.venueName}</span>}
+                    {showEventLine && headerField !== "venueName" && <span className="text-white/60">— {s.eventName}</span>}
                     <span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> {s.town}, NJ</span>
-                    <span className="text-white/50">{formatDateLoose(s.eventDate)}</span>
+                    {showDateLine && <span className="text-white/50">{dateLabel}</span>}
                   </div>
                   <div className="flex items-center gap-4 flex-wrap">
                     {s.instagramHandle && (
@@ -223,7 +241,8 @@ export function PageRenderer({ slug }: Props) {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
 
               {!hasAccess && hiddenCount > 0 && (
                 <div className="relative pt-6 mt-6 border-t border-white/10">
