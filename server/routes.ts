@@ -2813,46 +2813,11 @@ ${blogList || "_No recent posts yet._"}
 }
 
 async function seedDatabase() {
-  const existingEvents = await storage.getEvents();
-  if (existingEvents.length === 0) {
-    const seedEvents = [
-      {
-        title: "Summer Vibes Day Party",
-        description: "The hottest day party in Central NJ with live DJs and drinks.",
-        date: "2026-07-15",
-        region: "Central NJ",
-        imageUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        ticketLink: "https://example.com/tickets",
-      },
-      {
-        title: "Midnight R&B Lounge",
-        description: "Smooth R&B hits all night long.",
-        date: "2026-07-22",
-        region: "North NJ",
-        imageUrl: "https://images.unsplash.com/photo-1470229722913-7c090be5f5ae?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        ticketLink: "https://example.com/tickets",
-      },
-      {
-        title: "Beachfront Bash",
-        description: "Exclusive beachfront party to start the weekend right.",
-        date: "2026-07-29",
-        region: "South NJ",
-        imageUrl: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        ticketLink: "https://example.com/tickets",
-      },
-      {
-        title: "Techno Warehouse",
-        description: "Underground techno from 10PM to late.",
-        date: "2026-08-05",
-        region: "North NJ",
-        imageUrl: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        ticketLink: "https://example.com/tickets",
-      }
-    ];
-    for (const event of seedEvents) {
-      await storage.createEvent(event);
-    }
-  }
+  // No-op. This function used to re-insert 4 demo events ("Summer Vibes Day
+  // Party", "Midnight R&B Lounge", "Beachfront Bash", "Techno Warehouse")
+  // whenever the events table was empty. The user runs real data through
+  // CSV/XLSX imports; the demo entries just confused things every time a
+  // fresh DB instance booted (Replit Autoscale, prod DB reset, etc.).
 }
 
 async function seedRealEvents() {
