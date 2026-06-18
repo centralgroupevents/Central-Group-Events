@@ -1752,7 +1752,12 @@ ${blogList || "_No recent posts yet._"}
       console.log(`[subscriber-import] ${valid.length} rows passed validation, sending to storage`);
 
       const result = await storage.importSubscribers(
-        valid.map((r: any) => ({ email: r.email.trim().toLowerCase(), region: r.region || undefined }))
+        valid.map((r: any) => ({
+          email: r.email.trim().toLowerCase(),
+          name: typeof r.name === "string" && r.name.trim() ? r.name.trim() : undefined,
+          region: typeof r.region === "string" && r.region.trim() ? r.region.trim() : undefined,
+          referrer: typeof r.referrer === "string" && r.referrer.trim() ? r.referrer.trim() : undefined,
+        }))
       );
 
       console.log(`[subscriber-import] Result: ${result.imported} imported, ${result.skipped} skipped`);

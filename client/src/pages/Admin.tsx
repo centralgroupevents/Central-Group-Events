@@ -461,6 +461,14 @@ function SubscribersTab() {
   const [pasteText, setPasteText] = useState("");
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number; invalidFormat?: number } | null>(null);
+  // Column-mapping wizard (CSV path only — paste path doesn't have columns).
+  // After a file is parsed, headers + raw rows are set and the modal switches
+  // to "mapping" step. Required field is email; name + source are optional.
+  const [importStep, setImportStep] = useState<"input" | "mapping">("input");
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [importRows, setImportRows] = useState<string[][]>([]);
+  const [importMapping, setImportMapping] = useState<{ email: string; name: string; source: string }>({ email: "", name: "", source: "" });
+  const [importError, setImportError] = useState("");
 
   const { data: subscribers = [], isLoading } = useQuery<Subscriber[]>({
     queryKey: ["/api/admin/subscribers"],
@@ -565,92 +573,103 @@ function SubscribersTab() {
     URL.revokeObjectURL(url);
   }
 
-  async function parseCsvSubscriberFile(file: File) {
-    const text = await file.text();
-    const parsed = Papa.parse<Record<string, string>>(text, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: normalizeHeaderValue,
-    });
+  // Aliases for the subscribers import column-mapping wizard. Lowercased
+  // header names that match any alias auto-select that field on file upload.
+  const SUBSCRIBER_IMPORT_ALIASES: Record<"email" | "name" | "source", string[]> = {
+    email: ["email", "e-mail", "mail", "email address", "emailaddress"],
+    name: ["name", "full name", "fullname", "first name", "firstname", "subscriber", "subscriber name"],
+    source: ["source", "referrer", "referer", "ref", "campaign", "channel", "utm_source", "utm source"],
+  };
 
-    const headers = parsed.meta.fields ?? [];
-    const emailHeader = findEmailHeader(headers);
-    if (!emailHeader) {
-      throw new Error(`No email column found. Columns found: ${headers.join(", ") || "none"}`);
-    }
-
-    const rows: { email: string }[] = [];
-    let invalidCount = 0;
-    for (const row of parsed.data) {
-      const email = normalizeEmail(String(row[emailHeader] ?? ""));
-      if (email && EMAIL_REGEX.test(email)) {
-        rows.push({ email });
-      } else {
-        invalidCount++;
-      }
-    }
-
-    return { rows, invalidCount };
+  function autoMatchSubscriberColumn(headers: string[], key: "email" | "name" | "source"): string {
+    const aliases = SUBSCRIBER_IMPORT_ALIASES[key];
+    return headers.find((h) => aliases.some((a) => h.toLowerCase().trim() === a)) ||
+           headers.find((h) => aliases.some((a) => h.toLowerCase().trim().includes(a))) || "";
   }
 
-  async function parseXlsxSubscriberFile(file: File) {
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: "array" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const allRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
-    const rows = Array.isArray(allRows) ? allRows.filter((row) => Array.isArray(row) && row.some((cell) => String(cell).trim() !== "")) : [];
-
-    if (rows.length < 2) {
-      throw new Error("Spreadsheet appears to be empty or has only headers.");
+  // Parse a CSV/XLSX into raw {headers, rows[]} — no auto-detection. The
+  // mapping wizard then takes over.
+  async function parseSubscriberFileForMapping(file: File): Promise<{ headers: string[]; rows: string[][] }> {
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name) ||
+      file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.type === "application/vnd.ms-excel";
+    if (isExcel) {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const allRows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) as unknown[][];
+      const nonEmpty = allRows.filter((r) => Array.isArray(r) && r.some((c) => String(c).trim() !== ""));
+      if (nonEmpty.length < 2) throw new Error("Spreadsheet appears to be empty or has only headers.");
+      const headers = (nonEmpty[0] as unknown[]).map((c) => String(c ?? "").trim());
+      const rows = nonEmpty.slice(1).map((row) => (row as unknown[]).map((c) => String(c ?? "").trim()));
+      return { headers, rows };
     }
+    const text = await file.text();
+    const parsed = Papa.parse<string[]>(text, { header: false, skipEmptyLines: true });
+    const allRows = (parsed.data as string[][]).filter((r) => r.some((c) => String(c).trim() !== ""));
+    if (allRows.length < 2) throw new Error("CSV appears to be empty or has only headers.");
+    const headers = allRows[0].map((h) => String(h ?? "").trim());
+    const rows = allRows.slice(1).map((r) => r.map((c) => String(c ?? "").trim()));
+    return { headers, rows };
+  }
 
-    const headers = (rows[0] as unknown[]).map((cell) => normalizeHeaderValue(String(cell ?? "")));
-    const emailHeader = findEmailHeader(headers);
-    if (!emailHeader) {
-      throw new Error(`No email column found. Columns found: ${headers.join(", ") || "none"}`);
+  // Fired when the user picks a file. Parses headers + rows, sets up the
+  // initial column mapping using aliases, and switches the modal to the
+  // mapping step so the admin can confirm or adjust.
+  async function handleSubscriberFilePick(file: File) {
+    setImportError("");
+    setCsvFile(file);
+    try {
+      const { headers, rows } = await parseSubscriberFileForMapping(file);
+      setImportHeaders(headers);
+      setImportRows(rows);
+      setImportMapping({
+        email: autoMatchSubscriberColumn(headers, "email"),
+        name: autoMatchSubscriberColumn(headers, "name"),
+        source: autoMatchSubscriberColumn(headers, "source"),
+      });
+      setImportStep("mapping");
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Could not parse file.");
+      setCsvFile(null);
     }
-
-    const emailColumnIndex = headers.indexOf(emailHeader);
-    const parsedRows: { email: string }[] = [];
-    let invalidCount = 0;
-
-    for (const row of rows.slice(1)) {
-      const value = String((row as unknown[])[emailColumnIndex] ?? "");
-      const email = normalizeEmail(value);
-      if (email && EMAIL_REGEX.test(email)) {
-        parsedRows.push({ email });
-      } else {
-        invalidCount++;
-      }
-    }
-
-    return { rows: parsedRows, invalidCount };
   }
 
   async function handleImport() {
     setImporting(true);
     setImportResult(null);
     try {
-      let rows: Array<{ email: string }> = [];
+      let rows: Array<{ email: string; name?: string; referrer?: string }> = [];
       let invalidCount = 0;
 
-      if (importTab === "csv" && csvFile) {
-        const isExcel = /\.(xlsx|xls)$/i.test(csvFile.name) ||
-          csvFile.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-          csvFile.type === "application/vnd.ms-excel";
-
-        const parsed = isExcel
-          ? await parseXlsxSubscriberFile(csvFile)
-          : await parseCsvSubscriberFile(csvFile);
-
-        rows = parsed.rows;
-        invalidCount = parsed.invalidCount;
-      } else if (importTab === "paste") {
+      if (importTab === "csv") {
+        if (!importMapping.email) {
+          toast({ title: "Email column is required", description: "Pick which column contains the email.", variant: "destructive" });
+          setImporting(false);
+          return;
+        }
+        const emailIdx = importHeaders.indexOf(importMapping.email);
+        const nameIdx = importMapping.name ? importHeaders.indexOf(importMapping.name) : -1;
+        const sourceIdx = importMapping.source ? importHeaders.indexOf(importMapping.source) : -1;
+        for (const row of importRows) {
+          const email = normalizeEmail(String(row[emailIdx] ?? ""));
+          if (!email || !EMAIL_REGEX.test(email)) { invalidCount++; continue; }
+          const entry: { email: string; name?: string; referrer?: string } = { email };
+          if (nameIdx >= 0) {
+            const name = String(row[nameIdx] ?? "").trim();
+            if (name) entry.name = name;
+          }
+          if (sourceIdx >= 0) {
+            const source = String(row[sourceIdx] ?? "").trim();
+            if (source) entry.referrer = source;
+          }
+          rows.push(entry);
+        }
+      } else {
         const parsedRows = pasteText
           .split(/[\r\n,;]+/)
           .map((e) => normalizeEmail(e))
           .filter((e) => EMAIL_REGEX.test(e));
-
         rows = parsedRows.map((email) => ({ email }));
         invalidCount = pasteText
           .split(/[\r\n,;]+/)
@@ -669,11 +688,7 @@ function SubscribersTab() {
       setImportResult({ ...result, invalidFormat: invalidCount > 0 ? invalidCount : result.invalidFormat });
       qc.invalidateQueries({ queryKey: ["/api/admin/subscribers"] });
     } catch (err) {
-      if (err instanceof Error && err.message.startsWith("No email column found")) {
-        toast({ title: "CSV Error", description: err.message, variant: "destructive" });
-      } else {
-        toast({ title: "Import failed", description: "An error occurred during import.", variant: "destructive" });
-      }
+      toast({ title: "Import failed", description: err instanceof Error ? err.message : "An error occurred during import.", variant: "destructive" });
     } finally {
       setImporting(false);
     }
@@ -685,6 +700,11 @@ function SubscribersTab() {
     setPasteText("");
     setImportResult(null);
     setImporting(false);
+    setImportStep("input");
+    setImportHeaders([]);
+    setImportRows([]);
+    setImportMapping({ email: "", name: "", source: "" });
+    setImportError("");
   }
 
   return (
@@ -889,17 +909,51 @@ function SubscribersTab() {
           </div>
 
           {importTab === "csv" ? (
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">Upload a CSV or Excel file with an <code className="text-primary">email</code> column. Other columns are ignored.</p>
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls,text/csv"
-                data-testid="input-csv-file"
-                onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-white/70 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary/20 file:text-primary hover:file:bg-primary/30 cursor-pointer"
-              />
-              {csvFile && <p className="text-xs text-white/50">{csvFile.name}</p>}
-            </div>
+            importStep === "input" ? (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">Upload a CSV or Excel file. On the next step you'll map your columns to <code className="text-primary">email</code> (required), <code className="text-primary">name</code>, and <code className="text-primary">source</code>.</p>
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls,text/csv"
+                  data-testid="input-csv-file"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSubscriberFilePick(f); }}
+                  className="block w-full text-sm text-white/70 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary/20 file:text-primary hover:file:bg-primary/30 cursor-pointer"
+                />
+                {csvFile && <p className="text-xs text-white/50">{csvFile.name}</p>}
+                {importError && <p className="text-xs text-red-400">{importError}</p>}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">Map your file's columns. Required fields are marked <span className="text-red-400">*</span>.</p>
+                <div className="rounded-lg border border-white/10 overflow-hidden">
+                  <table className="text-sm w-full">
+                    <thead><tr className="bg-white/5 border-b border-white/10 text-muted-foreground text-left"><th className="px-3 py-2 font-medium w-1/2">CGE Field</th><th className="px-3 py-2 font-medium w-1/2">Your Column</th></tr></thead>
+                    <tbody>
+                      {([
+                        { key: "email", label: "Email", required: true },
+                        { key: "name", label: "Name", required: false },
+                        { key: "source", label: "Source", required: false },
+                      ] as const).map(({ key, label, required }) => (
+                        <tr key={key} className="border-b border-white/5">
+                          <td className="px-3 py-2 text-white/80">{label}{required && <span className="text-red-400 ml-1">*</span>}</td>
+                          <td className="px-3 py-2">
+                            <Select value={importMapping[key] || "__none__"} onValueChange={(v) => setImportMapping({ ...importMapping, [key]: v === "__none__" ? "" : v })}>
+                              <SelectTrigger className="h-8 bg-black/40 border-white/10 text-xs" data-testid={`select-subscriber-mapping-${key}`}><SelectValue placeholder="— skip —" /></SelectTrigger>
+                              <SelectContent className="bg-secondary border-white/10 text-white">
+                                <SelectItem value="__none__">— skip —</SelectItem>
+                                {importHeaders.filter((h) => h && h.trim().length > 0).map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[11px] text-white/40">{importRows.length} row{importRows.length !== 1 ? "s" : ""} ready to import. Invalid emails will be skipped.</p>
+                <button type="button" onClick={() => { setImportStep("input"); setCsvFile(null); }} className="text-xs text-white/50 hover:text-white/80">← Choose a different file</button>
+              </div>
+            )
           ) : (
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">Paste emails separated by newlines, commas, or semicolons.</p>
@@ -933,7 +987,12 @@ function SubscribersTab() {
             {!importResult && (
               <Button
                 onClick={handleImport}
-                disabled={importing || (importTab === "csv" ? !csvFile : !pasteText.trim())}
+                disabled={
+                  importing ||
+                  (importTab === "csv"
+                    ? (importStep !== "mapping" || !importMapping.email)
+                    : !pasteText.trim())
+                }
                 className="bg-primary hover:bg-primary/80"
                 data-testid="button-confirm-import"
               >

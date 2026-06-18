@@ -79,7 +79,7 @@ export interface IStorage {
   findSubscriberByEmail(email: string): Promise<Subscriber | null>;
   upsertSubscriber(email: string, referrer?: string, name?: string): Promise<{ subscriber: Subscriber; isNew: boolean }>;
 
-  importSubscribers(rows: Array<{ email: string; region?: string }>): Promise<{ imported: number; skipped: number }>;
+  importSubscribers(rows: Array<{ email: string; name?: string; region?: string; referrer?: string }>): Promise<{ imported: number; skipped: number }>;
   deleteSubscriber(id: number): Promise<void>;
 
   // Bookings
@@ -232,16 +232,22 @@ export class DatabaseStorage implements IStorage {
     return sub ?? null;
   }
 
-  async importSubscribers(rows: Array<{ email: string; region?: string }>): Promise<{ imported: number; skipped: number }> {
+  async importSubscribers(rows: Array<{ email: string; name?: string; region?: string; referrer?: string }>): Promise<{ imported: number; skipped: number }> {
     let imported = 0;
     let skipped = 0;
     for (const row of rows) {
       const email = row.email.trim().toLowerCase();
-      const name = email.split("@")[0] || email;
+      // Fallback name = email local-part if no explicit name provided in the import.
+      const name = row.name?.trim() || email.split("@")[0] || email;
       try {
         const result = await db
           .insert(newsletterSubscribers)
-          .values({ email, name, region: row.region || "All" })
+          .values({
+            email,
+            name,
+            region: row.region?.trim() || "All",
+            referrer: row.referrer?.trim() || null,
+          })
           .onConflictDoNothing()
           .returning();
         if (result.length > 0) {
