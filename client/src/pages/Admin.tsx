@@ -4851,10 +4851,13 @@ function PageSubmissionsView({ pageId, slug }: { pageId: number; slug: string })
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-white/70">Region override</Label>
-              <Select value={editForm.region} onValueChange={(v) => setEditForm({ ...editForm, region: v })}>
+              {/* Radix Select disallows empty-string values — use a sentinel
+                  "__auto__" for the "no override / auto-derive from town" choice
+                  and translate to empty string when reading the form value. */}
+              <Select value={editForm.region || "__auto__"} onValueChange={(v) => setEditForm({ ...editForm, region: v === "__auto__" ? "" : v })}>
                 <SelectTrigger className="bg-black/40 border-white/10 h-10"><SelectValue placeholder="Auto-derive from town" /></SelectTrigger>
                 <SelectContent className="bg-secondary border-white/10 text-white">
-                  <SelectItem value="">Auto-derive from town</SelectItem>
+                  <SelectItem value="__auto__">Auto-derive from town</SelectItem>
                   <SelectItem value="North NJ">North NJ</SelectItem>
                   <SelectItem value="Central NJ">Central NJ</SelectItem>
                   <SelectItem value="South NJ">South NJ</SelectItem>
