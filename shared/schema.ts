@@ -168,6 +168,32 @@ export const funnelEvents = pgTable("funnel_events", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// One row per (booking × kind). Idempotent backfill on every cron tick:
+// rows get created when a booking first becomes eligible (paid, not
+// cancelled, has a parseable eventDate), then flipped sent / failed /
+// skipped when the daily cron fires. Lets us survive double-pings and
+// gives the admin "Scheduled Emails" tab its data source.
+export const scheduledEmailSends = pgTable("scheduled_email_sends", {
+  id: serial("id").primaryKey(),
+  bookingId: integer("booking_id").notNull().references(() => promotionBookings.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), // "reminder_t4" | "feedback_t1"
+  scheduledFor: text("scheduled_for").notNull(), // YYYY-MM-DD (ET-anchored)
+  recipientEmail: text("recipient_email").notNull(),
+  status: text("status").notNull().default("pending"), // pending | sent | failed | skipped
+  sentAt: timestamp("sent_at"),
+  errorMessage: text("error_message"),
+  dryRun: boolean("dry_run").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Simple key/value settings table. Currently used for `cronDryRun`
+// (string "true"/"false"), but reusable for future runtime flags.
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const worldCupSubmissions = pgTable("world_cup_submissions", {
   id: serial("id").primaryKey(),
   weekIndex: integer("week_index").notNull(),
@@ -420,6 +446,9 @@ export type InsertLinkClick = z.infer<typeof insertLinkClickSchema>;
 
 export type FunnelEvent = typeof funnelEvents.$inferSelect;
 export type InsertFunnelEvent = z.infer<typeof insertFunnelEventSchema>;
+
+export type ScheduledEmailSend = typeof scheduledEmailSends.$inferSelect;
+export type AppSetting = typeof appSettings.$inferSelect;
 
 export type WorldCupSubmission = typeof worldCupSubmissions.$inferSelect;
 export type InsertWorldCupSubmission = z.infer<typeof insertWorldCupSubmissionSchema>;

@@ -261,6 +261,7 @@ const TABS = [
   { id: "blog", label: "Blog Posts", icon: BookOpen },
   { id: "pages", label: "Pages", icon: BookOpen },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
+  { id: "email-schedule", label: "Email Schedule", icon: Send },
   { id: "world-cup", label: "World Cup", icon: Star },
   { id: "nba-finals", label: "NBA Finals", icon: Star },
   { id: "team", label: "Team Members", icon: Users },
@@ -1648,6 +1649,163 @@ function BlogPostsTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/*  EMAIL SCHEDULE TAB                                        */
+/* ─────────────────────────────────────────────────────────── */
+type ScheduledEmailRow = {
+  id: number;
+  bookingId: number;
+  kind: string;
+  scheduledFor: string;
+  recipientEmail: string;
+  status: string;
+  sentAt: string | null;
+  errorMessage: string | null;
+  dryRun: boolean;
+  createdAt: string | null;
+};
+
+function EmailScheduleTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [filter, setFilter] = useState<"all" | "pending" | "sent" | "failed" | "skipped">("all");
+
+  const { data, isLoading } = useQuery<{ rows: ScheduledEmailRow[]; dryRun: boolean }>({
+    queryKey: ["/api/admin/scheduled-emails"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/scheduled-emails", { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  async function toggleDryRun(enabled: boolean) {
+    try {
+      const res = await apiRequest("POST", "/api/admin/scheduled-emails/dry-run", { enabled });
+      const json = await res.json();
+      toast({ title: json.dryRun ? "Dry-run ON — real recipients won't be emailed" : "Dry-run OFF — emails go to real recipients" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/scheduled-emails"] });
+    } catch (err) {
+      toast({ title: "Toggle failed", description: String((err as Error).message), variant: "destructive" });
+    }
+  }
+
+  const rows = (data?.rows ?? []).filter((r) => filter === "all" || r.status === filter);
+  const counts = {
+    pending: data?.rows.filter((r) => r.status === "pending").length ?? 0,
+    sent: data?.rows.filter((r) => r.status === "sent").length ?? 0,
+    failed: data?.rows.filter((r) => r.status === "failed").length ?? 0,
+    skipped: data?.rows.filter((r) => r.status === "skipped").length ?? 0,
+  };
+  const dryRun = data?.dryRun ?? true;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl p-6 space-y-3">
+        <h2 className="text-xl font-black">Scheduled emails for promotion bookings</h2>
+        <p className="text-sm text-muted-foreground">
+          A daily cron pings <code className="text-primary">/api/cron/scheduled-emails</code> at 9am ET. For every paid, non-cancelled booking it queues two emails:
+          a <strong>T-4 reminder</strong> to centralgroupevents@gmail.com + aagu1999@gmail.com, and a <strong>T+1 feedback</strong> email to the booker
+          with the <a className="text-primary underline" href="https://form.jotform.com/261385070354051" target="_blank" rel="noopener noreferrer">JotForm survey</a>.
+        </p>
+      </div>
+
+      <div className={`border rounded-2xl p-5 ${dryRun ? "bg-amber-500/10 border-amber-500/30" : "bg-green-500/10 border-green-500/30"}`}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className={`text-sm font-bold mb-1 ${dryRun ? "text-amber-300" : "text-green-300"}`}>
+              {dryRun ? "DRY RUN MODE — safe to test" : "LIVE MODE — real customers will be emailed"}
+            </p>
+            <p className="text-xs text-white/70 max-w-xl">
+              {dryRun
+                ? "Every queued email is rewritten to send to centralgroupevents@gmail.com with [TEST] in the subject. No real recipients are hit. Flip OFF only when you've verified the copy and timing look right."
+                : "Real emails are going to real inboxes on the cron's schedule. Flip back to dry-run any time."}
+            </p>
+          </div>
+          <Button
+            onClick={() => toggleDryRun(!dryRun)}
+            className={dryRun ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}
+            data-testid="button-toggle-dry-run"
+          >
+            {dryRun ? "Go LIVE →" : "Switch back to dry-run"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3">
+        {(["pending", "sent", "failed", "skipped"] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setFilter(filter === s ? "all" : s)}
+            className={`bg-secondary/30 border rounded-xl p-4 text-left transition-colors ${filter === s ? "border-primary" : "border-white/10 hover:border-white/30"}`}
+            data-testid={`filter-${s}`}
+          >
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{s}</p>
+            <p className="text-2xl font-black">{counts[s]}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-3 border-b border-white/10 flex items-center justify-between gap-3">
+          <p className="text-sm text-white/70">{rows.length} row{rows.length === 1 ? "" : "s"}{filter !== "all" ? ` (${filter})` : ""}</p>
+          {filter !== "all" && (
+            <Button size="sm" variant="outline" className="border-white/20 text-white/70 h-7" onClick={() => setFilter("all")}>Clear filter</Button>
+          )}
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+            No scheduled email rows yet. The first cron tick after a paid booking is created will backfill them.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left">
+                  <th className="px-4 py-2 font-medium">Booking</th>
+                  <th className="px-4 py-2 font-medium">Kind</th>
+                  <th className="px-4 py-2 font-medium">Scheduled for</th>
+                  <th className="px-4 py-2 font-medium">Recipient</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium">Sent at</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-white/5">
+                    <td className="px-4 py-3 text-white/80 tabular-nums">#{r.bookingId}</td>
+                    <td className="px-4 py-3 text-white/80">
+                      {r.kind === "reminder_t4" ? "T-4 reminder" : r.kind === "feedback_t1" ? "T+1 feedback" : r.kind}
+                    </td>
+                    <td className="px-4 py-3 text-white/70 tabular-nums">{r.scheduledFor}</td>
+                    <td className="px-4 py-3 text-white/60 text-xs truncate max-w-[240px]" title={r.recipientEmail}>{r.recipientEmail}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                        r.status === "sent" ? "bg-green-500/15 text-green-400" :
+                        r.status === "failed" ? "bg-red-500/15 text-red-400" :
+                        r.status === "skipped" ? "bg-white/10 text-white/60" :
+                        "bg-amber-500/15 text-amber-300"
+                      }`}>
+                        {r.status}{r.dryRun && r.status === "sent" ? " (dry)" : ""}
+                      </span>
+                      {r.errorMessage && <p className="text-[10px] text-red-400 mt-1 max-w-[200px] truncate" title={r.errorMessage}>{r.errorMessage}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-white/60 text-xs">
+                      {r.sentAt ? new Date(r.sentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -6819,6 +6977,7 @@ export default function Admin() {
         {activeTab === "blog" && <BlogPostsTab />}
         {activeTab === "this-week" && <ThisWeekTab />}
         {activeTab === "analytics" && <AnalyticsTab />}
+        {activeTab === "email-schedule" && <EmailScheduleTab />}
         {activeTab === "world-cup" && <WorldCupTab />}
         {activeTab === "nba-finals" && <NbaFinalsTab />}
         {activeTab === "pages" && <PagesTab />}

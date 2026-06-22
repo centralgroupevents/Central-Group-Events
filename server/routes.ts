@@ -2151,6 +2151,161 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // ── Scheduled emails (T-4 reminder + T+1 feedback) ──────────────────────
+  // Returns today's date in America/New_York as YYYY-MM-DD. The cron fires
+  // at 9am ET via cron-job.org, so "today in ET" is the correct frame for
+  // both backfill (scheduledFor calc) and pending lookup.
+  function todayInET(): string {
+    const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+    return fmt.format(new Date()); // en-CA gives YYYY-MM-DD
+  }
+  // Add `days` to a YYYY-MM-DD string and return YYYY-MM-DD. Anchored to
+  // UTC noon so daylight-savings transitions never roll into an adjacent day.
+  function shiftIsoDate(iso: string, days: number): string {
+    const [y, m, d] = iso.split("-").map(Number);
+    const ms = Date.UTC(y, m - 1, d, 12) + days * 86_400_000;
+    const dt = new Date(ms);
+    return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+  }
+
+  const INTERNAL_REMINDER_RECIPIENTS = ["centralgroupevents@gmail.com", "aagu1999@gmail.com"];
+  const FEEDBACK_FORM_URL = "https://form.jotform.com/261385070354051";
+
+  function buildReminderEmail(b: any): { subject: string; html: string } {
+    const subject = `Booking heads-up: ${b.eventName || b.venueName} in 4 days`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #0a0a0a; color: #fff; border-radius: 12px;">
+        <p style="color:#8B2FC9;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:bold;margin:0 0 6px">T-4 heads-up</p>
+        <h2 style="margin:0 0 16px;font-size:22px">${escapeHtml(b.eventName || b.venueName)} is in 4 days</h2>
+        <table style="width:100%;font-size:14px;color:#ddd;line-height:1.7">
+          <tr><td style="color:#888;width:120px">Event</td><td>${escapeHtml(b.eventName || "—")}</td></tr>
+          <tr><td style="color:#888">Venue</td><td>${escapeHtml(b.venueName)}</td></tr>
+          <tr><td style="color:#888">Where</td><td>${escapeHtml([b.city, b.region].filter(Boolean).join(", "))}</td></tr>
+          <tr><td style="color:#888">Date / time</td><td>${escapeHtml(b.eventDate)}${b.eventTime ? " · " + escapeHtml(b.eventTime) : ""}</td></tr>
+          <tr><td style="color:#888">Booker</td><td>${escapeHtml(b.contactName || "—")}</td></tr>
+          <tr><td style="color:#888">Email</td><td>${escapeHtml(b.email)}</td></tr>
+          <tr><td style="color:#888">Phone</td><td>${escapeHtml(b.phone || "—")}</td></tr>
+          <tr><td style="color:#888">Package</td><td>${escapeHtml(b.mode || "—")}</td></tr>
+          <tr><td style="color:#888">Status</td><td>${escapeHtml(b.status || "—")}</td></tr>
+          ${b.instagramHandle ? `<tr><td style="color:#888">IG</td><td>@${escapeHtml(b.instagramHandle.replace(/^@/, ""))}</td></tr>` : ""}
+        </table>
+        <p style="margin-top:24px;color:#aaa;font-size:13px">Time to schedule the social posts, queue the newsletter slot, and send any final assets.</p>
+      </div>`;
+    return { subject, html };
+  }
+
+  function buildFeedbackEmail(b: any): { subject: string; html: string } {
+    const subject = `How did ${b.eventName || b.venueName} go?`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #0a0a0a; color: #fff; border-radius: 12px;">
+        <h2 style="margin:0 0 14px;font-size:22px">How did ${escapeHtml(b.eventName || b.venueName)} go?</h2>
+        <p style="color:#ccc;line-height:1.6;margin:0 0 18px">
+          Hi ${escapeHtml(b.contactName || "there")},<br/><br/>
+          Hope <strong>${escapeHtml(b.eventName || b.venueName)}</strong> at ${escapeHtml(b.venueName)} went well yesterday! We'd love a quick 2-minute rundown — what worked, what could've been better, anything you'd want us to do differently next time.
+        </p>
+        <p style="text-align:center;margin:28px 0">
+          <a href="${FEEDBACK_FORM_URL}" style="display:inline-block;padding:14px 28px;background:#8B2FC9;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Share your feedback →</a>
+        </p>
+        <p style="color:#aaa;font-size:13px;margin-top:24px">Thanks for trusting Central Group Events with your event.<br/>— The CGE Team</p>
+      </div>`;
+    return { subject, html };
+  }
+
+  // Public, secret-protected. Pinged daily at 9am ET by cron-job.org.
+  app.get("/api/cron/scheduled-emails", async (req: Request, res: Response) => {
+    try {
+      const secret = (req.query.secret as string) || "";
+      if (!process.env.CRON_SECRET) {
+        return res.status(500).json({ message: "CRON_SECRET not configured" });
+      }
+      if (secret !== process.env.CRON_SECRET) return res.status(401).json({ message: "Unauthorized" });
+
+      const today = todayInET();
+      const dryRunSetting = await storage.getSetting("cronDryRun");
+      const dryRun = dryRunSetting !== "false"; // default ON until admin explicitly disables
+
+      // 1. Backfill rows for every eligible booking (paid + not cancelled +
+      //    parseable eventDate). Idempotent — skips if a row already exists.
+      const allBookings = await storage.getBookings();
+      let backfilled = 0;
+      for (const b of allBookings) {
+        if (!b.paidAt) continue; // only paid bookings
+        if (b.status && b.status.toLowerCase() === "cancelled") continue;
+        const iso = parseFlexibleWcDate(b.eventDate);
+        if (!iso) continue;
+        const t4 = shiftIsoDate(iso, -4);
+        const t1 = shiftIsoDate(iso, 1);
+        await storage.ensureScheduledEmailRows(b.id, "reminder_t4", t4, INTERNAL_REMINDER_RECIPIENTS.join(","));
+        await storage.ensureScheduledEmailRows(b.id, "feedback_t1", t1, b.email);
+        backfilled++;
+      }
+
+      // 2. Send everything pending with scheduledFor <= today.
+      const pending = await storage.listPendingScheduledEmails(today);
+      let sent = 0, failed = 0, skipped = 0;
+      for (const row of pending) {
+        const booking = allBookings.find((b) => b.id === row.bookingId);
+        if (!booking) {
+          await storage.markScheduledEmailSent(row.id, "skipped", { error: "booking not found", dryRun });
+          skipped++;
+          continue;
+        }
+        if (booking.status && booking.status.toLowerCase() === "cancelled") {
+          await storage.markScheduledEmailSent(row.id, "skipped", { error: "booking cancelled", dryRun });
+          skipped++;
+          continue;
+        }
+        const tpl = row.kind === "reminder_t4" ? buildReminderEmail(booking) : buildFeedbackEmail(booking);
+        const subject = dryRun ? `[TEST] ${tpl.subject}` : tpl.subject;
+        const to = dryRun ? "centralgroupevents@gmail.com" : row.recipientEmail;
+        try {
+          await transporter.sendMail({
+            from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+            to,
+            subject,
+            html: dryRun
+              ? `<div style="background:#fff3cd;border:1px solid #ffeaa7;padding:12px;margin-bottom:16px;color:#5b4a00;font-family:Arial,sans-serif;font-size:13px"><strong>[DRY RUN]</strong> Would have sent this to: <code>${escapeHtml(row.recipientEmail)}</code> for booking #${row.bookingId} (${row.kind}).</div>${tpl.html}`
+              : tpl.html,
+          });
+          await storage.markScheduledEmailSent(row.id, "sent", { dryRun });
+          sent++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message.slice(0, 500) : "unknown";
+          await storage.markScheduledEmailSent(row.id, "failed", { error: msg, dryRun });
+          failed++;
+        }
+      }
+
+      res.json({ today, dryRun, backfilled, sent, failed, skipped, pendingProcessed: pending.length });
+    } catch (err) {
+      console.error("[cron/scheduled-emails] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: list all scheduled email rows (for the new Scheduled Emails tab).
+  app.get("/api/admin/scheduled-emails", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const rows = await storage.listAllScheduledEmails(500);
+      const dryRun = (await storage.getSetting("cronDryRun")) !== "false";
+      res.json({ rows, dryRun });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: flip the dry-run toggle.
+  app.post("/api/admin/scheduled-emails/dry-run", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { enabled } = req.body as { enabled?: boolean };
+      if (typeof enabled !== "boolean") return res.status(400).json({ message: "enabled must be boolean" });
+      await storage.setSetting("cronDryRun", enabled ? "true" : "false");
+      res.json({ dryRun: enabled });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── World Cup watch party submissions ────────────────────────────────────
   app.post("/api/world-cup-submissions", formLimiter, async (req: Request, res: Response) => {
     try {

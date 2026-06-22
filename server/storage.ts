@@ -9,6 +9,8 @@ import {
   postViews,
   linkClicks,
   funnelEvents,
+  scheduledEmailSends,
+  appSettings,
   worldCupSubmissions,
   nbaFinalsSubmissions,
   landingPageSubmissions,
@@ -152,6 +154,15 @@ export interface IStorage {
 
   // Funnel tracking
   recordFunnelStep(step: string, sessionId?: string, metadata?: string): Promise<void>;
+
+  // Scheduled emails (T-4 reminder + T+1 feedback per promotion booking)
+  ensureScheduledEmailRows(bookingId: number, kind: string, scheduledFor: string, recipientEmail: string): Promise<void>;
+  listPendingScheduledEmails(asOfDate: string): Promise<Array<{ id: number; bookingId: number; kind: string; scheduledFor: string; recipientEmail: string }>>;
+  markScheduledEmailSent(id: number, status: "sent" | "failed" | "skipped", opts?: { error?: string; dryRun?: boolean }): Promise<void>;
+  listAllScheduledEmails(limit?: number): Promise<Array<{ id: number; bookingId: number; kind: string; scheduledFor: string; recipientEmail: string; status: string; sentAt: Date | null; errorMessage: string | null; dryRun: boolean; createdAt: Date | null }>>;
+  // App settings (key/value, used for cron dry-run flag)
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
 
   // World Cup watch party submissions
   createWorldCupSubmission(data: InsertWorldCupSubmission): Promise<WorldCupSubmission>;
@@ -790,6 +801,80 @@ export class DatabaseStorage implements IStorage {
       sessionId: sessionId ?? null,
       metadata: metadata ?? null,
     });
+  }
+
+  // ── Scheduled email sends ─────────────────────────────────────────────
+  // Idempotent: dedupes on (bookingId, kind). Repeated cron ticks won't
+  // insert dup rows even if a backfill loop happens to run twice.
+  async ensureScheduledEmailRows(bookingId: number, kind: string, scheduledFor: string, recipientEmail: string): Promise<void> {
+    const existing = await db
+      .select({ id: scheduledEmailSends.id })
+      .from(scheduledEmailSends)
+      .where(and(eq(scheduledEmailSends.bookingId, bookingId), eq(scheduledEmailSends.kind, kind)))
+      .limit(1);
+    if (existing.length > 0) return;
+    await db.insert(scheduledEmailSends).values({ bookingId, kind, scheduledFor, recipientEmail });
+  }
+
+  async listPendingScheduledEmails(asOfDate: string) {
+    const rows = await db
+      .select({
+        id: scheduledEmailSends.id,
+        bookingId: scheduledEmailSends.bookingId,
+        kind: scheduledEmailSends.kind,
+        scheduledFor: scheduledEmailSends.scheduledFor,
+        recipientEmail: scheduledEmailSends.recipientEmail,
+      })
+      .from(scheduledEmailSends)
+      .where(and(eq(scheduledEmailSends.status, "pending"), sql`${scheduledEmailSends.scheduledFor} <= ${asOfDate}`))
+      .orderBy(scheduledEmailSends.scheduledFor);
+    return rows;
+  }
+
+  async markScheduledEmailSent(id: number, status: "sent" | "failed" | "skipped", opts?: { error?: string; dryRun?: boolean }): Promise<void> {
+    await db
+      .update(scheduledEmailSends)
+      .set({
+        status,
+        sentAt: status === "sent" ? new Date() : null,
+        errorMessage: opts?.error ?? null,
+        dryRun: opts?.dryRun ?? false,
+      })
+      .where(eq(scheduledEmailSends.id, id));
+  }
+
+  async listAllScheduledEmails(limit: number = 500) {
+    return await db
+      .select({
+        id: scheduledEmailSends.id,
+        bookingId: scheduledEmailSends.bookingId,
+        kind: scheduledEmailSends.kind,
+        scheduledFor: scheduledEmailSends.scheduledFor,
+        recipientEmail: scheduledEmailSends.recipientEmail,
+        status: scheduledEmailSends.status,
+        sentAt: scheduledEmailSends.sentAt,
+        errorMessage: scheduledEmailSends.errorMessage,
+        dryRun: scheduledEmailSends.dryRun,
+        createdAt: scheduledEmailSends.createdAt,
+      })
+      .from(scheduledEmailSends)
+      .orderBy(desc(scheduledEmailSends.scheduledFor), desc(scheduledEmailSends.id))
+      .limit(limit);
+  }
+
+  // ── App settings (key/value) ──────────────────────────────────────────
+  async getSetting(key: string): Promise<string | null> {
+    const [row] = await db.select({ value: appSettings.value }).from(appSettings).where(eq(appSettings.key, key)).limit(1);
+    return row?.value ?? null;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    const existing = await this.getSetting(key);
+    if (existing === null) {
+      await db.insert(appSettings).values({ key, value });
+    } else {
+      await db.update(appSettings).set({ value, updatedAt: new Date() }).where(eq(appSettings.key, key));
+    }
   }
 
   // ── World Cup watch party submissions ─────────────────────────────────
