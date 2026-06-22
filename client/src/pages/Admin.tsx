@@ -1917,6 +1917,93 @@ function PagesFunnelCard() {
   );
 }
 
+type EmailBlastRow = {
+  id: number;
+  kind: string;
+  subject: string;
+  pageSlug: string | null;
+  recipientCount: number;
+  sentAt: string | null;
+  opens: number;
+  uniqueOpens: number;
+  clicks: number;
+  uniqueClicks: number;
+};
+
+function EmailBlastMetricsCard() {
+  const { data, isLoading } = useQuery<EmailBlastRow[]>({
+    queryKey: ["/api/admin/email-blasts"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/email-blasts", { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  const rows = data ?? [];
+
+  return (
+    <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="px-6 py-4 border-b border-white/10">
+        <h3 className="font-bold text-white">Email Blast Performance</h3>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Open rate uses a 1×1 tracking pixel (some clients like Gmail proxy images — opens are directional, not exact).
+          Clicks are accurate: every link in the email is rewritten through a redirect that records the destination.
+          Only blasts sent after this feature shipped will appear.
+        </p>
+      </div>
+      {isLoading ? (
+        <div className="p-6 space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+      ) : rows.length === 0 ? (
+        <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+          No tracked blasts yet. Send a newsletter or page email-blast to start seeing metrics here.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-muted-foreground text-left text-xs uppercase tracking-wider">
+                <th className="px-6 py-3 font-medium">Subject</th>
+                <th className="px-4 py-3 font-medium">Kind</th>
+                <th className="px-4 py-3 font-medium">Sent</th>
+                <th className="px-4 py-3 font-medium text-right">Recipients</th>
+                <th className="px-4 py-3 font-medium text-right">Opens</th>
+                <th className="px-4 py-3 font-medium text-right">Open %</th>
+                <th className="px-4 py-3 font-medium text-right">Clicks</th>
+                <th className="px-4 py-3 font-medium text-right">Click %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={r.id} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                  <td className="px-6 py-3 text-white/90 max-w-xs truncate" title={r.subject}>{r.subject}</td>
+                  <td className="px-4 py-3 text-white/60 text-xs">
+                    {r.kind === "newsletter" ? "Newsletter" : r.kind === "page-blast" ? `Page · ${r.pageSlug}` : r.kind}
+                  </td>
+                  <td className="px-4 py-3 text-white/60 text-xs whitespace-nowrap">
+                    {r.sentAt ? new Date(r.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right text-white/80 tabular-nums">{r.recipientCount.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-white/80 tabular-nums">
+                    {r.uniqueOpens.toLocaleString()}
+                    <span className="text-white/40 text-[10px] block">{r.opens !== r.uniqueOpens ? `${r.opens} total` : ""}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right text-white/60 text-xs tabular-nums">{pct(r.uniqueOpens, r.recipientCount)}</td>
+                  <td className="px-4 py-3 text-right text-white/80 tabular-nums">
+                    {r.uniqueClicks.toLocaleString()}
+                    <span className="text-white/40 text-[10px] block">{r.clicks !== r.uniqueClicks ? `${r.clicks} total` : ""}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right text-white/60 text-xs tabular-nums">{pct(r.uniqueClicks, r.recipientCount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnalyticsTab() {
   const [rangeDays, setRangeDays] = useState<number | null>(30);
   const { data, isLoading } = useQuery<AnalyticsData>({
@@ -2270,6 +2357,9 @@ function AnalyticsTab() {
 
       {/* ─── Per-page funnel (Pages CMS) ─── */}
       <PagesFunnelCard />
+
+      {/* ─── Email blast metrics ─── */}
+      <EmailBlastMetricsCard />
 
       {/* ─── Event Performance ─── */}
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">

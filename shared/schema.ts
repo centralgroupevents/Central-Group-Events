@@ -200,6 +200,31 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// One row per email blast we send. `kind` distinguishes the all-subscriber
+// newsletter from a per-page submitter blast; `pageSlug` is set for the
+// latter so we can filter by page in admin.
+export const emailBlasts = pgTable("email_blasts", {
+  id: serial("id").primaryKey(),
+  kind: text("kind").notNull(), // "newsletter" | "page-blast"
+  subject: text("subject").notNull(),
+  recipientCount: integer("recipient_count").notNull().default(0),
+  pageSlug: text("page_slug"),
+  sentAt: timestamp("sent_at").defaultNow(),
+});
+
+// One row per recorded event (open / click) for a blast. Per (blast,
+// recipient, eventType) we keep all occurrences — open counts go up if
+// the recipient previews + opens, click rows include the URL so we can
+// show top destinations.
+export const emailBlastEvents = pgTable("email_blast_events", {
+  id: serial("id").primaryKey(),
+  blastId: integer("blast_id").notNull().references(() => emailBlasts.id, { onDelete: "cascade" }),
+  recipientEmail: text("recipient_email").notNull(),
+  eventType: text("event_type").notNull(), // "open" | "click"
+  url: text("url"), // null for opens, the destination URL for clicks
+  ts: timestamp("ts").defaultNow(),
+});
+
 export const worldCupSubmissions = pgTable("world_cup_submissions", {
   id: serial("id").primaryKey(),
   weekIndex: integer("week_index").notNull(),
@@ -457,6 +482,8 @@ export type InsertFunnelEvent = z.infer<typeof insertFunnelEventSchema>;
 
 export type ScheduledEmailSend = typeof scheduledEmailSends.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
+export type EmailBlast = typeof emailBlasts.$inferSelect;
+export type EmailBlastEvent = typeof emailBlastEvents.$inferSelect;
 
 export type WorldCupSubmission = typeof worldCupSubmissions.$inferSelect;
 export type InsertWorldCupSubmission = z.infer<typeof insertWorldCupSubmissionSchema>;

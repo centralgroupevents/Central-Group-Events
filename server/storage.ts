@@ -11,6 +11,8 @@ import {
   funnelEvents,
   scheduledEmailSends,
   appSettings,
+  emailBlasts,
+  emailBlastEvents,
   worldCupSubmissions,
   nbaFinalsSubmissions,
   landingPageSubmissions,
@@ -163,6 +165,22 @@ export interface IStorage {
   // App settings (key/value, used for cron dry-run flag)
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+
+  // Email blast tracking — opens + clicks
+  createEmailBlast(kind: string, subject: string, recipientCount: number, pageSlug?: string | null): Promise<number>;
+  recordEmailBlastEvent(blastId: number, recipientEmail: string, eventType: "open" | "click", url?: string | null): Promise<void>;
+  listEmailBlastsWithStats(): Promise<Array<{
+    id: number;
+    kind: string;
+    subject: string;
+    pageSlug: string | null;
+    recipientCount: number;
+    sentAt: Date | null;
+    opens: number;
+    uniqueOpens: number;
+    clicks: number;
+    uniqueClicks: number;
+  }>>;
 
   // World Cup watch party submissions
   createWorldCupSubmission(data: InsertWorldCupSubmission): Promise<WorldCupSubmission>;
@@ -888,6 +906,60 @@ export class DatabaseStorage implements IStorage {
     } else {
       await db.update(appSettings).set({ value, updatedAt: new Date() }).where(eq(appSettings.key, key));
     }
+  }
+
+  // ── Email blast tracking ──────────────────────────────────────────────
+  async createEmailBlast(kind: string, subject: string, recipientCount: number, pageSlug?: string | null): Promise<number> {
+    const [row] = await db
+      .insert(emailBlasts)
+      .values({ kind, subject: subject.slice(0, 500), recipientCount, pageSlug: pageSlug ?? null })
+      .returning({ id: emailBlasts.id });
+    return row.id;
+  }
+
+  async recordEmailBlastEvent(blastId: number, recipientEmail: string, eventType: "open" | "click", url?: string | null): Promise<void> {
+    await db.insert(emailBlastEvents).values({
+      blastId,
+      recipientEmail: recipientEmail.slice(0, 320),
+      eventType,
+      url: url ? url.slice(0, 2000) : null,
+    });
+  }
+
+  async listEmailBlastsWithStats() {
+    const blasts = await db
+      .select({
+        id: emailBlasts.id,
+        kind: emailBlasts.kind,
+        subject: emailBlasts.subject,
+        pageSlug: emailBlasts.pageSlug,
+        recipientCount: emailBlasts.recipientCount,
+        sentAt: emailBlasts.sentAt,
+      })
+      .from(emailBlasts)
+      .orderBy(desc(emailBlasts.sentAt));
+
+    const stats = await db
+      .select({
+        blastId: emailBlastEvents.blastId,
+        eventType: emailBlastEvents.eventType,
+        total: count(),
+        unique: sql<number>`COUNT(DISTINCT ${emailBlastEvents.recipientEmail})`,
+      })
+      .from(emailBlastEvents)
+      .groupBy(emailBlastEvents.blastId, emailBlastEvents.eventType);
+
+    return blasts.map((b) => {
+      const openRow = stats.find((s) => s.blastId === b.id && s.eventType === "open");
+      const clickRow = stats.find((s) => s.blastId === b.id && s.eventType === "click");
+      return {
+        ...b,
+        opens: openRow ? Number(openRow.total) : 0,
+        uniqueOpens: openRow ? Number(openRow.unique) : 0,
+        clicks: clickRow ? Number(clickRow.total) : 0,
+        uniqueClicks: clickRow ? Number(clickRow.unique) : 0,
+      };
+    });
   }
 
   // ── World Cup watch party submissions ─────────────────────────────────

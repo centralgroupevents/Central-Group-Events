@@ -48,6 +48,40 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
+// ── Email blast tracking helpers ──────────────────────────────────────
+// Public site URL — used in the tracking pixel + click-redirect URLs we
+// embed in outbound emails. Falls back to prod hostname.
+function emailTrackingBase(): string {
+  return process.env.PUBLIC_SITE_URL || "https://centralgroupevents.com";
+}
+function encodeRecipient(email: string): string {
+  return Buffer.from(email).toString("base64url");
+}
+function decodeRecipient(b64: string): string {
+  try { return Buffer.from(b64, "base64url").toString("utf8"); } catch { return ""; }
+}
+// Append a 1x1 transparent tracking pixel to outbound email HTML. Fires
+// a GET on render, which we log as an "open" event. Note: some clients
+// (Gmail) proxy images, so the IP isn't a real visitor — opens are
+// still useful as a directional metric but never exact.
+function appendTrackingPixel(html: string, blastId: number, email: string): string {
+  const r = encodeRecipient(email);
+  const tag = `<img src="${emailTrackingBase()}/api/email/track/open?b=${blastId}&r=${r}" width="1" height="1" alt="" style="display:block;border:0;outline:none;text-decoration:none;height:1px;width:1px" />`;
+  return html.includes("</body>") ? html.replace("</body>", `${tag}</body>`) : `${html}${tag}`;
+}
+// Rewrite every absolute http(s) href in the email through our click
+// redirect, so we get a "click" event with the destination URL when
+// recipients tap a link. Skips our own tracker URLs so we don't double-wrap.
+function wrapEmailLinks(html: string, blastId: number, email: string): string {
+  const r = encodeRecipient(email);
+  const base = emailTrackingBase();
+  return html.replace(/href="(https?:\/\/[^"]+)"/gi, (match, url) => {
+    if (url.includes("/api/email/track/")) return match;
+    const tracked = `${base}/api/email/track/click?b=${blastId}&r=${r}&u=${encodeURIComponent(url)}`;
+    return `href="${tracked}"`;
+  });
+}
+
 // Normalize a free-text URL field: prepend https:// if missing, treat empty
 // as null. Doesn't validate the URL beyond that — admin imports often have
 // bare domains like "posh.vip/event/foo" or "instagram.com/handle".
@@ -1528,17 +1562,22 @@ ${blogList || "_No recent posts yet._"}
       if (recipients.length === 0) {
         return res.status(400).json({ message: "No approved submitters to email." });
       }
+      // Record the blast first so we have an ID to embed in the tracking pixel
+      // + link wrappers. Open/click events FK back to this row.
+      const blastId = await storage.createEmailBlast("page-blast", subject.slice(0, 200), recipients.length, page.slug);
+      const footer = `<hr style="margin-top:32px;border:0;border-top:1px solid #eee" />
+              <p style="color:#999;font-size:11px">You're receiving this because you submitted a venue on <a href="https://centralgroupevents.com/${page.slug}">${escapeHtml(page.title)}</a> at Central Group Events. Reply to unsubscribe.</p>`;
       let sent = 0;
       let failed = 0;
       for (const to of recipients) {
         try {
+          const wrapped = wrapEmailLinks(`${html}${footer}`, blastId, to);
+          const withPixel = appendTrackingPixel(wrapped, blastId, to);
           await transporter.sendMail({
             from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
             to,
             subject: subject.slice(0, 200),
-            html: `${html}
-              <hr style="margin-top:32px;border:0;border-top:1px solid #eee" />
-              <p style="color:#999;font-size:11px">You're receiving this because you submitted a venue on <a href="https://centralgroupevents.com/${page.slug}">${escapeHtml(page.title)}</a> at Central Group Events. Reply to unsubscribe.</p>`,
+            html: withPixel,
           });
           sent++;
           // Small delay between sends to stay within Gmail's burst limits.
@@ -1548,7 +1587,7 @@ ${blogList || "_No recent posts yet._"}
           failed++;
         }
       }
-      res.json({ sent, failed, total: recipients.length });
+      res.json({ sent, failed, total: recipients.length, blastId });
     } catch (err) {
       console.error("[email-blast] error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -1842,14 +1881,8 @@ ${blogList || "_No recent posts yet._"}
       const { subject, body } = req.body;
       if (!subject || !body) return res.status(400).json({ message: "Subject and body are required" });
       const subscribers = await storage.listSubscribers();
-      let sent = 0;
-      for (const sub of subscribers) {
-        try {
-          await transporter.sendMail({
-            from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
-            to: sub.email,
-            subject,
-            html: `
+      const blastId = await storage.createEmailBlast("newsletter", String(subject).slice(0, 200), subscribers.length);
+      const baseHtml = `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
                 <div style="text-align: center; margin-bottom: 24px;">
                   <h1 style="color: #8B2FC9; margin: 0;">Central Group Events</h1>
@@ -1862,14 +1895,24 @@ ${blogList || "_No recent posts yet._"}
                   <a href="https://centralgroupevents.com" style="color: #8B2FC9;">Unsubscribe</a>
                 </p>
               </div>
-            `,
+            `;
+      let sent = 0;
+      for (const sub of subscribers) {
+        try {
+          const wrapped = wrapEmailLinks(baseHtml, blastId, sub.email);
+          const withPixel = appendTrackingPixel(wrapped, blastId, sub.email);
+          await transporter.sendMail({
+            from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+            to: sub.email,
+            subject,
+            html: withPixel,
           });
           sent++;
         } catch (e) {
           console.error(`Failed to send to ${sub.email}:`, e);
         }
       }
-      res.json({ message: "Newsletter sent", sent });
+      res.json({ message: "Newsletter sent", sent, blastId });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }
@@ -2132,6 +2175,51 @@ ${blogList || "_No recent posts yet._"}
         isNaN(eventId as number) ? undefined : eventId,
       ).catch(() => {});
       res.redirect(302, url);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Email blast tracking endpoints ─────────────────────────────────
+  // Open pixel — returns a 1x1 transparent gif, records the open. Always
+  // 200 even if logging fails so the recipient's client doesn't show a
+  // broken-image icon.
+  const TRANSPARENT_GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
+  app.get("/api/email/track/open", async (req: Request, res: Response) => {
+    try {
+      const blastId = parseInt(req.query.b as string, 10);
+      const email = decodeRecipient((req.query.r as string) || "");
+      if (Number.isFinite(blastId) && email) {
+        storage.recordEmailBlastEvent(blastId, email, "open").catch(() => {});
+      }
+    } catch {}
+    res.setHeader("Content-Type", "image/gif");
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.setHeader("Pragma", "no-cache");
+    res.status(200).send(TRANSPARENT_GIF);
+  });
+
+  // Click redirect — records the click then 302's to the original URL.
+  app.get("/api/email/track/click", async (req: Request, res: Response) => {
+    try {
+      const blastId = parseInt(req.query.b as string, 10);
+      const email = decodeRecipient((req.query.r as string) || "");
+      const url = (req.query.u as string) || "";
+      if (!url) return res.status(400).send("Missing destination");
+      if (Number.isFinite(blastId) && email) {
+        storage.recordEmailBlastEvent(blastId, email, "click", url).catch(() => {});
+      }
+      res.redirect(302, url);
+    } catch {
+      res.status(500).send("Error");
+    }
+  });
+
+  // Admin: list every blast with aggregated open/click counts.
+  app.get("/api/admin/email-blasts", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const rows = await storage.listEmailBlastsWithStats();
+      res.json(rows);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }
