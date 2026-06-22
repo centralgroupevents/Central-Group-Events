@@ -4254,7 +4254,7 @@ function PageEditor({ slug, onClose, onDeleted }: { slug: string; onClose: () =>
       </div>
 
       {view === "submissions" && page && (
-        <PageSubmissionsView pageId={page.id} slug={slug} />
+        <PageSubmissionsView pageId={page.id} slug={slug} headerField={((page as any).listingHeaderField as string) || "venueName"} />
       )}
 
       {view === "content" && (
@@ -4516,7 +4516,8 @@ function pageSubAutoMatch(headers: string[], key: string): string {
          headers.find((h) => aliases.some((a) => h.toLowerCase().trim().includes(a.toLowerCase()))) || "";
 }
 
-function PageSubmissionsView({ pageId, slug }: { pageId: number; slug: string }) {
+function PageSubmissionsView({ pageId, slug, headerField }: { pageId: number; slug: string; headerField: string }) {
+  const eventNameRequired = headerField === "eventName";
   const qc = useQueryClient();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("pending");
@@ -4924,30 +4925,41 @@ function PageSubmissionsView({ pageId, slug }: { pageId: number; slug: string })
           {importStep === "mapping" && !importResult && (
             <div className="space-y-4 py-2">
               <p className="text-sm text-muted-foreground">Map your file's columns to our fields. Required fields are marked <span className="text-red-400">*</span>.</p>
+              {eventNameRequired && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-200">
+                  <p className="font-semibold mb-1">This page is set to show <span className="underline">Event Name</span> as the big header.</p>
+                  <p className="text-amber-200/80">
+                    Map a column to <strong>Event Name</strong> below, or every imported row will silently fall back to showing the venue name (which is what makes "the location is bigger" look like a bug). Don't have a column for it? Switch the page's <em>Listing header field</em> back to "Venue Name" on the Content tab.
+                  </p>
+                </div>
+              )}
               <div className="rounded-lg border border-white/10 overflow-hidden">
                 <table className="text-sm w-full">
                   <thead><tr className="bg-white/5 border-b border-white/10 text-muted-foreground text-left"><th className="px-3 py-2 font-medium w-1/2">CGE Field</th><th className="px-3 py-2 font-medium w-1/2">Your Column</th></tr></thead>
                   <tbody>
-                    {PAGE_SUB_IMPORT_FIELDS.map(({ key, label, required }) => (
-                      <tr key={key} className="border-b border-white/5">
-                        <td className="px-3 py-2 text-white/80">{label}{required && <span className="text-red-400 ml-1">*</span>}</td>
-                        <td className="px-3 py-2">
-                          <Select value={importMapping[key] || "__none__"} onValueChange={(v) => setImportMapping({ ...importMapping, [key]: v === "__none__" ? "" : v })}>
-                            <SelectTrigger className="h-8 bg-black/40 border-white/10 text-xs"><SelectValue placeholder="— skip —" /></SelectTrigger>
-                            <SelectContent className="bg-secondary border-white/10 text-white">
-                              <SelectItem value="__none__">— skip —</SelectItem>
-                              {importRawHeaders.filter(h => h && h.trim().length > 0).map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                      </tr>
-                    ))}
+                    {PAGE_SUB_IMPORT_FIELDS.map(({ key, label, required }) => {
+                      const isRequired = required || (key === "eventName" && eventNameRequired);
+                      return (
+                        <tr key={key} className="border-b border-white/5">
+                          <td className="px-3 py-2 text-white/80">{label}{isRequired && <span className="text-red-400 ml-1">*</span>}</td>
+                          <td className="px-3 py-2">
+                            <Select value={importMapping[key] || "__none__"} onValueChange={(v) => setImportMapping({ ...importMapping, [key]: v === "__none__" ? "" : v })}>
+                              <SelectTrigger className="h-8 bg-black/40 border-white/10 text-xs"><SelectValue placeholder="— skip —" /></SelectTrigger>
+                              <SelectContent className="bg-secondary border-white/10 text-white">
+                                <SelectItem value="__none__">— skip —</SelectItem>
+                                {importRawHeaders.filter(h => h && h.trim().length > 0).map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
               <DialogFooter className="gap-2 pt-2">
                 <Button variant="outline" onClick={() => setImportStep("input")} className="border-white/20 text-white/70">Back</Button>
-                <Button onClick={submitMappedImport} disabled={importBusy || !importMapping["eventDate"] || !importMapping["venueName"] || !importMapping["town"]} className="bg-primary hover:bg-primary/90">
+                <Button onClick={submitMappedImport} disabled={importBusy || !importMapping["eventDate"] || !importMapping["venueName"] || !importMapping["town"] || (eventNameRequired && !importMapping["eventName"])} className="bg-primary hover:bg-primary/90">
                   {importBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing…</> : <>Import {importRawRows.length} row{importRawRows.length !== 1 ? "s" : ""}</>}
                 </Button>
               </DialogFooter>

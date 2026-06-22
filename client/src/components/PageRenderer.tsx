@@ -200,10 +200,12 @@ export function PageRenderer({ slug }: Props) {
                   headerField === "eventName" ? (s.eventName || s.venueName) :
                   headerField === "eventDate" ? dateLabel :
                   s.venueName;
-                // Render the other two fields as subline + meta-row, in a
-                // stable order so the card layout doesn't shift per row.
-                const showVenueLine = headerField !== "venueName";
-                const showEventLine = headerField !== "eventName" && !!s.eventName;
+                // Suppress the venue/event sublines when they'd just repeat the
+                // H3 (e.g. headerField=eventName but the row has no eventName,
+                // so headerText falls back to venueName — without this, the
+                // same string rendered twice and the page looked unchanged).
+                const showVenueLine = headerField !== "venueName" && headerText !== s.venueName;
+                const showEventLine = headerField !== "eventName" && !!s.eventName && headerText !== s.eventName;
                 const showDateLine = headerField !== "eventDate";
                 return (
                 <div key={s.id} className="bg-secondary/30 border border-white/10 rounded-2xl p-5" data-testid={`page-submission-${s.id}`}>
