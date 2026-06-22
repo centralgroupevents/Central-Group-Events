@@ -483,6 +483,38 @@ export default function Home() {
         </div>
       </section>
 
+      {/* JUNETEENTH FEATURED BANNER — auto-hides after June 22 each year so
+          the homepage doesn't carry a stale promo. Footer link stays year-round. */}
+      {(() => {
+        const today = new Date();
+        const cutoff = new Date(today.getFullYear(), 5, 22); // June 22
+        if (today > cutoff) return null;
+        return (
+          <section className="py-10">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+              <a
+                href="/juneteenth-in-nj"
+                className="block group rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-r from-red-700/30 via-black to-emerald-700/30 hover:border-white/30 transition-colors"
+                data-testid="link-juneteenth-feature"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] items-center gap-6 p-6 md:p-8">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-widest font-bold text-amber-300 mb-2">This Week · June 19</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-white mb-2">Juneteenth in NJ</h3>
+                    <p className="text-sm md:text-base text-white/70 max-w-xl">
+                      Cookouts, block parties, parades, and celebrations across New Jersey. The full curated list of where to celebrate Juneteenth in NJ.
+                    </p>
+                  </div>
+                  <div className="inline-flex items-center gap-2 text-amber-300 font-semibold text-sm md:text-base group-hover:gap-3 transition-all">
+                    See the list <ArrowRight className="w-4 h-4" />
+                  </div>
+                </div>
+              </a>
+            </div>
+          </section>
+        );
+      })()}
+
       {/* EVENT CALENDAR SECTION */}
       <section id="events" className="py-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -868,6 +900,7 @@ export default function Home() {
                 <li><a href="/things-to-do-in-nj-this-weekend" className="text-muted-foreground hover:text-primary transition-colors">Things to do in NJ this weekend</a></li>
                 <li><a href="/things-to-do-in-nj-tonight" className="text-muted-foreground hover:text-primary transition-colors">Things to do in NJ tonight</a></li>
                 <li><a href="/free-things-to-do-in-nj" className="text-muted-foreground hover:text-primary transition-colors">Free things to do in NJ</a></li>
+                <li><a href="/juneteenth-in-nj" className="text-muted-foreground hover:text-primary transition-colors">Juneteenth in NJ</a></li>
                 <li><a href="/world-cup-2026-nj-guide" className="text-muted-foreground hover:text-primary transition-colors">World Cup 2026 NJ Guide</a></li>
                 <li><a href="/blog" className="text-muted-foreground hover:text-primary transition-colors">Weekly Newsletter</a></li>
                 <li><a href="/faq" className="text-muted-foreground hover:text-primary transition-colors">FAQ</a></li>
