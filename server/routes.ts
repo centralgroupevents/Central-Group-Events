@@ -2973,6 +2973,17 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Per-page funnel for the landing-page CMS (views → engagement →
+  // submissions → approved). Reads existing tables only.
+  app.get("/api/analytics/pages-funnel", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const data = await storage.getPagesFunnel();
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/analytics/events", requireAuth(), async (req: Request, res: Response) => {
     try {
       const raw = req.query.days;

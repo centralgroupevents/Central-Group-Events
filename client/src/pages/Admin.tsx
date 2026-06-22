@@ -1815,6 +1815,108 @@ function EmailScheduleTab() {
 /* ─────────────────────────────────────────────────────────── */
 /*  ANALYTICS TAB                                             */
 /* ─────────────────────────────────────────────────────────── */
+
+type PagesFunnelRow = {
+  pageId: number;
+  slug: string;
+  title: string;
+  views: number;
+  engagements: number;
+  submissions: number;
+  approved: number;
+};
+
+function pct(num: number, denom: number): string {
+  if (!denom) return "—";
+  return `${((num / denom) * 100).toFixed(1)}%`;
+}
+
+function PagesFunnelCard() {
+  const { data, isLoading } = useQuery<PagesFunnelRow[]>({
+    queryKey: ["/api/analytics/pages-funnel"],
+    queryFn: async () => {
+      const res = await fetch("/api/analytics/pages-funnel", { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  const rows = data ?? [];
+  const totals = rows.reduce((acc, r) => ({
+    views: acc.views + r.views,
+    engagements: acc.engagements + r.engagements,
+    submissions: acc.submissions + r.submissions,
+    approved: acc.approved + r.approved,
+  }), { views: 0, engagements: 0, submissions: 0, approved: 0 });
+
+  return (
+    <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="px-6 py-4 border-b border-white/10">
+        <h3 className="font-bold text-white">Landing Pages Funnel</h3>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Per-page conversion: views → form engagement → submissions → approved.
+          Engagement is recorded once per session on first focus of the submission form (new — only fills going forward).
+        </p>
+      </div>
+      {isLoading ? (
+        <div className="p-6 space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+      ) : rows.length === 0 ? (
+        <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+          No landing pages yet. Create one in the Pages tab to start tracking conversion.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-muted-foreground text-left text-xs uppercase tracking-wider">
+                <th className="px-6 py-3 font-medium">Page</th>
+                <th className="px-4 py-3 font-medium text-right">Views</th>
+                <th className="px-4 py-3 font-medium text-right">Engaged</th>
+                <th className="px-4 py-3 font-medium text-right">Submissions</th>
+                <th className="px-4 py-3 font-medium text-right">Approved</th>
+                <th className="px-4 py-3 font-medium text-right">Eng %</th>
+                <th className="px-4 py-3 font-medium text-right">Sub %</th>
+                <th className="px-4 py-3 font-medium text-right">Approve %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={r.pageId} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                  <td className="px-6 py-3">
+                    <a href={`/${r.slug}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium" title={r.title}>
+                      {r.title || r.slug}
+                    </a>
+                    <p className="text-[10px] text-muted-foreground">/{r.slug}</p>
+                  </td>
+                  <td className="px-4 py-3 text-right text-white/80 tabular-nums">{r.views.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-white/80 tabular-nums">{r.engagements.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-white/80 tabular-nums">{r.submissions.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-white/80 tabular-nums">{r.approved.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-white/60 text-xs tabular-nums">{pct(r.engagements, r.views)}</td>
+                  <td className="px-4 py-3 text-right text-white/60 text-xs tabular-nums">{pct(r.submissions, r.engagements)}</td>
+                  <td className="px-4 py-3 text-right text-white/60 text-xs tabular-nums">{pct(r.approved, r.submissions)}</td>
+                </tr>
+              ))}
+              {rows.length > 1 && (
+                <tr className="bg-white/[0.04] font-semibold">
+                  <td className="px-6 py-3 text-white/80 text-xs uppercase tracking-wider">Total</td>
+                  <td className="px-4 py-3 text-right text-white tabular-nums">{totals.views.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-white tabular-nums">{totals.engagements.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-white tabular-nums">{totals.submissions.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-white tabular-nums">{totals.approved.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right text-white/60 text-xs tabular-nums">{pct(totals.engagements, totals.views)}</td>
+                  <td className="px-4 py-3 text-right text-white/60 text-xs tabular-nums">{pct(totals.submissions, totals.engagements)}</td>
+                  <td className="px-4 py-3 text-right text-white/60 text-xs tabular-nums">{pct(totals.approved, totals.submissions)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnalyticsTab() {
   const [rangeDays, setRangeDays] = useState<number | null>(30);
   const { data, isLoading } = useQuery<AnalyticsData>({
@@ -2165,6 +2267,9 @@ function AnalyticsTab() {
           </div>
         )}
       </div>
+
+      {/* ─── Per-page funnel (Pages CMS) ─── */}
+      <PagesFunnelCard />
 
       {/* ─── Event Performance ─── */}
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Navigation } from "@/components/Navigation";
@@ -314,6 +314,26 @@ function SubmitForm({ slug, pageTitle }: { slug: string; pageTitle: string }) {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
 
+  // Funnel tracking: fire one engagement event the first time the user
+  // interacts with this submission form. Drives the per-page funnel in
+  // admin analytics (views → engagements → submissions → approved).
+  const engagedRef = useRef(false);
+  const sessionIdRef = useRef<string>(
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36),
+  );
+  function trackEngagement() {
+    if (engagedRef.current) return;
+    engagedRef.current = true;
+    fetch("/api/funnel/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step: `landing-form-engaged:${slug}`, sessionId: sessionIdRef.current }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -365,7 +385,7 @@ function SubmitForm({ slug, pageTitle }: { slug: string; pageTitle: string }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} onFocus={trackEngagement} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-white/80 text-xs">Your name <span className="text-red-400">*</span></Label>

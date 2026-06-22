@@ -209,6 +209,17 @@ export interface IStorage {
   getCommentsByPost(postId: number): Promise<Comment[]>;
   createComment(data: InsertComment): Promise<Comment>;
 
+  // Per-page funnel — landing-page CMS submission flow
+  getPagesFunnel(): Promise<Array<{
+    pageId: number;
+    slug: string;
+    title: string;
+    views: number;
+    engagements: number;
+    submissions: number;
+    approved: number;
+  }>>;
+
   // Analytics
   getAnalytics(days?: number): Promise<{
     totalSubscribers: number;
@@ -1220,6 +1231,60 @@ export class DatabaseStorage implements IStorage {
   async createComment(data: InsertComment): Promise<Comment> {
     const [comment] = await db.insert(comments).values(data).returning();
     return comment;
+  }
+
+  // ── Per-page funnel ───────────────────────────────────────────────────
+  // Returns one row per landing page with the four funnel stages:
+  //   views (lifetime, from pages.viewCount)
+  //   engagements (funnel events with step "landing-form-engaged:<slug>")
+  //   submissions (any status, count of landing_page_submissions for the page)
+  //   approved (subset of submissions with status='approved')
+  // Excludes the legacy /things-to-do-in-nj page since it uses a different
+  // render path and its viewCount doesn't reflect the same funnel.
+  async getPagesFunnel() {
+    const pageRows = await db
+      .select({ id: pages.id, slug: pages.slug, title: pages.title, views: pages.viewCount })
+      .from(pages)
+      .where(sql`${pages.slug} != 'things-to-do-in-nj'`)
+      .orderBy(desc(pages.viewCount));
+
+    const subRows = await db
+      .select({
+        pageId: landingPageSubmissions.pageId,
+        status: landingPageSubmissions.status,
+        count: count(),
+      })
+      .from(landingPageSubmissions)
+      .groupBy(landingPageSubmissions.pageId, landingPageSubmissions.status);
+
+    const engagementRows = await db
+      .select({
+        step: funnelEvents.step,
+        count: sql<number>`COUNT(DISTINCT ${funnelEvents.sessionId})`,
+      })
+      .from(funnelEvents)
+      .where(sql`${funnelEvents.step} LIKE 'landing-form-engaged:%'`)
+      .groupBy(funnelEvents.step);
+
+    const engagementBySlug = new Map<string, number>();
+    for (const r of engagementRows) {
+      const slug = r.step.replace(/^landing-form-engaged:/, "");
+      engagementBySlug.set(slug, Number(r.count));
+    }
+
+    return pageRows.map((p) => {
+      const submissions = subRows.filter((s) => s.pageId === p.id).reduce((sum, s) => sum + Number(s.count), 0);
+      const approved = subRows.filter((s) => s.pageId === p.id && s.status === "approved").reduce((sum, s) => sum + Number(s.count), 0);
+      return {
+        pageId: p.id,
+        slug: p.slug,
+        title: p.title || p.slug,
+        views: Number(p.views ?? 0),
+        engagements: engagementBySlug.get(p.slug) ?? 0,
+        submissions,
+        approved,
+      };
+    });
   }
 
   // ── Analytics ─────────────────────────────────────────────────────────
