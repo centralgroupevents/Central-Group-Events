@@ -45,7 +45,12 @@ function NewsletterSignup() {
 
   const subscribeMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/subscribers", { name, email, region });
+      const landingPath = typeof window !== "undefined" ? window.location.pathname : undefined;
+      const referrer = typeof document !== "undefined" ? document.referrer || undefined : undefined;
+      const utmSource = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("utm_source") || undefined
+        : undefined;
+      const res = await apiRequest("POST", "/api/subscribers", { name, email, region, referrer, landingPath, utmSource });
       return res.json();
     },
     onSuccess: () => {

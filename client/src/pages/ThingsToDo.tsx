@@ -85,10 +85,15 @@ function UnlockPrompt() {
     setError("");
     setLoading(true);
     try {
+      const landingPath = typeof window !== "undefined" ? window.location.pathname : undefined;
+      const referrer = typeof document !== "undefined" ? document.referrer || undefined : undefined;
+      const utmSource = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("utm_source") || undefined
+        : undefined;
       const subRes = await fetch("/api/subscribers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail, region, name: trimmedName }),
+        body: JSON.stringify({ email: trimmedEmail, region, name: trimmedName, referrer, landingPath, utmSource }),
         credentials: "include",
       });
       if (!subRes.ok && subRes.status !== 409) {

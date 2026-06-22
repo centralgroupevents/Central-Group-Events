@@ -43,12 +43,28 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }:
     setError("");
     setLoading(true);
 
+    // Attribution: what page was this person on, what's their cross-site
+    // source, what's the campaign tag in the URL. Fired from any page so
+    // we can see "subscribes per landing path / utm campaign" in admin.
+    const landingPath = typeof window !== "undefined" ? window.location.pathname : undefined;
+    const referrer = typeof document !== "undefined" ? document.referrer || undefined : undefined;
+    const utmSource = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("utm_source") || undefined
+      : undefined;
+
     try {
       // Step 1: always add to the subscriber list (handles both normal + gated flows)
       const subRes = await fetch("/api/subscribers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmed, region: region || undefined, name: "" }),
+        body: JSON.stringify({
+          email: trimmed,
+          region: region || undefined,
+          name: "",
+          referrer,
+          landingPath,
+          utmSource,
+        }),
         credentials: "include",
       });
       // 409 conflict (already subscribed) is acceptable — we still proceed

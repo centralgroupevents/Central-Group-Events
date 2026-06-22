@@ -215,6 +215,8 @@ export interface IStorage {
     postViews: { postId: number; title: string; views: number }[];
     linkClicks: { url: string; count: number; sourcePage: string | null }[];
     memberSources: { referrer: string; count: number }[];
+    landingPaths: { landingPath: string; count: number }[];
+    utmSources: { utmSource: string; count: number }[];
     window: {
       days: number | null;
       subscribers: number;
@@ -1257,6 +1259,26 @@ export class DatabaseStorage implements IStorage {
       .groupBy(newsletterSubscribers.referrer)
       .orderBy(desc(count()));
 
+    const landingPathRows = await db
+      .select({
+        landingPath: newsletterSubscribers.landingPath,
+        count: count(),
+      })
+      .from(newsletterSubscribers)
+      .where(sql`${newsletterSubscribers.landingPath} IS NOT NULL`)
+      .groupBy(newsletterSubscribers.landingPath)
+      .orderBy(desc(count()));
+
+    const utmSourceRows = await db
+      .select({
+        utmSource: newsletterSubscribers.utmSource,
+        count: count(),
+      })
+      .from(newsletterSubscribers)
+      .where(sql`${newsletterSubscribers.utmSource} IS NOT NULL`)
+      .groupBy(newsletterSubscribers.utmSource)
+      .orderBy(desc(count()));
+
     // Window-scoped totals + prior-period comparison for % change.
     const now = new Date();
     const windowStart = days ? new Date(now.getTime() - days * 86_400_000) : null;
@@ -1330,6 +1352,14 @@ export class DatabaseStorage implements IStorage {
       })),
       memberSources: sourceRows.map((r) => ({
         referrer: r.referrer ?? "direct",
+        count: Number(r.count),
+      })),
+      landingPaths: landingPathRows.map((r) => ({
+        landingPath: r.landingPath ?? "—",
+        count: Number(r.count),
+      })),
+      utmSources: utmSourceRows.map((r) => ({
+        utmSource: r.utmSource ?? "—",
         count: Number(r.count),
       })),
       window: {

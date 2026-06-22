@@ -10,6 +10,12 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
   email: text("email").notNull().unique(),
   region: text("region"),
   referrer: text("referrer"),
+  // Attribution captured at subscribe time. landingPath = the CGE URL the
+  // user was on when they hit subscribe (e.g. "/", "/blog/post-slug",
+  // "/juneteenth-in-nj"). utmSource = ?utm_source= query param if present.
+  // Both are optional — only filled for subscribes from pages that capture them.
+  landingPath: text("landing_path"),
+  utmSource: text("utm_source"),
   hasAccess: boolean("has_access").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -277,7 +283,9 @@ export const comments = pgTable("comments", {
 
 export const insertSubscriberSchema = createInsertSchema(newsletterSubscribers).omit({ id: true, createdAt: true }).extend({
   email: z.string().email(),
-  referrer: z.string().optional(),
+  referrer: z.string().max(500).optional(),
+  landingPath: z.string().max(500).optional(),
+  utmSource: z.string().max(120).optional(),
   hasAccess: z.boolean().optional(),
 });
 export const insertBookingSchema = createInsertSchema(promotionBookings).omit({ id: true, createdAt: true, adminNotes: true, referenceId: true }).extend({

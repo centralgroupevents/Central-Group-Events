@@ -146,6 +146,8 @@ type AnalyticsData = {
   postViews: { postId: number; title: string; views: number }[];
   linkClicks: { url: string; count: number; sourcePage: string | null }[];
   memberSources: { referrer: string; count: number }[];
+  landingPaths: { landingPath: string; count: number }[];
+  utmSources: { utmSource: string; count: number }[];
   window: {
     days: number | null;
     subscribers: number;
@@ -2066,6 +2068,7 @@ function AnalyticsTab() {
       <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-white/10">
           <h3 className="font-bold text-white">Member Sources</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Cross-site referrer at subscribe time (document.referrer)</p>
         </div>
         {isLoading ? (
           <div className="p-6 space-y-3">
@@ -2087,6 +2090,74 @@ function AnalyticsTab() {
                   <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
                     <td className="px-6 py-4 text-white/80">{s.referrer}</td>
                     <td className="px-4 py-4 text-right text-white/80">{s.count.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Landing Paths (where on CGE they subscribed from) ─── */}
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-white/10">
+          <h3 className="font-bold text-white">Top Landing Paths</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Which CGE page was on screen when the subscribe happened. New data — only filled going forward.</p>
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : !data?.landingPaths?.length ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">No landing-path data yet — older subscribers signed up before this was captured.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left">
+                  <th className="px-6 py-3 font-medium">Page</th>
+                  <th className="px-4 py-3 font-medium text-right">Subscribers</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.landingPaths.map((s, i) => (
+                  <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                    <td className="px-6 py-4">
+                      <a href={s.landingPath} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" title={s.landingPath}>{s.landingPath}</a>
+                    </td>
+                    <td className="px-4 py-4 text-right text-white/80 font-medium tabular-nums">{s.count.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ─── UTM Sources (campaign tags) ─── */}
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-white/10">
+          <h3 className="font-bold text-white">UTM Campaigns</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">From <code className="text-primary">?utm_source=…</code> on the URL when subscribed. Use this to track which campaigns / IG posts / SMS blasts drive signups.</p>
+        </div>
+        {isLoading ? (
+          <div className="p-6 space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : !data?.utmSources?.length ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+            No UTM data yet. Tag your campaign links like <code className="text-primary">centralgroupevents.com/?utm_source=ig-bio</code> to start tracking sources.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left">
+                  <th className="px-6 py-3 font-medium">Source</th>
+                  <th className="px-4 py-3 font-medium text-right">Subscribers</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.utmSources.map((s, i) => (
+                  <tr key={i} className={`border-b border-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`}>
+                    <td className="px-6 py-4 text-white/80">{s.utmSource}</td>
+                    <td className="px-4 py-4 text-right text-white/80 font-medium tabular-nums">{s.count.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>

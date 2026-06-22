@@ -103,7 +103,13 @@ export default function Home() {
   const subscribeMutation = useSubscribeNewsletter();
 
   const onNewsletterSubmit = (data: z.infer<typeof newsletterSchema>) => {
-    subscribeMutation.mutate(data, {
+    // Attribution at subscribe time — see SubscribeModal for the same pattern.
+    const landingPath = typeof window !== "undefined" ? window.location.pathname : undefined;
+    const referrer = typeof document !== "undefined" ? document.referrer || undefined : undefined;
+    const utmSource = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("utm_source") || undefined
+      : undefined;
+    subscribeMutation.mutate({ ...data, referrer, landingPath, utmSource }, {
       onSuccess: () => {
         if (typeof window !== "undefined") {
           localStorage.setItem("cge_newsletter_subscribed", "true");
@@ -943,7 +949,7 @@ export default function Home() {
       <SubscribeModal
         open={subscribeModalOpen}
         onOpenChange={setSubscribeModalOpen}
-        redirectAfter="/blog"
+        redirectAfter="/things-to-do-in-nj"
         onSuccess={() => setHeroSubscribed(true)}
       />
     </div>

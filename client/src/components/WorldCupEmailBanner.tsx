@@ -44,10 +44,14 @@ export function WorldCupEmailBanner({ source, headline, subhead, buttonLabel }: 
     setError("");
     setLoading(true);
     try {
+      const landingPath = typeof window !== "undefined" ? window.location.pathname : undefined;
+      const utmSource = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("utm_source") || undefined
+        : undefined;
       const res = await fetch("/api/subscribers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail, name: trimmedName, region, referrer: source }),
+        body: JSON.stringify({ email: trimmedEmail, name: trimmedName, region, referrer: source, landingPath, utmSource }),
         credentials: "include",
       });
       if (!res.ok && res.status !== 409) {
