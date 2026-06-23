@@ -20,6 +20,26 @@ import { PageRenderer } from "@/components/PageRenderer";
 
 const SITE = "https://centralgroupevents.com";
 
+// Minimal markdown-link parser for intro paragraphs. Splits on [text](url)
+// patterns and renders them as <a> tags so internal cross-links in topic
+// intros become actual clickable links (SEO-relevant). Plain text passes
+// through unchanged.
+function renderIntroParagraph(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  const regex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+  let key = 0;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > lastIndex) parts.push(text.slice(lastIndex, m.index));
+    const [, label, href] = m;
+    parts.push(<a key={key++} href={href} className="text-primary hover:underline">{label}</a>);
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts.length ? parts : text;
+}
+
 export default function TopicLanding() {
   // Catch-all /:slug — only matches when no earlier route does.
   const [, params] = useRoute<{ slug: string }>("/:slug");
@@ -93,7 +113,7 @@ export default function TopicLanding() {
           <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-6">{config.h1}</h1>
           <div className="space-y-4 text-white/80 text-base leading-relaxed">
             {config.introParagraphs.map((p, i) => (
-              <p key={i}>{p}</p>
+              <p key={i}>{renderIntroParagraph(p)}</p>
             ))}
           </div>
 

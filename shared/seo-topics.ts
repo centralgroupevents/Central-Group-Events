@@ -249,24 +249,81 @@ function buildTypeTopic(type: TypeProfile): TopicConfig {
   };
 }
 
+// Per-type commentary for combo pages — when set, this becomes one of the
+// intro paragraphs, with {city} interpolated. Drives substantive content
+// per (city × type) without writing 200 unique paragraphs by hand. Falls
+// back to a generic line for type slugs without an entry here.
+const TYPE_COMMENTARY: Record<string, string> = {
+  "brunches":          "Brunches in {city} typically run 11 AM to 3 PM Saturday and Sunday, with the more in-demand spots requiring reservations 2-3 weeks ahead during peak season. Bottomless menus, live DJ brunches, and rooftop service are common formats.",
+  "day-parties":       "Day parties in {city} usually kick off around 2-3 PM and run through sunset. Lounges, rooftops, and outdoor venues are the typical settings, especially May through September. Expect cover charges of $20-40 and table sections starting around $300.",
+  "concerts":          "Concerts in {city} range from intimate club shows under $40 to larger arena dates running $80+. Tickets typically go on sale 4-6 weeks ahead — set a reminder once a show you're watching is announced.",
+  "comedy-shows":      "Comedy shows in {city} run mostly Thursday-Saturday nights at dedicated comedy clubs and rotating bar venues. Two-drink minimums are standard at club shows; bar shows are usually free or pay-what-you-want.",
+  "happy-hours":       "Happy hours in {city} run on weekdays roughly 4-7 PM, with the more popular spots offering $5-8 drink specials and discounted small plates. Some venues do a late-night happy hour after 10 PM as well.",
+  "live-music":        "Live music in {city} spans jazz lounges, indie venues, hip-hop showcases, and singer-songwriter nights, mostly on Thursday-Saturday evenings. Cover charges typically run $10-30 depending on the venue.",
+  "nightlife":         "Nightlife in {city} is most active Thursday-Saturday from 10 PM to 2 AM, with after-hours lounges going later on weekends. Dress codes are enforced at most upscale venues; expect to budget $40-100 per person between cover and drinks.",
+  "festivals":         "Festivals in {city} cluster around summer weekends and major holidays. Tickets often sell out 2-4 weeks ahead for the bigger ones — early-bird pricing usually closes a month before the event.",
+  "open-mics":         "Open mics in {city} are typically free or $5 cover, with sign-ups starting 30-60 minutes before showtime. Music, comedy, and spoken word formats all run regularly throughout the week.",
+  "pop-ups":           "Pop-ups in {city} are one-night or weekend-only events at rotating venues — brunches, parties, supper clubs, and shopping events. They sell out fast; bookmark this page and check Mondays for the new week's lineup.",
+  "markets":           "Markets in {city} include weekend farmers markets, vintage and craft markets, and seasonal night markets. Most run free admission with vendor sales — check vendor lineups in advance for specific brands.",
+  "dance-events":      "Dance events in {city} run year-round across genres — salsa, bachata, Afrobeats, house, and reggaeton socials with lessons before the main event. Cover typically $15-25.",
+  "yoga-classes":      "Yoga classes in {city} include studio drop-ins, park sessions in warmer months, and rooftop and brewery yoga events. Drop-in rates are typically $20-30; donation-based classes appear periodically.",
+  "workshops":         "Workshops in {city} cover everything from creative skills (pottery, cocktails, candle-making) to professional development (networking, financial literacy). Pricing varies widely — most run $30-100.",
+  "networking-events": "Networking events in {city} are most active Wednesday and Thursday evenings — industry mixers, founder meetups, and after-work happy hours geared toward professionals. Most are $25-50 with drinks/light food included.",
+  "film-screenings":   "Film screenings in {city} include indie theater runs, rooftop and park screenings in summer, and one-off director Q&A events. Indie tickets run $12-18; outdoor screenings are often free or donation-based.",
+  "art-events":        "Art events in {city} include gallery openings (usually free with RSVP), artist talks, studio visits, and quarterly art crawls covering multiple venues in one night.",
+  "parades":           "Parades in {city} cluster around major holidays and cultural celebrations. Most are free to attend; arrive 60-90 minutes early for good viewing on the route.",
+  "cookouts":          "Cookouts in {city} happen most weekends from Memorial Day through Labor Day — backyard parties, restaurant cookouts, day-party cookouts at venues, and pop-up grill events. Pricing ranges from free community events to $40-60 ticketed cookouts.",
+  "food-festivals":    "Food festivals in {city} cluster around summer and fall weekends. Tickets typically run $25-75 with food samples included; VIP tiers add early entry and unlimited tastings.",
+};
+
 function buildComboTopic(city: CityProfile, type: TypeProfile): TopicConfig {
+  const t = type.label.toLowerCase();
+  const ts = `${t}${t.endsWith("s") ? "" : "s"}`; // plural form for natural-reading copy
+  const commentary = (TYPE_COMMENTARY[type.slug] || `${ts.replace(/^./, (c) => c.toUpperCase())} in {city} happen on a regular cadence throughout the year, with the most activity Thursday through Sunday.`).replace(/\{city\}/g, city.name);
+  // Pull in the city's editorial intro snippet when available — this is
+  // hand-written copy that makes the page feel grounded in the specific
+  // city, not boilerplate.
+  const cityContext = city.customIntro
+    ? city.customIntro
+    : `${city.name} sits in ${city.region}, one of the denser event corridors in the state — so the ${t} calendar fills out quickly, especially Friday and Saturday nights.`;
+
   return {
     slug: `${type.slug}-in-${city.slug}`,
     pageType: "city-type",
     h1: `${type.label}s in ${city.name}, NJ`,
-    metaTitle: `${type.label}s in ${city.name}, NJ — This Week's Events | Central Group Events`,
-    metaDescription: `Find ${type.label.toLowerCase()} events in ${city.name}, ${city.region}. Curated weekly by Central Group Events.`,
+    metaTitle: `${type.label}s in ${city.name}, NJ — This Week's ${type.label} Events | Central Group Events`,
+    metaDescription: `The full list of ${ts} happening in ${city.name}, ${city.region} this week. Venues, dates, ticket links — curated and updated every Monday by Central Group Events.`,
     filter: { city: city.name, genre: type.genreMatches },
     introParagraphs: [
-      `Looking for ${type.label.toLowerCase()} events in ${city.name}? This list is updated weekly with venues across the area.`,
-      `Don't see anything that fits this weekend? Check the broader ${city.name} events page or browse all NJ ${type.label.toLowerCase()} events.`,
+      `Looking for ${ts} in ${city.name}? This page tracks every notable ${t} event happening in ${city.name} this week — refreshed every Monday morning with the latest lineup from venues across the area. Each listing includes the venue, date and time, and a link to tickets or the organizer's profile.`,
+      cityContext,
+      commentary,
+      `If nothing on this week's list works, check the broader [${city.name} events page](/things-to-do-in-${city.slug}) for every event type, or browse [all NJ ${ts}](/${type.slug}-in-nj) across every city. To list your own ${t} event in ${city.name}, submit through the [promotion booking form](/book) — Basic listings are free.`,
     ],
     faqItems: [
       {
-        q: `Are there ${type.label.toLowerCase()} events in ${city.name} every week?`,
-        a: `${city.name} hosts ${type.label.toLowerCase()} events on a regular cadence — usually weekly during peak season. Central Group Events publishes the full schedule each Monday morning.`,
+        q: `Are there ${ts} in ${city.name} every week?`,
+        a: `${city.name} hosts ${ts} on a regular cadence — usually weekly during peak season (May through September) and biweekly otherwise. Central Group Events publishes the full schedule each Monday morning, so bookmark this page and check back for new events.`,
+      },
+      {
+        q: `What's the typical cost of a ${t} event in ${city.name}?`,
+        a: `Most ${ts} in ${city.name} run general admission of $20-60, with VIP sections or table service starting around $150-500 depending on the venue. Free events happen periodically — they're flagged on the broader free things to do in NJ page.`,
+      },
+      {
+        q: `How do I list my ${t} event in ${city.name}, NJ?`,
+        a: `Submit your event through the Central Group Events promotion booking form at /book. Basic calendar listings are free; paid packages (Starter $70, Growth $150, Custom $300+) include Instagram reels, premium newsletter placement, SMS blasts, and influencer reposts. For best results, submit at least 7 days before your event.`,
+      },
+      {
+        q: `What's the best night for ${ts} in ${city.name}?`,
+        a: `${city.name} ${t} activity is heaviest Friday and Saturday nights, with secondary peaks Thursday evenings and Sunday daytime. Specific recommendations rotate weekly based on what's actually scheduled — check the list above for this week.`,
       },
     ],
+    // Always indexable. The earlier auto-noindex-on-sparse-weeks rule
+    // meant Google never crawled most combo pages → never ranked them
+    // for long-tail city+type queries. Page now relies on the deeper
+    // intro/FAQ copy above for content depth even when the event list
+    // is short, so a thin week doesn't drop the URL out of the index.
+    alwaysIndex: true,
   };
 }
 
