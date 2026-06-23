@@ -75,6 +75,7 @@ type Event = {
 
 type Booking = {
   id: number;
+  referenceId: string | null;
   mode: string | null;
   eventName: string | null;
   venueName: string;
@@ -92,6 +93,9 @@ type Booking = {
   instagramHandle: string | null;
   readyToMoveForward: string | null;
   status: string | null;
+  contactedAt: string | null;
+  paidAt: string | null;
+  completedAt: string | null;
   createdAt: string | null;
 };
 
@@ -7350,24 +7354,44 @@ export default function Admin() {
                                   )}
                                 </td>
                                 <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                                  <Select
-                                    value={currentStatus}
-                                    onValueChange={(val) => updateBookingStatusMutation.mutate({ id: booking.id, status: val })}
-                                  >
-                                    <SelectTrigger
-                                      className={`h-7 text-xs border rounded-full px-2.5 w-[110px] ${statusBadge[currentStatus] ?? statusBadge["New"]}`}
-                                      data-testid={`select-booking-status-${booking.id}`}
+                                  <div className="flex flex-col gap-1.5">
+                                    <Select
+                                      value={currentStatus}
+                                      onValueChange={(val) => updateBookingStatusMutation.mutate({ id: booking.id, status: val })}
                                     >
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-secondary border-white/10 text-white">
-                                      <SelectItem value="New">New</SelectItem>
-                                      <SelectItem value="Contacted">Contacted</SelectItem>
-                                      <SelectItem value="Paid">Paid</SelectItem>
-                                      <SelectItem value="Completed">Completed</SelectItem>
-                                      <SelectItem value="Cancelled">Cancelled</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                      <SelectTrigger
+                                        className={`h-7 text-xs border rounded-full px-2.5 w-[110px] ${statusBadge[currentStatus] ?? statusBadge["New"]}`}
+                                        data-testid={`select-booking-status-${booking.id}`}
+                                      >
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-secondary border-white/10 text-white">
+                                        <SelectItem value="New">New</SelectItem>
+                                        <SelectItem value="Contacted">Contacted</SelectItem>
+                                        <SelectItem value="Paid">Paid</SelectItem>
+                                        <SelectItem value="Completed">Completed</SelectItem>
+                                        <SelectItem value="Cancelled">Cancelled</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    {/* One-click Mark Paid for not-yet-paid bookings. Setting status="Paid"
+                                        auto-stamps paidAt server-side (stageTimestampField in storage),
+                                        which is what the scheduled email cron filters on. */}
+                                    {!booking.paidAt && currentStatus !== "Cancelled" && (
+                                      <button
+                                        onClick={() => updateBookingStatusMutation.mutate({ id: booking.id, status: "Paid" })}
+                                        className="text-[10px] font-semibold text-green-400 hover:text-green-300 hover:underline w-[110px] text-left"
+                                        data-testid={`button-mark-paid-${booking.id}`}
+                                        disabled={updateBookingStatusMutation.isPending}
+                                      >
+                                        $ Mark paid →
+                                      </button>
+                                    )}
+                                    {booking.paidAt && (
+                                      <span className="text-[10px] text-green-400/70 w-[110px]" title={new Date(booking.paidAt).toLocaleString()}>
+                                        ✓ Paid {new Date(booking.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="px-4 py-4">
                                   <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-semibold border ${booking.mode === "Premium" ? "bg-primary/15 border-primary/40 text-primary" : "bg-white/5 border-white/20 text-white/60"}`}>
