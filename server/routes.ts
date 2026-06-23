@@ -2283,18 +2283,42 @@ ${blogList || "_No recent posts yet._"}
   }
 
   function buildFeedbackEmail(b: any): { subject: string; html: string } {
-    const subject = `How did ${b.eventName || b.venueName} go?`;
+    const eventLabel = b.eventName || b.venueName;
+    // First name only — feels more personal than the full booking
+    // contactName. Falls back to "there" when contactName is missing.
+    const firstName = (b.contactName || "").trim().split(/\s+/)[0] || "there";
+    const subject = `Reflecting on ${eventLabel} — and a quick favor`;
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #0a0a0a; color: #fff; border-radius: 12px;">
-        <h2 style="margin:0 0 14px;font-size:22px">How did ${escapeHtml(b.eventName || b.venueName)} go?</h2>
-        <p style="color:#ccc;line-height:1.6;margin:0 0 18px">
-          Hi ${escapeHtml(b.contactName || "there")},<br/><br/>
-          Hope <strong>${escapeHtml(b.eventName || b.venueName)}</strong> at ${escapeHtml(b.venueName)} went well yesterday! We'd love a quick 2-minute rundown — what worked, what could've been better, anything you'd want us to do differently next time.
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 28px; background: #0a0a0a; color: #fff; border-radius: 12px; line-height: 1.65;">
+        <p style="color:#ddd;font-size:15px;margin:0 0 16px">Hi ${escapeHtml(firstName)},</p>
+
+        <p style="color:#e0e0e0;font-size:15px;margin:0 0 16px">
+          Yesterday was the day. Whether <strong>${escapeHtml(eventLabel)}</strong> went exactly to plan or threw a few curveballs at you, you put something into the world that wasn't there before — and we got to be part of it. That's not lost on us.
         </p>
+
+        <p style="color:#e0e0e0;font-size:15px;margin:0 0 22px">
+          We'd love to hear how it went from your side. Not just the numbers (though those matter too) but the human stuff — what surprised you, what you'd do differently, the small detail that made the night. It'll take two minutes.
+        </p>
+
         <p style="text-align:center;margin:28px 0">
-          <a href="${FEEDBACK_FORM_URL}" style="display:inline-block;padding:14px 28px;background:#8B2FC9;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Share your feedback →</a>
+          <a href="${FEEDBACK_FORM_URL}" style="display:inline-block;padding:14px 32px;background:#8B2FC9;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:15px">Tell us how it went →</a>
         </p>
-        <p style="color:#aaa;font-size:13px;margin-top:24px">Thanks for trusting Central Group Events with your event.<br/>— The CGE Team</p>
+
+        <p style="color:#e0e0e0;font-size:15px;margin:22px 0 16px">
+          We don't take it for granted that you trusted us with your event. There are a hundred ways you could have spent that promotion budget — our hope is we earned the choice. And if we didn't quite hit the mark, that's exactly what we need to hear.
+        </p>
+
+        <p style="color:#e0e0e0;font-size:15px;margin:0 0 24px">
+          Whatever's next — another event, a breather, something new entirely — we're rooting for you.
+        </p>
+
+        <p style="color:#aaa;font-size:14px;margin:0 0 18px">
+          — The Central Group Events Team
+        </p>
+
+        <p style="color:#888;font-size:13px;font-style:italic;margin:0;padding-top:18px;border-top:1px solid #222">
+          P.S. Got photos or videos from the night you'd love to see featured? Just reply with them — we'd love to share.
+        </p>
       </div>`;
     return { subject, html };
   }
