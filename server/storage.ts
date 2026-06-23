@@ -238,6 +238,27 @@ export interface IStorage {
     approved: number;
   }>>;
 
+  // SEO health snapshot — scores every public URL on SEO basics
+  getSeoHealth(): Promise<Array<{
+    kind: "topic" | "page" | "post";
+    slug: string;
+    url: string;
+    title: string;
+    metaTitle: string;
+    metaDescription: string;
+    metaTitleLength: number;
+    metaDescriptionLength: number;
+    wordCount: number;
+    h1Count: number;
+    h2Count: number;
+    faqCount: number;
+    indexable: boolean;
+    lastUpdated: Date | null;
+    autoNoindex: boolean;
+    matchingEventCount: number | null;
+    issues: Array<{ severity: "error" | "warn"; code: string; message: string }>;
+  }>>;
+
   // Analytics
   getAnalytics(days?: number): Promise<{
     totalSubscribers: number;
@@ -260,6 +281,29 @@ export interface IStorage {
     };
   }>;
 }
+
+// Shared concrete type for the SEO health snapshot. Lifted out of the
+// method body so the implementation can reference it without TS hitting
+// a circular self-reference through the inferred return type.
+type SeoHealthRow = {
+  kind: "topic" | "page" | "post";
+  slug: string;
+  url: string;
+  title: string;
+  metaTitle: string;
+  metaDescription: string;
+  metaTitleLength: number;
+  metaDescriptionLength: number;
+  wordCount: number;
+  h1Count: number;
+  h2Count: number;
+  faqCount: number;
+  indexable: boolean;
+  lastUpdated: Date | null;
+  autoNoindex: boolean;
+  matchingEventCount: number | null;
+  issues: Array<{ severity: "error" | "warn"; code: string; message: string }>;
+};
 
 // ─── Implementation ───────────────────────────────────────────────────────
 
@@ -1357,6 +1401,127 @@ export class DatabaseStorage implements IStorage {
         approved,
       };
     });
+  }
+
+  // ── SEO health ────────────────────────────────────────────────────────
+  // Snapshot of every public URL we control with the SEO basics scored.
+  // Stitches together programmatic topics, CMS landing pages, and blog
+  // posts into one ranking-issue feed for the admin.
+  async getSeoHealth(): Promise<SeoHealthRow[]> {
+    const { getAllTopics, countMatchingEvents } = await import("@shared/seo-topics");
+    const allEvents = await db.select().from(events);
+    const topics = getAllTopics();
+    const pageRows = await db.select().from(pages);
+    const postRows = await db.select().from(posts).where(eq(posts.isPublished, true));
+
+    const rows: SeoHealthRow[] = [];
+
+    // Helpers — kept inline so the SEO scoring logic stays in one spot.
+    const stripHtml = (html: string) => html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ").replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ");
+    const wordCountOf = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+    const countTag = (html: string, tag: string) => (html.match(new RegExp(`<${tag}\\b`, "gi")) || []).length;
+
+    const scoreIssues = (r: Omit<SeoHealthRow, "issues">): SeoHealthRow["issues"] => {
+      const issues: SeoHealthRow["issues"] = [];
+      if (!r.metaTitle) issues.push({ severity: "error", code: "missing-title", message: "Meta title missing" });
+      else if (r.metaTitleLength < 30) issues.push({ severity: "warn", code: "short-title", message: `Meta title is ${r.metaTitleLength} chars — aim for 50-60` });
+      else if (r.metaTitleLength > 65) issues.push({ severity: "warn", code: "long-title", message: `Meta title is ${r.metaTitleLength} chars — Google truncates around 60` });
+      if (!r.metaDescription) issues.push({ severity: "error", code: "missing-description", message: "Meta description missing" });
+      else if (r.metaDescriptionLength < 70) issues.push({ severity: "warn", code: "short-description", message: `Meta description is ${r.metaDescriptionLength} chars — aim for 140-160` });
+      else if (r.metaDescriptionLength > 170) issues.push({ severity: "warn", code: "long-description", message: `Meta description is ${r.metaDescriptionLength} chars — Google truncates around 160` });
+      if (r.wordCount < 200) issues.push({ severity: "error", code: "thin-content", message: `Only ${r.wordCount} words — too thin to rank for competitive queries` });
+      else if (r.wordCount < 500) issues.push({ severity: "warn", code: "shallow-content", message: `${r.wordCount} words — bump to 800+ for stronger ranking signals` });
+      if (r.h1Count === 0) issues.push({ severity: "error", code: "no-h1", message: "No H1 on page" });
+      else if (r.h1Count > 1) issues.push({ severity: "warn", code: "multi-h1", message: `${r.h1Count} H1s — should be exactly 1` });
+      if (r.faqCount === 0) issues.push({ severity: "warn", code: "no-faq", message: "No FAQ items — adding 3-5 enables FAQ rich snippets in Google" });
+      if (!r.indexable) issues.push({ severity: "error", code: "noindex", message: "Page is set to noindex — Google won't rank it" });
+      if (r.autoNoindex) issues.push({ severity: "warn", code: "auto-noindex", message: `Auto-noindexed: only ${r.matchingEventCount} matching events this week (need 3+)` });
+      return issues;
+    };
+
+    // 1) Programmatic topics from shared/seo-topics
+    for (const t of topics) {
+      const introHtml = t.introParagraphs.join(" ");
+      const introText = stripHtml(introHtml);
+      const faqText = (t.faqItems || []).map((f) => `${f.q} ${f.a}`).join(" ");
+      const wordCount = wordCountOf(introText + " " + faqText);
+      const matching = countMatchingEvents(allEvents as any, t.filter);
+      const autoNoindex = !t.alwaysIndex && matching < 3;
+      const indexable = !autoNoindex;
+      const base = {
+        kind: "topic" as const,
+        slug: t.slug,
+        url: `/${t.slug}`,
+        title: t.h1,
+        metaTitle: t.metaTitle,
+        metaDescription: t.metaDescription,
+        metaTitleLength: t.metaTitle.length,
+        metaDescriptionLength: t.metaDescription.length,
+        wordCount,
+        h1Count: 1, // TopicLanding always renders exactly one H1
+        h2Count: t.faqItems?.length ? 1 : 0, // FAQ heading is the only H2
+        faqCount: t.faqItems?.length ?? 0,
+        indexable,
+        lastUpdated: null,
+        autoNoindex,
+        matchingEventCount: matching,
+      };
+      rows.push({ ...base, issues: scoreIssues(base) });
+    }
+
+    // 2) CMS landing pages
+    for (const p of pageRows) {
+      const editorText = stripHtml(p.editorContent || "");
+      let faqCount = 0;
+      try { faqCount = (JSON.parse(p.faqItems || "[]") as any[]).length; } catch {}
+      const wordCount = wordCountOf(editorText) + (p.title?.split(/\s+/).length || 0);
+      const base = {
+        kind: "page" as const,
+        slug: p.slug,
+        url: `/${p.slug}`,
+        title: p.title || p.slug,
+        metaTitle: p.metaTitle || "",
+        metaDescription: p.metaDescription || "",
+        metaTitleLength: (p.metaTitle || "").length,
+        metaDescriptionLength: (p.metaDescription || "").length,
+        wordCount,
+        h1Count: 1, // PageRenderer always renders exactly one H1 from `title`
+        h2Count: countTag(p.editorContent || "", "h2"),
+        faqCount,
+        indexable: !!p.indexable && !!p.published,
+        lastUpdated: p.updatedAt ?? null,
+        autoNoindex: false,
+        matchingEventCount: null,
+      };
+      rows.push({ ...base, issues: scoreIssues(base) });
+    }
+
+    // 3) Published blog posts
+    for (const p of postRows) {
+      const bodyText = stripHtml(p.content || "");
+      const wordCount = wordCountOf(bodyText);
+      const base = {
+        kind: "post" as const,
+        slug: p.slug,
+        url: `/blog/${p.slug}`,
+        title: p.title,
+        metaTitle: p.title, // Posts use title as meta title in SSR
+        metaDescription: p.excerpt || "",
+        metaTitleLength: p.title.length,
+        metaDescriptionLength: (p.excerpt || "").length,
+        wordCount,
+        h1Count: 1,
+        h2Count: countTag(p.content || "", "h2"),
+        faqCount: 0,
+        indexable: true,
+        lastUpdated: p.updatedAt ?? p.createdAt ?? null,
+        autoNoindex: false,
+        matchingEventCount: null,
+      };
+      rows.push({ ...base, issues: scoreIssues(base) });
+    }
+
+    return rows;
   }
 
   // ── Analytics ─────────────────────────────────────────────────────────

@@ -263,6 +263,7 @@ const TABS = [
   { id: "blog", label: "Blog Posts", icon: BookOpen },
   { id: "pages", label: "Pages", icon: BookOpen },
   { id: "analytics", label: "Analytics", icon: BarChart2 },
+  { id: "seo", label: "SEO", icon: BarChart2 },
   { id: "email-schedule", label: "Email Schedule", icon: Send },
   { id: "world-cup", label: "World Cup", icon: Star },
   { id: "nba-finals", label: "NBA Finals", icon: Star },
@@ -1829,6 +1830,192 @@ type PagesFunnelRow = {
 function pct(num: number, denom: number): string {
   if (!denom) return "—";
   return `${((num / denom) * 100).toFixed(1)}%`;
+}
+
+/* ─────────────────────────────────────────────────────────── */
+/*  SEO HEALTH TAB                                            */
+/* ─────────────────────────────────────────────────────────── */
+type SeoIssue = { severity: "error" | "warn"; code: string; message: string };
+type SeoHealthRow = {
+  kind: "topic" | "page" | "post";
+  slug: string;
+  url: string;
+  title: string;
+  metaTitle: string;
+  metaDescription: string;
+  metaTitleLength: number;
+  metaDescriptionLength: number;
+  wordCount: number;
+  h1Count: number;
+  h2Count: number;
+  faqCount: number;
+  indexable: boolean;
+  lastUpdated: string | null;
+  autoNoindex: boolean;
+  matchingEventCount: number | null;
+  issues: SeoIssue[];
+};
+
+function SeoHealthTab() {
+  const [filter, setFilter] = useState<"all" | "errors" | "warnings" | "healthy">("all");
+  const [kindFilter, setKindFilter] = useState<"all" | "topic" | "page" | "post">("all");
+  const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery<SeoHealthRow[]>({
+    queryKey: ["/api/admin/seo-health"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/seo-health", { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  const rows = data ?? [];
+  const counts = {
+    total: rows.length,
+    errors: rows.filter((r) => r.issues.some((i) => i.severity === "error")).length,
+    warnings: rows.filter((r) => r.issues.every((i) => i.severity !== "error") && r.issues.length > 0).length,
+    healthy: rows.filter((r) => r.issues.length === 0).length,
+  };
+
+  const visible = rows.filter((r) => {
+    if (kindFilter !== "all" && r.kind !== kindFilter) return false;
+    if (filter === "errors") return r.issues.some((i) => i.severity === "error");
+    if (filter === "warnings") return r.issues.every((i) => i.severity !== "error") && r.issues.length > 0;
+    if (filter === "healthy") return r.issues.length === 0;
+    return true;
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl p-6 space-y-3">
+        <h2 className="text-xl font-black">SEO Health</h2>
+        <p className="text-sm text-muted-foreground">
+          Every public URL on the site, scored on the basics that move rankings: meta tags, content depth, headings, FAQs, indexability.
+          Flags appear when a page has missing or weak SEO signals — click any row to see the full diagnosis + fix.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3">
+        {([
+          { key: "all", label: "All", count: counts.total, color: "text-white" },
+          { key: "errors", label: "Errors", count: counts.errors, color: "text-red-400" },
+          { key: "warnings", label: "Warnings", count: counts.warnings, color: "text-amber-300" },
+          { key: "healthy", label: "Healthy", count: counts.healthy, color: "text-green-400" },
+        ] as const).map((s) => (
+          <button
+            key={s.key}
+            onClick={() => setFilter(filter === s.key ? "all" : s.key)}
+            className={`bg-secondary/30 border rounded-xl p-4 text-left transition-colors ${filter === s.key ? "border-primary" : "border-white/10 hover:border-white/30"}`}
+            data-testid={`filter-${s.key}`}
+          >
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{s.label}</p>
+            <p className={`text-2xl font-black ${s.color}`}>{s.count}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-1">
+        {(["all", "topic", "page", "post"] as const).map((k) => (
+          <button
+            key={k}
+            onClick={() => setKindFilter(k)}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${kindFilter === k ? "bg-primary text-white" : "text-white/60 hover:text-white"}`}
+          >
+            {k === "all" ? "All kinds" : k === "topic" ? "Programmatic topics" : k === "page" ? "Landing pages (CMS)" : "Blog posts"}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        {isLoading ? (
+          <div className="p-6 space-y-3">{[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : visible.length === 0 ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">No URLs match the current filter.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left text-xs uppercase tracking-wider">
+                  <th className="px-6 py-3 font-medium">URL</th>
+                  <th className="px-4 py-3 font-medium">Kind</th>
+                  <th className="px-4 py-3 font-medium text-right">Words</th>
+                  <th className="px-4 py-3 font-medium text-right">Title</th>
+                  <th className="px-4 py-3 font-medium text-right">Desc</th>
+                  <th className="px-4 py-3 font-medium text-right">FAQ</th>
+                  <th className="px-4 py-3 font-medium">Index?</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r) => {
+                  const expanded = expandedSlug === r.slug;
+                  const hasError = r.issues.some((i) => i.severity === "error");
+                  const hasWarn = !hasError && r.issues.length > 0;
+                  return (
+                    <>
+                      <tr
+                        key={r.slug}
+                        onClick={() => setExpandedSlug(expanded ? null : r.slug)}
+                        className={`border-b border-white/5 cursor-pointer hover:bg-white/[0.03] ${expanded ? "bg-white/[0.03]" : ""}`}
+                        data-testid={`seo-row-${r.slug}`}
+                      >
+                        <td className="px-6 py-3">
+                          <a href={r.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline font-medium" title={r.title}>
+                            {r.url}
+                          </a>
+                          <p className="text-[10px] text-muted-foreground truncate max-w-xs">{r.title}</p>
+                        </td>
+                        <td className="px-4 py-3 text-white/60 text-xs">{r.kind}</td>
+                        <td className="px-4 py-3 text-right text-white/80 tabular-nums">{r.wordCount}</td>
+                        <td className={`px-4 py-3 text-right tabular-nums ${r.metaTitleLength === 0 ? "text-red-400" : r.metaTitleLength < 30 || r.metaTitleLength > 65 ? "text-amber-300" : "text-green-400"}`}>{r.metaTitleLength}</td>
+                        <td className={`px-4 py-3 text-right tabular-nums ${r.metaDescriptionLength === 0 ? "text-red-400" : r.metaDescriptionLength < 70 || r.metaDescriptionLength > 170 ? "text-amber-300" : "text-green-400"}`}>{r.metaDescriptionLength}</td>
+                        <td className={`px-4 py-3 text-right tabular-nums ${r.faqCount === 0 ? "text-amber-300" : "text-green-400"}`}>{r.faqCount}</td>
+                        <td className="px-4 py-3">
+                          {r.indexable ? (
+                            <span className="text-green-400 text-xs">✓</span>
+                          ) : (
+                            <span className="text-red-400 text-xs" title={r.autoNoindex ? `Auto-noindex (${r.matchingEventCount} events)` : "noindex"}>✗{r.autoNoindex ? " auto" : ""}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {hasError ? <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-red-500/15 text-red-400">{r.issues.length} issue{r.issues.length === 1 ? "" : "s"}</span>
+                            : hasWarn ? <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/15 text-amber-300">{r.issues.length} warn</span>
+                            : <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-green-500/15 text-green-400">healthy</span>}
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr key={r.slug + "-detail"} className="border-b border-white/10 bg-black/30">
+                          <td colSpan={8} className="px-6 py-4">
+                            {r.issues.length === 0 ? (
+                              <p className="text-sm text-green-400">✓ No issues detected. Page is hitting all the SEO basics.</p>
+                            ) : (
+                              <ul className="space-y-2">
+                                {r.issues.map((iss, i) => (
+                                  <li key={i} className="flex items-start gap-2 text-sm">
+                                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold uppercase mt-0.5 flex-shrink-0 ${iss.severity === "error" ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-300"}`}>{iss.severity}</span>
+                                    <span className="text-white/80">{iss.message}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            <div className="mt-4 text-xs text-muted-foreground border-t border-white/10 pt-3 space-y-1">
+                              <p><span className="text-white/50">Meta title:</span> <span className="text-white/80">{r.metaTitle || <em className="text-red-400">(missing)</em>}</span></p>
+                              <p><span className="text-white/50">Meta desc:</span> <span className="text-white/80">{r.metaDescription || <em className="text-red-400">(missing)</em>}</span></p>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function PagesFunnelCard() {
@@ -7243,6 +7430,7 @@ export default function Admin() {
         {activeTab === "blog" && <BlogPostsTab />}
         {activeTab === "this-week" && <ThisWeekTab />}
         {activeTab === "analytics" && <AnalyticsTab />}
+        {activeTab === "seo" && <SeoHealthTab />}
         {activeTab === "email-schedule" && <EmailScheduleTab />}
         {activeTab === "world-cup" && <WorldCupTab />}
         {activeTab === "nba-finals" && <NbaFinalsTab />}

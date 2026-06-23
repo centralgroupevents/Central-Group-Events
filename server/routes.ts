@@ -3072,6 +3072,17 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // SEO health snapshot — every public URL scored on SEO basics
+  app.get("/api/admin/seo-health", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const data = await storage.getSeoHealth();
+      res.json(data);
+    } catch (err) {
+      console.error("[seo-health] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/analytics/events", requireAuth(), async (req: Request, res: Response) => {
     try {
       const raw = req.query.days;
