@@ -161,6 +161,7 @@ export interface IStorage {
   ensureScheduledEmailRows(bookingId: number, kind: string, scheduledFor: string, recipientEmail: string): Promise<void>;
   listPendingScheduledEmails(asOfDate: string): Promise<Array<{ id: number; bookingId: number; kind: string; scheduledFor: string; recipientEmail: string }>>;
   markScheduledEmailSent(id: number, status: "sent" | "failed" | "skipped", opts?: { error?: string; dryRun?: boolean }): Promise<void>;
+  getScheduledEmailRow(id: number): Promise<{ id: number; bookingId: number; kind: string; scheduledFor: string; recipientEmail: string; status: string } | null>;
   listAllScheduledEmails(limit?: number): Promise<Array<{ id: number; bookingId: number; kind: string; scheduledFor: string; recipientEmail: string; status: string; sentAt: Date | null; errorMessage: string | null; dryRun: boolean; createdAt: Date | null }>>;
   // App settings (key/value, used for cron dry-run flag)
   getSetting(key: string): Promise<string | null>;
@@ -916,6 +917,22 @@ export class DatabaseStorage implements IStorage {
         dryRun: opts?.dryRun ?? false,
       })
       .where(eq(scheduledEmailSends.id, id));
+  }
+
+  async getScheduledEmailRow(id: number) {
+    const [row] = await db
+      .select({
+        id: scheduledEmailSends.id,
+        bookingId: scheduledEmailSends.bookingId,
+        kind: scheduledEmailSends.kind,
+        scheduledFor: scheduledEmailSends.scheduledFor,
+        recipientEmail: scheduledEmailSends.recipientEmail,
+        status: scheduledEmailSends.status,
+      })
+      .from(scheduledEmailSends)
+      .where(eq(scheduledEmailSends.id, id))
+      .limit(1);
+    return row ?? null;
   }
 
   async listAllScheduledEmails(limit: number = 500) {

@@ -1676,6 +1676,11 @@ function EmailScheduleTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [filter, setFilter] = useState<"all" | "pending" | "sent" | "failed" | "skipped">("all");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [previewBusyId, setPreviewBusyId] = useState<number | null>(null);
+  const [preview, setPreview] = useState<{ id: number; subject: string; html: string; to: string; kind: string; scheduledFor: string } | null>(null);
+  const [sendNowBusyId, setSendNowBusyId] = useState<number | null>(null);
+  const [runNowBusy, setRunNowBusy] = useState(false);
 
   const { data, isLoading } = useQuery<{ rows: ScheduledEmailRow[]; dryRun: boolean }>({
     queryKey: ["/api/admin/scheduled-emails"],
@@ -1697,6 +1702,55 @@ function EmailScheduleTab() {
     }
   }
 
+  async function runCronNow() {
+    setRunNowBusy(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/scheduled-emails/run-now", {});
+      const json = await res.json();
+      toast({ title: `Tick complete — ${json.sent} sent, ${json.failed} failed, ${json.skipped} skipped, ${json.backfilled} backfilled${json.dryRun ? " (dry-run)" : ""}` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/scheduled-emails"] });
+    } catch (err) {
+      toast({ title: "Run failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setRunNowBusy(false);
+    }
+  }
+
+  async function loadPreview(id: number) {
+    if (preview?.id === id) {
+      setPreview(null);
+      setExpandedId(null);
+      return;
+    }
+    setPreviewBusyId(id);
+    try {
+      const res = await fetch(`/api/admin/scheduled-emails/${id}/preview`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const json = await res.json();
+      setPreview({ id, subject: json.subject, html: json.html, to: json.to, kind: json.kind, scheduledFor: json.scheduledFor });
+      setExpandedId(id);
+    } catch (err) {
+      toast({ title: "Preview failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setPreviewBusyId(null);
+    }
+  }
+
+  async function sendNow(id: number) {
+    if (!confirm(`Send this email right now? It will respect the current dry-run setting.`)) return;
+    setSendNowBusyId(id);
+    try {
+      const res = await apiRequest("POST", `/api/admin/scheduled-emails/${id}/send-now`, {});
+      const json = await res.json();
+      toast({ title: json.dryRun ? `[DRY] Sent test copy to centralgroupevents@gmail.com` : `Sent to ${json.to}` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/scheduled-emails"] });
+    } catch (err) {
+      toast({ title: "Send failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setSendNowBusyId(null);
+    }
+  }
+
   const rows = (data?.rows ?? []).filter((r) => filter === "all" || r.status === filter);
   const counts = {
     pending: data?.rows.filter((r) => r.status === "pending").length ?? 0,
@@ -1704,17 +1758,78 @@ function EmailScheduleTab() {
     failed: data?.rows.filter((r) => r.status === "failed").length ?? 0,
     skipped: data?.rows.filter((r) => r.status === "skipped").length ?? 0,
   };
+
+  // Upcoming summary — what's actually coming up in the next 7 + 30 days.
+  // Computed from the existing data on the client; no extra endpoint needed.
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const in7 = new Date(today.getTime() + 7 * 86_400_000);
+  const in30 = new Date(today.getTime() + 30 * 86_400_000);
+  const pendingRows = (data?.rows ?? []).filter((r) => r.status === "pending");
+  function inWindow(scheduledFor: string, until: Date): boolean {
+    const [y, m, d] = scheduledFor.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt >= today && dt <= until;
+  }
+  const next7 = {
+    reminders: pendingRows.filter((r) => r.kind === "reminder_t4" && inWindow(r.scheduledFor, in7)).length,
+    feedback:  pendingRows.filter((r) => r.kind === "feedback_t1" && inWindow(r.scheduledFor, in7)).length,
+  };
+  const next30 = {
+    reminders: pendingRows.filter((r) => r.kind === "reminder_t4" && inWindow(r.scheduledFor, in30)).length,
+    feedback:  pendingRows.filter((r) => r.kind === "feedback_t1" && inWindow(r.scheduledFor, in30)).length,
+  };
+  // Next firing date so the admin knows when the next batch actually goes out.
+  const nextDate = pendingRows
+    .map((r) => r.scheduledFor)
+    .sort()
+    .find((s) => {
+      const [y, m, d] = s.split("-").map(Number);
+      return new Date(y, m - 1, d) >= today;
+    });
+
   const dryRun = data?.dryRun ?? true;
 
   return (
     <div className="space-y-6">
       <div className="bg-secondary/30 border border-white/10 rounded-2xl p-6 space-y-3">
-        <h2 className="text-xl font-black">Scheduled emails for promotion bookings</h2>
-        <p className="text-sm text-muted-foreground">
-          A daily cron pings <code className="text-primary">/api/cron/scheduled-emails</code> at 9am ET. For every paid, non-cancelled booking it queues two emails:
-          a <strong>T-4 reminder</strong> to centralgroupevents@gmail.com + aagu1999@gmail.com, and a <strong>T+1 feedback</strong> email to the booker
-          with the <a className="text-primary underline" href="https://form.jotform.com/261385070354051" target="_blank" rel="noopener noreferrer">JotForm survey</a>.
-        </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex-1 min-w-[280px]">
+            <h2 className="text-xl font-black">Scheduled emails for promotion bookings</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              A daily cron pings <code className="text-primary">/api/cron/scheduled-emails</code> at 9am ET. For every paid, non-cancelled booking it queues two emails:
+              a <strong>T-4 reminder</strong> to centralgroupevents@gmail.com + aagu1999@gmail.com, and a <strong>T+1 feedback</strong> email to the booker
+              with the <a className="text-primary underline" href="https://form.jotform.com/261385070354051" target="_blank" rel="noopener noreferrer">JotForm survey</a>.
+            </p>
+          </div>
+          <Button
+            onClick={runCronNow}
+            disabled={runNowBusy}
+            variant="outline"
+            className="border-white/20 text-white/80 hover:bg-white/5"
+            data-testid="button-run-cron-now"
+          >
+            {runNowBusy ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Running…</> : "↻ Run cron now"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Upcoming summary card (#4) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Next 7 days</p>
+          <p className="text-2xl font-black text-white">{next7.reminders + next7.feedback}</p>
+          <p className="text-xs text-white/60 mt-1">{next7.reminders} reminder{next7.reminders === 1 ? "" : "s"} · {next7.feedback} feedback</p>
+        </div>
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Next 30 days</p>
+          <p className="text-2xl font-black text-white">{next30.reminders + next30.feedback}</p>
+          <p className="text-xs text-white/60 mt-1">{next30.reminders} reminder{next30.reminders === 1 ? "" : "s"} · {next30.feedback} feedback</p>
+        </div>
+        <div className="bg-secondary/30 border border-white/10 rounded-xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Next firing date</p>
+          <p className="text-2xl font-black text-white">{nextDate || "—"}</p>
+          <p className="text-xs text-white/60 mt-1">{nextDate ? "9am ET on this date" : "No pending rows in queue"}</p>
+        </div>
       </div>
 
       <div className={`border rounded-2xl p-5 ${dryRun ? "bg-amber-500/10 border-amber-500/30" : "bg-green-500/10 border-green-500/30"}`}>
@@ -1777,33 +1892,81 @@ function EmailScheduleTab() {
                   <th className="px-4 py-2 font-medium">Recipient</th>
                   <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium">Sent at</th>
+                  <th className="px-4 py-2 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-white/5">
-                    <td className="px-4 py-3 text-white/80 tabular-nums">#{r.bookingId}</td>
-                    <td className="px-4 py-3 text-white/80">
-                      {r.kind === "reminder_t4" ? "T-4 reminder" : r.kind === "feedback_t1" ? "T+1 feedback" : r.kind}
-                    </td>
-                    <td className="px-4 py-3 text-white/70 tabular-nums">{r.scheduledFor}</td>
-                    <td className="px-4 py-3 text-white/60 text-xs truncate max-w-[240px]" title={r.recipientEmail}>{r.recipientEmail}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
-                        r.status === "sent" ? "bg-green-500/15 text-green-400" :
-                        r.status === "failed" ? "bg-red-500/15 text-red-400" :
-                        r.status === "skipped" ? "bg-white/10 text-white/60" :
-                        "bg-amber-500/15 text-amber-300"
-                      }`}>
-                        {r.status}{r.dryRun && r.status === "sent" ? " (dry)" : ""}
-                      </span>
-                      {r.errorMessage && <p className="text-[10px] text-red-400 mt-1 max-w-[200px] truncate" title={r.errorMessage}>{r.errorMessage}</p>}
-                    </td>
-                    <td className="px-4 py-3 text-white/60 text-xs">
-                      {r.sentAt ? new Date(r.sentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"}
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const expanded = expandedId === r.id && preview?.id === r.id;
+                  return (
+                    <>
+                      <tr key={r.id} className="border-b border-white/5">
+                        <td className="px-4 py-3 text-white/80 tabular-nums">#{r.bookingId}</td>
+                        <td className="px-4 py-3 text-white/80">
+                          {r.kind === "reminder_t4" ? "T-4 reminder" : r.kind === "feedback_t1" ? "T+1 feedback" : r.kind}
+                        </td>
+                        <td className="px-4 py-3 text-white/70 tabular-nums">{r.scheduledFor}</td>
+                        <td className="px-4 py-3 text-white/60 text-xs truncate max-w-[240px]" title={r.recipientEmail}>{r.recipientEmail}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                            r.status === "sent" ? "bg-green-500/15 text-green-400" :
+                            r.status === "failed" ? "bg-red-500/15 text-red-400" :
+                            r.status === "skipped" ? "bg-white/10 text-white/60" :
+                            "bg-amber-500/15 text-amber-300"
+                          }`}>
+                            {r.status}{r.dryRun && r.status === "sent" ? " (dry)" : ""}
+                          </span>
+                          {r.errorMessage && <p className="text-[10px] text-red-400 mt-1 max-w-[200px] truncate" title={r.errorMessage}>{r.errorMessage}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-white/60 text-xs">
+                          {r.sentAt ? new Date(r.sentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs text-white/70 hover:text-white"
+                            onClick={() => loadPreview(r.id)}
+                            disabled={previewBusyId === r.id}
+                            data-testid={`button-preview-${r.id}`}
+                          >
+                            {previewBusyId === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : expanded ? "Hide" : "Preview"}
+                          </Button>
+                          {r.status === "pending" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-primary hover:text-white ml-1"
+                              onClick={() => sendNow(r.id)}
+                              disabled={sendNowBusyId === r.id}
+                              data-testid={`button-send-now-${r.id}`}
+                            >
+                              {sendNowBusyId === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Send now →"}
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                      {expanded && preview && (
+                        <tr key={`${r.id}-preview`} className="border-b border-white/10 bg-black/40">
+                          <td colSpan={7} className="px-4 py-4">
+                            <div className="space-y-3">
+                              <div className="text-xs text-white/60 space-y-1">
+                                <p><span className="text-white/40">To:</span> <span className="text-white/80">{preview.to}</span></p>
+                                <p><span className="text-white/40">Subject:</span> <span className="text-white/80 font-medium">{preview.subject}</span></p>
+                              </div>
+                              <iframe
+                                title={`Preview ${r.id}`}
+                                srcDoc={preview.html}
+                                className="w-full h-[420px] rounded-lg border border-white/10 bg-white"
+                                sandbox=""
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
               </tbody>
             </table>
           </div>

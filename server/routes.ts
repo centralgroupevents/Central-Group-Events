@@ -2299,6 +2299,75 @@ ${blogList || "_No recent posts yet._"}
     return { subject, html };
   }
 
+  // Build the actual email body for a single scheduled row given the
+  // booking — extracted so the admin preview + send-now endpoints can
+  // reuse the exact same renderer as the cron tick.
+  function renderScheduledEmail(row: { id: number; kind: string; recipientEmail: string; bookingId: number }, booking: any, dryRun: boolean) {
+    const tpl = row.kind === "reminder_t4" ? buildReminderEmail(booking) : buildFeedbackEmail(booking);
+    const subject = dryRun ? `[TEST] ${tpl.subject}` : tpl.subject;
+    const to = dryRun ? "centralgroupevents@gmail.com" : row.recipientEmail;
+    const html = dryRun
+      ? `<div style="background:#fff3cd;border:1px solid #ffeaa7;padding:12px;margin-bottom:16px;color:#5b4a00;font-family:Arial,sans-serif;font-size:13px"><strong>[DRY RUN]</strong> Would have sent this to: <code>${escapeHtml(row.recipientEmail)}</code> for booking #${row.bookingId} (${row.kind}).</div>${tpl.html}`
+      : tpl.html;
+    return { subject, html, to };
+  }
+
+  // The whole "process scheduled emails" loop, extracted so both the
+  // secret-protected cron endpoint AND the admin "Run now" button can
+  // call the same logic. Backfills rows, sends pending ones.
+  async function runScheduledEmailsTick(): Promise<{ today: string; dryRun: boolean; backfilled: number; sent: number; failed: number; skipped: number; pendingProcessed: number }> {
+    const today = todayInET();
+    const dryRunSetting = await storage.getSetting("cronDryRun");
+    const dryRun = dryRunSetting !== "false";
+
+    const allBookings = await storage.getBookings();
+    let backfilled = 0;
+    for (const b of allBookings) {
+      if (!b.paidAt) continue;
+      if (b.status && b.status.toLowerCase() === "cancelled") continue;
+      const iso = parseFlexibleWcDate(b.eventDate);
+      if (!iso) continue;
+      const t4 = shiftIsoDate(iso, -4);
+      const t1 = shiftIsoDate(iso, 1);
+      await storage.ensureScheduledEmailRows(b.id, "reminder_t4", t4, INTERNAL_REMINDER_RECIPIENTS.join(","));
+      await storage.ensureScheduledEmailRows(b.id, "feedback_t1", t1, b.email);
+      backfilled++;
+    }
+
+    const pending = await storage.listPendingScheduledEmails(today);
+    let sent = 0, failed = 0, skipped = 0;
+    for (const row of pending) {
+      const booking = allBookings.find((b) => b.id === row.bookingId);
+      if (!booking) {
+        await storage.markScheduledEmailSent(row.id, "skipped", { error: "booking not found", dryRun });
+        skipped++;
+        continue;
+      }
+      if (booking.status && booking.status.toLowerCase() === "cancelled") {
+        await storage.markScheduledEmailSent(row.id, "skipped", { error: "booking cancelled", dryRun });
+        skipped++;
+        continue;
+      }
+      const { subject, html, to } = renderScheduledEmail(row, booking, dryRun);
+      try {
+        await transporter.sendMail({
+          from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+          to,
+          subject,
+          html,
+        });
+        await storage.markScheduledEmailSent(row.id, "sent", { dryRun });
+        sent++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.slice(0, 500) : "unknown";
+        await storage.markScheduledEmailSent(row.id, "failed", { error: msg, dryRun });
+        failed++;
+      }
+    }
+
+    return { today, dryRun, backfilled, sent, failed, skipped, pendingProcessed: pending.length };
+  }
+
   // Public, secret-protected. Pinged daily at 9am ET by cron-job.org.
   app.get("/api/cron/scheduled-emails", async (req: Request, res: Response) => {
     try {
@@ -2307,64 +2376,8 @@ ${blogList || "_No recent posts yet._"}
         return res.status(500).json({ message: "CRON_SECRET not configured" });
       }
       if (secret !== process.env.CRON_SECRET) return res.status(401).json({ message: "Unauthorized" });
-
-      const today = todayInET();
-      const dryRunSetting = await storage.getSetting("cronDryRun");
-      const dryRun = dryRunSetting !== "false"; // default ON until admin explicitly disables
-
-      // 1. Backfill rows for every eligible booking (paid + not cancelled +
-      //    parseable eventDate). Idempotent — skips if a row already exists.
-      const allBookings = await storage.getBookings();
-      let backfilled = 0;
-      for (const b of allBookings) {
-        if (!b.paidAt) continue; // only paid bookings
-        if (b.status && b.status.toLowerCase() === "cancelled") continue;
-        const iso = parseFlexibleWcDate(b.eventDate);
-        if (!iso) continue;
-        const t4 = shiftIsoDate(iso, -4);
-        const t1 = shiftIsoDate(iso, 1);
-        await storage.ensureScheduledEmailRows(b.id, "reminder_t4", t4, INTERNAL_REMINDER_RECIPIENTS.join(","));
-        await storage.ensureScheduledEmailRows(b.id, "feedback_t1", t1, b.email);
-        backfilled++;
-      }
-
-      // 2. Send everything pending with scheduledFor <= today.
-      const pending = await storage.listPendingScheduledEmails(today);
-      let sent = 0, failed = 0, skipped = 0;
-      for (const row of pending) {
-        const booking = allBookings.find((b) => b.id === row.bookingId);
-        if (!booking) {
-          await storage.markScheduledEmailSent(row.id, "skipped", { error: "booking not found", dryRun });
-          skipped++;
-          continue;
-        }
-        if (booking.status && booking.status.toLowerCase() === "cancelled") {
-          await storage.markScheduledEmailSent(row.id, "skipped", { error: "booking cancelled", dryRun });
-          skipped++;
-          continue;
-        }
-        const tpl = row.kind === "reminder_t4" ? buildReminderEmail(booking) : buildFeedbackEmail(booking);
-        const subject = dryRun ? `[TEST] ${tpl.subject}` : tpl.subject;
-        const to = dryRun ? "centralgroupevents@gmail.com" : row.recipientEmail;
-        try {
-          await transporter.sendMail({
-            from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
-            to,
-            subject,
-            html: dryRun
-              ? `<div style="background:#fff3cd;border:1px solid #ffeaa7;padding:12px;margin-bottom:16px;color:#5b4a00;font-family:Arial,sans-serif;font-size:13px"><strong>[DRY RUN]</strong> Would have sent this to: <code>${escapeHtml(row.recipientEmail)}</code> for booking #${row.bookingId} (${row.kind}).</div>${tpl.html}`
-              : tpl.html,
-          });
-          await storage.markScheduledEmailSent(row.id, "sent", { dryRun });
-          sent++;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message.slice(0, 500) : "unknown";
-          await storage.markScheduledEmailSent(row.id, "failed", { error: msg, dryRun });
-          failed++;
-        }
-      }
-
-      res.json({ today, dryRun, backfilled, sent, failed, skipped, pendingProcessed: pending.length });
+      const result = await runScheduledEmailsTick();
+      res.json(result);
     } catch (err) {
       console.error("[cron/scheduled-emails] error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -2378,6 +2391,75 @@ ${blogList || "_No recent posts yet._"}
       const dryRun = (await storage.getSetting("cronDryRun")) !== "false";
       res.json({ rows, dryRun });
     } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: trigger the daily scheduler manually (same logic as the cron
+  // tick, no need to remember the secret-protected URL).
+  app.post("/api/admin/scheduled-emails/run-now", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const result = await runScheduledEmailsTick();
+      res.json(result);
+    } catch (err) {
+      console.error("[scheduled-emails/run-now] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: render a single scheduled row as the exact email that would
+  // send. Used by the inline preview in the Email Schedule tab.
+  app.get("/api/admin/scheduled-emails/:id/preview", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const row = await storage.getScheduledEmailRow(id);
+      if (!row) return res.status(404).json({ message: "Row not found" });
+      const bookings = await storage.getBookings();
+      const booking = bookings.find((b) => b.id === row.bookingId);
+      if (!booking) return res.status(404).json({ message: "Linked booking missing" });
+      const dryRun = (await storage.getSetting("cronDryRun")) !== "false";
+      const rendered = renderScheduledEmail(row, booking, dryRun);
+      res.json({ ...rendered, kind: row.kind, recipient: row.recipientEmail, scheduledFor: row.scheduledFor, status: row.status, dryRun });
+    } catch (err) {
+      console.error("[scheduled-emails/preview] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: send a single pending scheduled row immediately. Marks sent
+  // on success. Respects the dry-run toggle so testing stays safe.
+  app.post("/api/admin/scheduled-emails/:id/send-now", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const row = await storage.getScheduledEmailRow(id);
+      if (!row) return res.status(404).json({ message: "Row not found" });
+      if (row.status !== "pending") return res.status(400).json({ message: `Row already ${row.status}` });
+      const bookings = await storage.getBookings();
+      const booking = bookings.find((b) => b.id === row.bookingId);
+      if (!booking) {
+        await storage.markScheduledEmailSent(id, "skipped", { error: "booking not found" });
+        return res.status(404).json({ message: "Linked booking missing — marked skipped" });
+      }
+      const dryRun = (await storage.getSetting("cronDryRun")) !== "false";
+      const { subject, html, to } = renderScheduledEmail(row, booking, dryRun);
+      try {
+        await transporter.sendMail({
+          from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+          to,
+          subject,
+          html,
+        });
+        await storage.markScheduledEmailSent(id, "sent", { dryRun });
+        res.json({ sent: true, to, subject, dryRun });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.slice(0, 500) : "unknown";
+        await storage.markScheduledEmailSent(id, "failed", { error: msg, dryRun });
+        res.status(500).json({ message: `Send failed: ${msg}`, dryRun });
+      }
+    } catch (err) {
+      console.error("[scheduled-emails/send-now] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
