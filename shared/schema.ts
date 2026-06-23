@@ -200,6 +200,23 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Standalone arbitrary reminders. Free-text title + optional body, one
+// or more comma-separated recipients, a sendAt timestamp. Processed by
+// the same cron tick as scheduled emails — fires the next time the tick
+// runs at or after sendAt. Recurring reminders intentionally not in v1.
+export const reminders = pgTable("reminders", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  body: text("body"),
+  sendAt: timestamp("send_at").notNull(),
+  recipientEmails: text("recipient_emails").notNull(),
+  tag: text("tag"),
+  status: text("status").notNull().default("pending"), // pending | sent | failed | cancelled
+  sentAt: timestamp("sent_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // One row per email blast we send. `kind` distinguishes the all-subscriber
 // newsletter from a per-page submitter blast; `pageSlug` is set for the
 // latter so we can filter by page in admin.
@@ -484,6 +501,7 @@ export type ScheduledEmailSend = typeof scheduledEmailSends.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
 export type EmailBlast = typeof emailBlasts.$inferSelect;
 export type EmailBlastEvent = typeof emailBlastEvents.$inferSelect;
+export type Reminder = typeof reminders.$inferSelect;
 
 export type WorldCupSubmission = typeof worldCupSubmissions.$inferSelect;
 export type InsertWorldCupSubmission = z.infer<typeof insertWorldCupSubmissionSchema>;

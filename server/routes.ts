@@ -2339,7 +2339,7 @@ ${blogList || "_No recent posts yet._"}
   // The whole "process scheduled emails" loop, extracted so both the
   // secret-protected cron endpoint AND the admin "Run now" button can
   // call the same logic. Backfills rows, sends pending ones.
-  async function runScheduledEmailsTick(): Promise<{ today: string; dryRun: boolean; backfilled: number; sent: number; failed: number; skipped: number; pendingProcessed: number }> {
+  async function runScheduledEmailsTick(): Promise<{ today: string; dryRun: boolean; backfilled: number; sent: number; failed: number; skipped: number; pendingProcessed: number; remindersSent: number; remindersFailed: number }> {
     const today = todayInET();
     const dryRunSetting = await storage.getSetting("cronDryRun");
     const dryRun = dryRunSetting !== "false";
@@ -2389,7 +2389,43 @@ ${blogList || "_No recent posts yet._"}
       }
     }
 
-    return { today, dryRun, backfilled, sent, failed, skipped, pendingProcessed: pending.length };
+    // Standalone reminders piggyback on the same tick. Any reminder
+    // with sendAt <= now and status='pending' gets fired and marked sent.
+    // Same dry-run honored — preview lands in centralgroupevents@gmail.com.
+    const dueReminders = await storage.listDueReminders(new Date());
+    let remindersSent = 0;
+    let remindersFailed = 0;
+    for (const r of dueReminders) {
+      const recipients = r.recipientEmails.split(",").map((s) => s.trim()).filter(Boolean);
+      const subject = dryRun ? `[TEST] Reminder: ${r.title}` : `Reminder: ${r.title}`;
+      const baseHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 28px; background: #0a0a0a; color: #fff; border-radius: 12px; line-height: 1.6;">
+          <p style="color:#8B2FC9;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:bold;margin:0 0 8px">Reminder</p>
+          <h2 style="margin:0 0 16px;font-size:22px;color:#fff">${escapeHtml(r.title)}</h2>
+          ${r.body ? `<div style="color:#ddd;font-size:15px;white-space:pre-wrap;margin:0 0 18px">${escapeHtml(r.body)}</div>` : ""}
+          <p style="color:#888;font-size:12px;margin-top:24px;border-top:1px solid #222;padding-top:12px">Scheduled for ${r.sendAt.toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" })} ET · sent by Central Group Events admin.</p>
+        </div>`;
+      const html = dryRun
+        ? `<div style="background:#fff3cd;border:1px solid #ffeaa7;padding:12px;margin-bottom:16px;color:#5b4a00;font-family:Arial,sans-serif;font-size:13px"><strong>[DRY RUN]</strong> Would have sent to: <code>${escapeHtml(r.recipientEmails)}</code></div>${baseHtml}`
+        : baseHtml;
+      const to = dryRun ? "centralgroupevents@gmail.com" : recipients.join(",");
+      try {
+        await transporter.sendMail({
+          from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+          to,
+          subject,
+          html,
+        });
+        await storage.markReminderSent(r.id, "sent");
+        remindersSent++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.slice(0, 500) : "unknown";
+        await storage.markReminderSent(r.id, "failed", { error: msg });
+        remindersFailed++;
+      }
+    }
+
+    return { today, dryRun, backfilled, sent, failed, skipped, pendingProcessed: pending.length, remindersSent, remindersFailed };
   }
 
   // Public, secret-protected. Pinged daily at 9am ET by cron-job.org.
@@ -2495,6 +2531,108 @@ ${blogList || "_No recent posts yet._"}
       if (typeof enabled !== "boolean") return res.status(400).json({ message: "enabled must be boolean" });
       await storage.setSetting("cronDryRun", enabled ? "true" : "false");
       res.json({ dryRun: enabled });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Standalone reminders ────────────────────────────────────────────
+  app.get("/api/admin/reminders", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const rows = await storage.listReminders(200);
+      res.json(rows);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/reminders", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { title, body, sendAt, recipientEmails, tag } = req.body as {
+        title?: string; body?: string; sendAt?: string; recipientEmails?: string; tag?: string;
+      };
+      if (!title || typeof title !== "string" || !title.trim()) return res.status(400).json({ message: "title is required" });
+      if (!sendAt || typeof sendAt !== "string") return res.status(400).json({ message: "sendAt (ISO datetime) is required" });
+      const dt = new Date(sendAt);
+      if (isNaN(dt.getTime())) return res.status(400).json({ message: "sendAt is not a valid datetime" });
+      const recips = (recipientEmails || "centralgroupevents@gmail.com").trim();
+      if (!recips) return res.status(400).json({ message: "recipientEmails required" });
+      const created = await storage.createReminder({
+        title: title.trim(),
+        body: body && body.trim() ? body.trim() : null,
+        sendAt: dt,
+        recipientEmails: recips,
+        tag: tag && tag.trim() ? tag.trim() : null,
+      });
+      res.status(201).json(created);
+    } catch (err) {
+      console.error("[reminders/create] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/reminders/:id/cancel", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const r = await storage.getReminder(id);
+      if (!r) return res.status(404).json({ message: "Reminder not found" });
+      if (r.status !== "pending") return res.status(400).json({ message: `Already ${r.status}` });
+      await storage.markReminderSent(id, "cancelled");
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/reminders/:id/send-now", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const r = await storage.getReminder(id);
+      if (!r) return res.status(404).json({ message: "Reminder not found" });
+      if (r.status !== "pending") return res.status(400).json({ message: `Already ${r.status}` });
+      const dryRun = (await storage.getSetting("cronDryRun")) !== "false";
+      const recipients = r.recipientEmails.split(",").map((s) => s.trim()).filter(Boolean);
+      const subject = dryRun ? `[TEST] Reminder: ${r.title}` : `Reminder: ${r.title}`;
+      const baseHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 28px; background: #0a0a0a; color: #fff; border-radius: 12px; line-height: 1.6;">
+          <p style="color:#8B2FC9;font-size:11px;letter-spacing:1px;text-transform:uppercase;font-weight:bold;margin:0 0 8px">Reminder</p>
+          <h2 style="margin:0 0 16px;font-size:22px;color:#fff">${escapeHtml(r.title)}</h2>
+          ${r.body ? `<div style="color:#ddd;font-size:15px;white-space:pre-wrap;margin:0 0 18px">${escapeHtml(r.body)}</div>` : ""}
+          <p style="color:#888;font-size:12px;margin-top:24px;border-top:1px solid #222;padding-top:12px">Sent manually from Central Group Events admin.</p>
+        </div>`;
+      const html = dryRun
+        ? `<div style="background:#fff3cd;border:1px solid #ffeaa7;padding:12px;margin-bottom:16px;color:#5b4a00;font-family:Arial,sans-serif;font-size:13px"><strong>[DRY RUN]</strong> Would have sent to: <code>${escapeHtml(r.recipientEmails)}</code></div>${baseHtml}`
+        : baseHtml;
+      const to = dryRun ? "centralgroupevents@gmail.com" : recipients.join(",");
+      try {
+        await transporter.sendMail({
+          from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+          to,
+          subject,
+          html,
+        });
+        await storage.markReminderSent(id, "sent");
+        res.json({ sent: true, to, dryRun });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.slice(0, 500) : "unknown";
+        await storage.markReminderSent(id, "failed", { error: msg });
+        res.status(500).json({ message: `Send failed: ${msg}`, dryRun });
+      }
+    } catch (err) {
+      console.error("[reminders/send-now] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/reminders/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const ok = await storage.deleteReminder(id);
+      if (!ok) return res.status(404).json({ message: "Reminder not found" });
+      res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }

@@ -269,6 +269,7 @@ const TABS = [
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "seo", label: "SEO", icon: BarChart2 },
   { id: "email-schedule", label: "Email Schedule", icon: Send },
+  { id: "reminders", label: "Reminders", icon: Mail },
   { id: "world-cup", label: "World Cup", icon: Star },
   { id: "nba-finals", label: "NBA Finals", icon: Star },
   { id: "team", label: "Team Members", icon: Users },
@@ -1675,6 +1676,288 @@ type ScheduledEmailRow = {
   dryRun: boolean;
   createdAt: string | null;
 };
+
+/* ─────────────────────────────────────────────────────────── */
+/*  REMINDERS TAB                                             */
+/* ─────────────────────────────────────────────────────────── */
+type ReminderRow = {
+  id: number;
+  title: string;
+  body: string | null;
+  sendAt: string;
+  recipientEmails: string;
+  tag: string | null;
+  status: string;
+  sentAt: string | null;
+  errorMessage: string | null;
+  createdAt: string | null;
+};
+
+function isoLocalNowPlus(minutes: number): string {
+  // Format a Date as the value an <input type="datetime-local"> expects
+  // (YYYY-MM-DDTHH:mm in the user's local TZ — no Z suffix).
+  const d = new Date(Date.now() + minutes * 60_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function RemindersTab() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [sendAt, setSendAt] = useState(isoLocalNowPlus(60));
+  const [recipients, setRecipients] = useState("centralgroupevents@gmail.com");
+  const [tag, setTag] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "sent" | "failed" | "cancelled">("all");
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const { data: rows = [], isLoading } = useQuery<ReminderRow[]>({
+    queryKey: ["/api/admin/reminders"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/reminders", { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+  });
+
+  async function createReminder() {
+    if (!title.trim() || !sendAt) {
+      toast({ title: "Title and send-at are required", variant: "destructive" });
+      return;
+    }
+    setCreating(true);
+    try {
+      // datetime-local gives YYYY-MM-DDTHH:mm in local time; new Date() parses
+      // it as local time, which is what we want for the API.
+      const sendAtIso = new Date(sendAt).toISOString();
+      await apiRequest("POST", "/api/admin/reminders", {
+        title: title.trim(),
+        body: body.trim() || undefined,
+        sendAt: sendAtIso,
+        recipientEmails: recipients.trim() || "centralgroupevents@gmail.com",
+        tag: tag.trim() || undefined,
+      });
+      toast({ title: "Reminder scheduled" });
+      setTitle("");
+      setBody("");
+      setSendAt(isoLocalNowPlus(60));
+      setTag("");
+      qc.invalidateQueries({ queryKey: ["/api/admin/reminders"] });
+    } catch (err) {
+      toast({ title: "Failed to create", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function sendNow(id: number) {
+    setBusyId(id);
+    try {
+      const res = await apiRequest("POST", `/api/admin/reminders/${id}/send-now`, {});
+      const j = await res.json();
+      toast({ title: j.dryRun ? `[DRY] Sent test copy to centralgroupevents@gmail.com` : `Sent to ${j.to}` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/reminders"] });
+    } catch (err) {
+      toast({ title: "Send failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function cancelReminder(id: number) {
+    if (!confirm("Cancel this reminder? It will not send.")) return;
+    setBusyId(id);
+    try {
+      await apiRequest("POST", `/api/admin/reminders/${id}/cancel`, {});
+      toast({ title: "Reminder cancelled" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/reminders"] });
+    } catch (err) {
+      toast({ title: "Cancel failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteReminder(id: number) {
+    if (!confirm("Delete this reminder permanently?")) return;
+    setBusyId(id);
+    try {
+      await apiRequest("DELETE", `/api/admin/reminders/${id}`, undefined);
+      toast({ title: "Deleted" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/reminders"] });
+    } catch (err) {
+      toast({ title: "Delete failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const visible = rows.filter((r) => statusFilter === "all" || r.status === statusFilter);
+  const counts = {
+    pending: rows.filter((r) => r.status === "pending").length,
+    sent: rows.filter((r) => r.status === "sent").length,
+    failed: rows.filter((r) => r.status === "failed").length,
+    cancelled: rows.filter((r) => r.status === "cancelled").length,
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl p-6 space-y-3">
+        <h2 className="text-xl font-black">Reminders</h2>
+        <p className="text-sm text-muted-foreground">
+          Send yourself (or anyone else) a reminder email at any future time. Fires on the same daily cron that handles scheduled emails — so granularity is currently <strong>daily at 9am ET</strong> unless you upgrade the cron-job.org schedule to hourly.
+          For time-of-day precision, use the <strong>Send now</strong> button on each row.
+        </p>
+      </div>
+
+      {/* Quick-add form */}
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-3">
+        <h3 className="text-sm font-bold text-white">New reminder</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="md:col-span-2 space-y-1">
+            <Label className="text-xs text-white/60">Title <span className="text-red-400">*</span></Label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Post Juneteenth recap on IG"
+              className="bg-black/40 border-white/10 h-10"
+              data-testid="input-reminder-title"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-white/60">Send at <span className="text-red-400">*</span></Label>
+            <Input
+              type="datetime-local"
+              value={sendAt}
+              onChange={(e) => setSendAt(e.target.value)}
+              className="bg-black/40 border-white/10 h-10"
+              data-testid="input-reminder-sendat"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-white/60">Recipients <span className="text-white/30">(comma-separated)</span></Label>
+            <Input
+              value={recipients}
+              onChange={(e) => setRecipients(e.target.value)}
+              placeholder="centralgroupevents@gmail.com"
+              className="bg-black/40 border-white/10 h-10"
+              data-testid="input-reminder-recipients"
+            />
+          </div>
+          <div className="md:col-span-2 space-y-1">
+            <Label className="text-xs text-white/60">Notes <span className="text-white/30">(optional)</span></Label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={3}
+              placeholder="Include the carousel link + thank the venues again"
+              className="w-full bg-black/40 border border-white/10 rounded-md p-2 text-sm text-white"
+              data-testid="textarea-reminder-body"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-white/60">Tag <span className="text-white/30">(optional)</span></Label>
+            <Input
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+              placeholder="marketing"
+              className="bg-black/40 border-white/10 h-10"
+              data-testid="input-reminder-tag"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end pt-2">
+          <Button
+            onClick={createReminder}
+            disabled={creating || !title.trim()}
+            className="bg-primary hover:bg-primary/90"
+            data-testid="button-create-reminder"
+          >
+            {creating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Scheduling…</> : "Schedule reminder"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3">
+        {(["pending", "sent", "failed", "cancelled"] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
+            className={`bg-secondary/30 border rounded-xl p-4 text-left transition-colors ${statusFilter === s ? "border-primary" : "border-white/10 hover:border-white/30"}`}
+            data-testid={`reminder-filter-${s}`}
+          >
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{s}</p>
+            <p className="text-2xl font-black">{counts[s]}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
+        {isLoading ? (
+          <div className="p-6 space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+        ) : visible.length === 0 ? (
+          <div className="py-10 px-6 text-center text-muted-foreground text-sm">
+            No reminders {statusFilter !== "all" ? `with status "${statusFilter}"` : "yet"}. Use the form above to schedule one.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-muted-foreground text-left text-xs uppercase tracking-wider">
+                  <th className="px-4 py-2 font-medium">Title</th>
+                  <th className="px-4 py-2 font-medium">Send at</th>
+                  <th className="px-4 py-2 font-medium">Recipients</th>
+                  <th className="px-4 py-2 font-medium">Tag</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r) => (
+                  <tr key={r.id} className="border-b border-white/5">
+                    <td className="px-4 py-3 text-white/90">
+                      <div className="font-medium" title={r.body || ""}>{r.title}</div>
+                      {r.body && <div className="text-[10px] text-white/40 truncate max-w-[280px]">{r.body}</div>}
+                    </td>
+                    <td className="px-4 py-3 text-white/70 text-xs whitespace-nowrap">
+                      {new Date(r.sendAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                    </td>
+                    <td className="px-4 py-3 text-white/60 text-xs truncate max-w-[200px]" title={r.recipientEmails}>{r.recipientEmails}</td>
+                    <td className="px-4 py-3 text-white/60 text-xs">{r.tag || "—"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                        r.status === "sent" ? "bg-green-500/15 text-green-400" :
+                        r.status === "failed" ? "bg-red-500/15 text-red-400" :
+                        r.status === "cancelled" ? "bg-white/10 text-white/60" :
+                        "bg-amber-500/15 text-amber-300"
+                      }`}>
+                        {r.status}
+                      </span>
+                      {r.errorMessage && <p className="text-[10px] text-red-400 mt-1 max-w-[200px] truncate" title={r.errorMessage}>{r.errorMessage}</p>}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {r.status === "pending" && (
+                        <>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-primary hover:text-white" onClick={() => sendNow(r.id)} disabled={busyId === r.id} data-testid={`button-send-now-${r.id}`}>
+                            {busyId === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Send now"}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-white/60 hover:text-white ml-1" onClick={() => cancelReminder(r.id)} disabled={busyId === r.id}>Cancel</Button>
+                        </>
+                      )}
+                      <Button size="sm" variant="ghost" className="h-7 text-xs text-red-400/70 hover:text-red-400 ml-1" onClick={() => deleteReminder(r.id)} disabled={busyId === r.id}>Delete</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function EmailScheduleTab() {
   const qc = useQueryClient();
@@ -7619,6 +7902,7 @@ export default function Admin() {
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "seo" && <SeoHealthTab />}
         {activeTab === "email-schedule" && <EmailScheduleTab />}
+        {activeTab === "reminders" && <RemindersTab />}
         {activeTab === "world-cup" && <WorldCupTab />}
         {activeTab === "nba-finals" && <NbaFinalsTab />}
         {activeTab === "pages" && <PagesTab />}

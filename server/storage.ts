@@ -13,6 +13,7 @@ import {
   appSettings,
   emailBlasts,
   emailBlastEvents,
+  reminders,
   worldCupSubmissions,
   nbaFinalsSubmissions,
   landingPageSubmissions,
@@ -166,6 +167,14 @@ export interface IStorage {
   // App settings (key/value, used for cron dry-run flag)
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+
+  // Standalone reminders (free-text, fires on cron tick at/after sendAt)
+  createReminder(data: { title: string; body?: string | null; sendAt: Date; recipientEmails: string; tag?: string | null }): Promise<{ id: number }>;
+  listReminders(limit?: number): Promise<Array<{ id: number; title: string; body: string | null; sendAt: Date; recipientEmails: string; tag: string | null; status: string; sentAt: Date | null; errorMessage: string | null; createdAt: Date | null }>>;
+  getReminder(id: number): Promise<{ id: number; title: string; body: string | null; sendAt: Date; recipientEmails: string; status: string } | null>;
+  listDueReminders(now: Date): Promise<Array<{ id: number; title: string; body: string | null; sendAt: Date; recipientEmails: string }>>;
+  markReminderSent(id: number, status: "sent" | "failed" | "cancelled", opts?: { error?: string }): Promise<void>;
+  deleteReminder(id: number): Promise<boolean>;
 
   // Email blast tracking — opens + clicks
   createEmailBlast(kind: string, subject: string, recipientCount: number, pageSlug?: string | null): Promise<number>;
@@ -967,6 +976,86 @@ export class DatabaseStorage implements IStorage {
     } else {
       await db.update(appSettings).set({ value, updatedAt: new Date() }).where(eq(appSettings.key, key));
     }
+  }
+
+  // ── Standalone reminders ──────────────────────────────────────────────
+  async createReminder(data: { title: string; body?: string | null; sendAt: Date; recipientEmails: string; tag?: string | null }) {
+    const [row] = await db
+      .insert(reminders)
+      .values({
+        title: data.title.slice(0, 200),
+        body: data.body ? data.body.slice(0, 4000) : null,
+        sendAt: data.sendAt,
+        recipientEmails: data.recipientEmails.slice(0, 1000),
+        tag: data.tag ? data.tag.slice(0, 80) : null,
+      })
+      .returning({ id: reminders.id });
+    return { id: row.id };
+  }
+
+  async listReminders(limit: number = 200) {
+    return await db
+      .select({
+        id: reminders.id,
+        title: reminders.title,
+        body: reminders.body,
+        sendAt: reminders.sendAt,
+        recipientEmails: reminders.recipientEmails,
+        tag: reminders.tag,
+        status: reminders.status,
+        sentAt: reminders.sentAt,
+        errorMessage: reminders.errorMessage,
+        createdAt: reminders.createdAt,
+      })
+      .from(reminders)
+      .orderBy(desc(reminders.sendAt))
+      .limit(limit);
+  }
+
+  async getReminder(id: number) {
+    const [row] = await db
+      .select({
+        id: reminders.id,
+        title: reminders.title,
+        body: reminders.body,
+        sendAt: reminders.sendAt,
+        recipientEmails: reminders.recipientEmails,
+        status: reminders.status,
+      })
+      .from(reminders)
+      .where(eq(reminders.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async listDueReminders(now: Date) {
+    return await db
+      .select({
+        id: reminders.id,
+        title: reminders.title,
+        body: reminders.body,
+        sendAt: reminders.sendAt,
+        recipientEmails: reminders.recipientEmails,
+      })
+      .from(reminders)
+      .where(and(eq(reminders.status, "pending"), lt(reminders.sendAt, now)))
+      .orderBy(reminders.sendAt);
+  }
+
+  async markReminderSent(id: number, status: "sent" | "failed" | "cancelled", opts?: { error?: string }): Promise<void> {
+    await db
+      .update(reminders)
+      .set({
+        status,
+        sentAt: status === "sent" ? new Date() : null,
+        errorMessage: opts?.error ?? null,
+      })
+      .where(eq(reminders.id, id));
+  }
+
+  async deleteReminder(id: number): Promise<boolean> {
+    const result = await db.delete(reminders).where(eq(reminders.id, id)).returning({ id: reminders.id });
+    return result.length > 0;
   }
 
   // ── Email blast tracking ──────────────────────────────────────────────
