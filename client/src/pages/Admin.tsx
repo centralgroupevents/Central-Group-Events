@@ -6171,6 +6171,8 @@ export default function Admin() {
   const [weekAnchor, setWeekAnchor] = useState<string>(getCurrentMondayIso());
   const [genreIsOther, setGenreIsOther] = useState(false);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
+  // Free-text search across event title, venue, and city. Empty = show all.
+  const [eventSearch, setEventSearch] = useState("");
   const [lastClickedEventIndex, setLastClickedEventIndex] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [inlineEdit, setInlineEdit] = useState<{ id: number; field: string; value: string } | null>(null);
@@ -6784,11 +6786,25 @@ export default function Admin() {
         </div>
 
         {/* EVENTS TAB */}
-        {activeTab === "events" && (
+        {activeTab === "events" && (() => {
+          // Filter the full events list by the search box. Matches the
+          // query against title, venue, and city (case-insensitive).
+          // Splits on whitespace so "newark brunch" matches any event with
+          // both terms across any of the three fields. Empty query = all events.
+          const q = eventSearch.trim().toLowerCase();
+          const filteredEvents = !q ? events : events.filter((ev) => {
+            const hay = `${ev.title || ""} ${ev.venue || ""} ${ev.city || ""}`.toLowerCase();
+            return q.split(/\s+/).every((term) => hay.includes(term));
+          });
+          return (
           <>
             {/* Header row */}
             <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-              <h2 className="text-xl font-bold text-white">Events <span className="text-muted-foreground font-normal text-sm ml-1">({events.length} total)</span></h2>
+              <h2 className="text-xl font-bold text-white">
+                Events <span className="text-muted-foreground font-normal text-sm ml-1">
+                  ({q ? `${filteredEvents.length} of ${events.length}` : `${events.length} total`})
+                </span>
+              </h2>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => { resetImportModal(); setShowImportModal(true); }} className="border-white/20 hover:bg-white/10 text-white/70" data-testid="button-import-csv">
                   <Upload className="w-4 h-4 mr-1.5" /> Import CSV
@@ -6797,6 +6813,30 @@ export default function Admin() {
                   <Plus className="w-4 h-4 mr-1" /> Add New Event
                 </Button>
               </div>
+            </div>
+
+            {/* Search bar — filters by event name, venue, or city */}
+            <div className="relative mb-3">
+              <Input
+                value={eventSearch}
+                onChange={(e) => setEventSearch(e.target.value)}
+                placeholder="Search events by name, venue, or city…"
+                className="bg-secondary/30 border-white/10 h-10 pl-9 pr-9 text-sm"
+                data-testid="input-events-search"
+              />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              {eventSearch && (
+                <button
+                  onClick={() => setEventSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-xs font-bold w-4 h-4 flex items-center justify-center"
+                  aria-label="Clear search"
+                  data-testid="button-events-search-clear"
+                >
+                  ×
+                </button>
+              )}
             </div>
 
             {/* Batch action bar */}
@@ -6836,6 +6876,11 @@ export default function Admin() {
                 <div className="flex justify-center items-center h-40 text-muted-foreground">Loading…</div>
               ) : events.length === 0 ? (
                 <div className="flex justify-center items-center h-40 text-muted-foreground">No events yet. Add one above.</div>
+              ) : filteredEvents.length === 0 ? (
+                <div className="flex flex-col justify-center items-center h-40 text-muted-foreground gap-2">
+                  <span>No events match "{eventSearch}".</span>
+                  <button onClick={() => setEventSearch("")} className="text-primary text-xs hover:underline">Clear search</button>
+                </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="text-sm" style={{ minWidth: "1100px", width: "100%" }}>
@@ -6845,8 +6890,8 @@ export default function Admin() {
                           <input
                             type="checkbox"
                             className="accent-primary cursor-pointer"
-                            checked={selectedEventIds.size === events.length && events.length > 0}
-                            onChange={(e) => setSelectedEventIds(e.target.checked ? new Set(events.map(ev => ev.id)) : new Set())}
+                            checked={filteredEvents.length > 0 && filteredEvents.every(ev => selectedEventIds.has(ev.id))}
+                            onChange={(e) => setSelectedEventIds(e.target.checked ? new Set(filteredEvents.map(ev => ev.id)) : new Set())}
                             data-testid="checkbox-select-all-events"
                             title="Select all"
                           />
@@ -6865,7 +6910,7 @@ export default function Admin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {events.map((event, i) => {
+                      {filteredEvents.map((event, i) => {
                         const rowBg = i % 2 !== 0 ? "bg-white/[0.02]" : "";
                         const stickyBg = i % 2 !== 0 ? "bg-[#161624]" : "bg-[#111120]";
 
@@ -7467,7 +7512,8 @@ export default function Admin() {
               </DialogContent>
             </Dialog>
           </>
-        )}
+          );
+        })()}
 
         {/* BOOKINGS TAB */}
         {activeTab === "bookings" && (() => {
