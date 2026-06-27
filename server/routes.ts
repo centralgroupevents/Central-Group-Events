@@ -1139,20 +1139,25 @@ ${blogList || "_No recent posts yet._"}
       for (let i = 0; i < rawRows.length; i++) {
         const row = rawRows[i];
         const title = (row.name || row.title || "").trim();
-        const date = (row.date || "").trim();
+        const rawDate = (row.date || "").trim();
         if (!title) {
           invalid.push({ rowIndex: i, title: "(no name)", reason: "Missing event name" });
           continue;
         }
-        if (!date) {
+        if (!rawDate) {
           invalid.push({ rowIndex: i, title, reason: "Missing date" });
           continue;
         }
+        // Belt-and-suspenders date normalization — handles Excel serial
+        // numbers (e.g. 46199), slash dates (6/19/2026), and spelled-out
+        // dates ("Jun 19, 2026"). Returns the original string if already
+        // ISO or completely unparseable.
+        const date = parseFlexibleWcDate(rawDate) || rawDate;
         // Events are filtered by `gte(events.date, CURRENT_DATE::text)` on read, so a non-ISO
         // date string would silently fail that lexical comparison and the event would never
         // appear. Reject anything that isn't YYYY-MM-DD up front so the user sees why.
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-          invalid.push({ rowIndex: i, title, reason: `Unrecognized date format: "${row.date}". Expected YYYY-MM-DD or a value the importer can normalize (e.g. 5/19/2026).` });
+          invalid.push({ rowIndex: i, title, reason: `Unrecognized date format: "${rawDate}". Expected YYYY-MM-DD or a value the importer can normalize (e.g. 5/19/2026).` });
           continue;
         }
         try {

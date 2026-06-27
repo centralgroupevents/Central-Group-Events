@@ -3563,6 +3563,30 @@ function resolveDayToIsoDate(day: string, weekStartIso: string): string {
   return buildIsoDate(anchor.getFullYear(), anchor.getMonth() + 1, anchor.getDate());
 }
 
+// Excel stores time-of-day cells as fractions of a 24-hour day: 0.5 = noon,
+// 0.6666… = 4 PM, etc. With cellDates+raw:false+dateNF the SheetJS formatter
+// handles full datetimes but bare time-only cells can still leak through as
+// fractions. This catches and formats them as a human-readable "H:MM AM/PM"
+// so the import preview and bulk-import endpoint don't choke.
+function normalizeExcelCell(cell: unknown): string {
+  if (cell === null || cell === undefined) return "";
+  const s = String(cell).trim();
+  if (!s) return "";
+  // Match bare fractions in [0, 1) — Excel time-only cells.
+  if (/^0(\.\d+)?$/.test(s) || /^\.\d+$/.test(s)) {
+    const f = parseFloat(s);
+    if (f >= 0 && f < 1) {
+      const totalMinutes = Math.round(f * 24 * 60);
+      let hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      const ampm = hours >= 12 ? "PM" : "AM";
+      hours = hours % 12 || 12;
+      return `${hours}:${String(minutes).padStart(2, "0")} ${ampm}`;
+    }
+  }
+  return s;
+}
+
 function getUpcomingMondayIso(): string {
   const today = new Date();
   const dow = today.getDay();
@@ -6553,16 +6577,21 @@ export default function Admin() {
       reader.onload = (e) => {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: "array" });
+          // cellDates + raw:false + dateNF makes Excel date cells come through
+          // as "2026-06-19" strings instead of serial numbers like "46199".
+          // Same combo every other import wizard uses.
+          const workbook = XLSX.read(data, { type: "array", cellDates: true });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const allRows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as string[][];
-          const nonEmpty = allRows.filter(r => r.some(c => String(c).trim() !== ""));
+          const allRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, dateNF: "yyyy-mm-dd" }) as any[][];
+          const nonEmpty = allRows.filter(r => r.some((c: unknown) => String(c).trim() !== ""));
           if (nonEmpty.length < 2) {
             setImportErrors(["Spreadsheet appears to be empty or has only headers."]);
             return;
           }
-          const headers = nonEmpty[0].map(h => String(h).trim());
-          const dataRows = nonEmpty.slice(1).map(row => row.map(c => String(c).trim()));
+          const headers = nonEmpty[0].map((h: unknown) => String(h).trim());
+          // Normalize Excel time fractions (e.g. 0.6666 → "4:00 PM") so the
+          // eventTime column doesn't store a meaningless decimal.
+          const dataRows = nonEmpty.slice(1).map(row => row.map((c: unknown) => normalizeExcelCell(c)));
           setImportRawHeaders(headers);
           setImportRawRows(dataRows);
           setImportMapping(buildInitialMapping(headers));
