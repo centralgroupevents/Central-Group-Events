@@ -3595,6 +3595,18 @@ function getUpcomingMondayIso(): string {
   return buildIsoDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
 }
 
+// "This week's Monday" — i.e. the most recent Monday on or before today.
+// Used as the default week-anchor when importing events whose date column is
+// empty and only a weekday is given. Previously defaulted to NEXT Monday,
+// which surprised admins importing this-week events (Friday → next Friday).
+function getCurrentMondayIso(): string {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const daysSinceMon = dow === 0 ? 6 : dow - 1;
+  today.setDate(today.getDate() - daysSinceMon);
+  return buildIsoDate(today.getFullYear(), today.getMonth() + 1, today.getDate());
+}
+
 function normalizeEventDate(input: string): string {
   if (!input) return "";
   const s = String(input).trim();
@@ -6156,7 +6168,7 @@ export default function Admin() {
     invalid: { rowIndex: number; title: string; reason: string }[];
   } | null>(null);
   const [pasteText, setPasteText] = useState("");
-  const [weekAnchor, setWeekAnchor] = useState<string>(getUpcomingMondayIso());
+  const [weekAnchor, setWeekAnchor] = useState<string>(getCurrentMondayIso());
   const [genreIsOther, setGenreIsOther] = useState(false);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [lastClickedEventIndex, setLastClickedEventIndex] = useState<number | null>(null);
