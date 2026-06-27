@@ -3602,6 +3602,20 @@ function normalizeEventDate(input: string): string {
   // Already YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
 
+  // Excel serial date fallback — handles XLSX cells that came through as
+  // raw numbers (e.g. "46199" → "2026-06-19"). Belt-and-suspenders for
+  // when cellDates+raw:false misses a cell. Excel epoch = 1899-12-30.
+  if (/^\d{4,5}(\.\d+)?$/.test(s)) {
+    const n = parseFloat(s);
+    if (n > 30000 && n < 80000) {
+      const ms = Date.UTC(1899, 11, 30) + n * 86_400_000;
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) {
+        return buildIsoDate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+      }
+    }
+  }
+
   // YYYY/MM/DD or YYYY-MM-DD with single-digit month/day
   let m = s.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
   if (m) {
@@ -6666,8 +6680,19 @@ export default function Admin() {
         invalid: Array.isArray(data.invalid) ? data.invalid : [],
       });
       qc.invalidateQueries({ queryKey: ["/api/events"] });
-    } catch {
-      toast({ title: "Import failed", variant: "destructive" });
+    } catch (err) {
+      // Surface the real error instead of the generic "Import failed". Logs
+      // full detail to console for power debugging; the toast shows the
+      // server's message (status + reason) so the admin knows what to fix
+      // without opening devtools.
+      console.error("[events bulk-import] failed:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      toast({
+        title: "Import failed",
+        description: message.slice(0, 500),
+        variant: "destructive",
+      });
+      setImportErrors([message]);
     }
   }
 
