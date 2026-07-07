@@ -204,91 +204,137 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
             </div>
           ) : visibleEvents.length > 0 ? (
             <>
-              <div className="divide-y divide-white/10 rounded-2xl border border-white/10 overflow-hidden">
-                {visibleEvents.map((event, idx) => (
-                  <Fragment key={event.id}>
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.04 }}
-                    data-testid={`row-event-${event.id}`}
-                    className="flex items-center justify-between gap-4 px-6 py-5 bg-white/[0.02] hover:bg-white/[0.05] transition-colors"
-                  >
-                    {/* Thumbnail (Instagram post preview, re-hosted on Cloudinary at import time). */}
-                    {event.imageUrl ? (
-                      <img
-                        src={event.imageUrl}
-                        alt=""
-                        loading="lazy"
-                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover shrink-0 border border-white/10 bg-black/30"
-                        data-testid={`img-event-thumb-${event.id}`}
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                      />
-                    ) : (
-                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl shrink-0 bg-white/[0.04] border border-white/10 flex items-center justify-center text-white/30 text-xs" aria-hidden="true">
-                        <MapPin className="w-5 h-5" />
+              {(() => {
+                // Group events by date so the list reads like a chronological
+                // calendar (DanceDispatch-inspired). Events with a missing /
+                // unparseable date group under an "Undated" section.
+                type Group = { key: string; label: string; events: typeof visibleEvents };
+                const groups: Group[] = [];
+                const seen = new Map<string, Group>();
+                for (const ev of visibleEvents) {
+                  const iso = /^\d{4}-\d{2}-\d{2}$/.test(ev.date || "") ? ev.date : "";
+                  const key = iso || "undated";
+                  let group = seen.get(key);
+                  if (!group) {
+                    const label = iso
+                      ? new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" })
+                      : "TBD";
+                    group = { key, label, events: [] as typeof visibleEvents };
+                    seen.set(key, group);
+                    groups.push(group);
+                  }
+                  group.events.push(ev);
+                }
+
+                let renderedIdx = 0;
+                let adInserted = false;
+                return (
+                  <div className="space-y-8">
+                    {groups.map((g) => (
+                      <div key={g.key}>
+                        <h4 className="text-xs font-bold text-white/50 tracking-widest uppercase mb-3 pl-1" data-testid={`date-heading-${g.key}`}>
+                          {g.label.toUpperCase()}
+                        </h4>
+                        <div className="space-y-3">
+                          {g.events.map((event) => {
+                            const idx = renderedIdx++;
+                            const showAdAfter = inlineAd && !adInserted && idx === inlineAdAfterIndex;
+                            if (showAdAfter) adInserted = true;
+                            return (
+                              <Fragment key={event.id}>
+                                <motion.div
+                                  initial={{ opacity: 0, y: 8 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ delay: Math.min(idx * 0.03, 0.4) }}
+                                  data-testid={`row-event-${event.id}`}
+                                  className="flex items-start gap-4 p-4 sm:p-5 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/20 transition-colors"
+                                >
+                                  {/* Thumbnail — bumped from 56/64 to 72/88 for
+                                      more visual weight per DanceDispatch cards. */}
+                                  {event.imageUrl ? (
+                                    <img
+                                      src={event.imageUrl}
+                                      alt=""
+                                      loading="lazy"
+                                      className="w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] rounded-xl object-cover shrink-0 border border-white/10 bg-black/30"
+                                      data-testid={`img-event-thumb-${event.id}`}
+                                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                    />
+                                  ) : (
+                                    <div className="w-[72px] h-[72px] sm:w-[88px] sm:h-[88px] rounded-xl shrink-0 bg-white/[0.04] border border-white/10 flex items-center justify-center text-white/30" aria-hidden="true">
+                                      <MapPin className="w-6 h-6" />
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start gap-2 flex-wrap mb-1">
+                                      <h3 className="font-black text-base sm:text-lg leading-snug line-clamp-2 text-white" data-testid={`text-event-title-${event.id}`}>
+                                        {event.title}
+                                      </h3>
+                                      {pinFeatured && (event as any).isFeatured && (
+                                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 shrink-0 mt-0.5">
+                                          Featured
+                                        </span>
+                                      )}
+                                    </div>
+                                    {event.description && event.description.trim().length > 0 && (
+                                      <p className="text-sm text-white/60 line-clamp-2 mb-2" data-testid={`text-event-description-${event.id}`}>
+                                        {event.description}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-white/70">
+                                      {event.eventTime && (
+                                        <span className="inline-flex items-center gap-1 text-accent font-semibold" data-testid={`text-event-time-${event.id}`}>
+                                          {event.eventTime}
+                                        </span>
+                                      )}
+                                      <span className="inline-flex items-center gap-1">
+                                        <MapPin className="w-3 h-3 shrink-0" />
+                                        {(() => {
+                                          const parts = [event.venue, event.city]
+                                            .map((p) => (p || "").trim())
+                                            .filter(Boolean);
+                                          return parts.length > 0
+                                            ? parts.join(", ")
+                                            : normalizeRegion(event.region) || event.region;
+                                        })()}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="shrink-0 self-center">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="rounded-full border-white/20 hover:bg-primary hover:border-primary hover:text-white transition-all duration-200 h-8 text-xs"
+                                      asChild
+                                      data-testid={`button-tickets-${event.id}`}
+                                    >
+                                      <a
+                                        href={event.ticketLink ? `/go?url=${encodeURIComponent(event.ticketLink)}&eventId=${event.id}` : "#"}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        Learn more
+                                      </a>
+                                    </Button>
+                                  </div>
+                                </motion.div>
+                                {showAdAfter && (
+                                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4" data-testid="event-list-inline-ad">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">Sponsored</span>
+                                    </div>
+                                    {inlineAd}
+                                  </div>
+                                )}
+                              </Fragment>
+                            );
+                          })}
+                        </div>
                       </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-base leading-snug truncate" data-testid={`text-event-title-${event.id}`}>{event.title}</p>
-                        {pinFeatured && (event as any).isFeatured && (
-                          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30">
-                            Featured
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 shrink-0" />
-                        {(() => {
-                          const parts = [event.venue, event.city]
-                            .map((p) => (p || "").trim())
-                            .filter(Boolean);
-                          // Region is intentionally not shown — it's used only as
-                          // a backend filter via the region tabs above.
-                          return parts.length > 0
-                            ? parts.join(", ")
-                            : normalizeRegion(event.region) || event.region;
-                        })()}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-4 shrink-0">
-                      <div className="text-right hidden sm:block">
-                        <p className="text-sm text-accent font-medium" data-testid={`text-event-date-${event.id}`}>
-                          {new Date(event.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
-                        </p>
-                        {event.eventTime && (
-                          <p className="text-xs text-white/50 mt-0.5" data-testid={`text-event-time-${event.id}`}>{event.eventTime}</p>
-                        )}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-full border-white/20 hover:bg-primary hover:border-primary hover:text-white transition-all duration-200"
-                        asChild
-                        data-testid={`button-tickets-${event.id}`}
-                      >
-                        <a
-                          href={event.ticketLink ? `/go?url=${encodeURIComponent(event.ticketLink)}&eventId=${event.id}` : "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Learn more
-                        </a>
-                      </Button>
-                    </div>
-                  </motion.div>
-                  {inlineAd && idx === inlineAdAfterIndex && (
-                    <div className="px-6 py-4 bg-white/[0.04]" data-testid="event-list-inline-ad">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-white/40">Sponsored</span>
-                      </div>
-                      {inlineAd}
-                    </div>
-                  )}
-                  </Fragment>
-                ))}
-              </div>
+                    ))}
+                  </div>
+                );
+              })()}
               {showSeeMoreButton && hasMore && (
                 <div className="flex justify-center mt-6">
                   <Button

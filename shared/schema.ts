@@ -499,9 +499,9 @@ export type InsertFunnelEvent = z.infer<typeof insertFunnelEventSchema>;
 
 export type ScheduledEmailSend = typeof scheduledEmailSends.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
+export type Reminder = typeof reminders.$inferSelect;
 export type EmailBlast = typeof emailBlasts.$inferSelect;
 export type EmailBlastEvent = typeof emailBlastEvents.$inferSelect;
-export type Reminder = typeof reminders.$inferSelect;
 
 export type WorldCupSubmission = typeof worldCupSubmissions.$inferSelect;
 export type InsertWorldCupSubmission = z.infer<typeof insertWorldCupSubmissionSchema>;
