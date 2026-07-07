@@ -338,6 +338,11 @@ export async function registerRoutes(
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://centralgroupevents.com/guides</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://centralgroupevents.com/world-cup-2026-nj-watch-parties</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
@@ -1305,6 +1310,27 @@ ${blogList || "_No recent posts yet._"}
       const ok = await storage.deletePage(req.params.slug as string);
       if (!ok) return res.status(404).json({ message: "Not found or protected" });
       res.json({ deleted: true });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Public list of published landing pages. Powers the /guides hub, the
+  // homepage guides strip, and the footer's auto-populated Guides column.
+  // Returns lean projection (no heavy body/faqItems) — good for lists.
+  app.get("/api/landing-pages", publicReadLimiter, async (_req: Request, res: Response) => {
+    try {
+      const pages = await storage.listPublishedLandingPages();
+      res.json(pages.map((p) => ({
+        slug: p.slug,
+        title: p.title,
+        metaTitle: p.metaTitle,
+        metaDescription: p.metaDescription,
+        heroImageUrl: p.heroImageUrl,
+        heroImageAlt: p.heroImageAlt,
+        ogImageUrl: p.ogImageUrl,
+        updatedAt: p.updatedAt,
+      })));
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }

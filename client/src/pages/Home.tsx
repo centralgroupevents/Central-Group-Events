@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight, Calendar, Megaphone, Video, MessageSquare,
-  Users, CheckCircle2, Ticket, Loader2, Instagram, Plus, X
+  Users, CheckCircle2, Ticket, Loader2, Instagram, Plus, X, BookOpen, Compass
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -87,6 +88,16 @@ export default function Home() {
   const { toast } = useToast();
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
   const [heroSubscribed, setHeroSubscribed] = useState(false);
+  // Powers the footer's auto-populated Guides column. Same query as the
+  // ExploreNjSection strip — TanStack Query dedupes to a single request.
+  const { data: footerGuides = [] } = useQuery<GuideLite[]>({
+    queryKey: ["/api/landing-pages"],
+    queryFn: async () => {
+      const r = await fetch("/api/landing-pages");
+      if (!r.ok) throw new Error(`${r.status}`);
+      return r.json();
+    },
+  });
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -544,6 +555,12 @@ export default function Home() {
         </div>
       </section>
 
+      {/* EXPLORE NJ SECTION — homepage discovery for landing pages + blog posts.
+          Pulls from /api/landing-pages and /api/posts. Both strips are hidden
+          when their source list is empty so a fresh install doesn't show
+          empty sections. */}
+      <ExploreNjSection />
+
       {/* PRICING SECTION */}
       <section id="pricing" className="py-24 bg-black/50 border-t border-white/5 relative overflow-hidden">
         <div className="absolute right-0 top-0 w-1/3 h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none" />
@@ -906,11 +923,32 @@ export default function Home() {
                 <li><a href="/things-to-do-in-nj-this-weekend" className="text-muted-foreground hover:text-primary transition-colors">Things to do in NJ this weekend</a></li>
                 <li><a href="/things-to-do-in-nj-tonight" className="text-muted-foreground hover:text-primary transition-colors">Things to do in NJ tonight</a></li>
                 <li><a href="/free-things-to-do-in-nj" className="text-muted-foreground hover:text-primary transition-colors">Free things to do in NJ</a></li>
-                <li><a href="/juneteenth-in-nj" className="text-muted-foreground hover:text-primary transition-colors">Juneteenth in NJ</a></li>
-                <li><a href="/world-cup-2026-nj-guide" className="text-muted-foreground hover:text-primary transition-colors">World Cup 2026 NJ Guide</a></li>
                 <li><a href="/blog" className="text-muted-foreground hover:text-primary transition-colors">Weekly Newsletter</a></li>
                 <li><a href="/faq" className="text-muted-foreground hover:text-primary transition-colors">FAQ</a></li>
               </ul>
+              {/* Auto-populated NJ Guides column — pulls every published Page.
+                  Publishing a new page in the CMS surfaces it here without a
+                  code edit. Capped at 5 links so the footer doesn't balloon;
+                  the /guides hub carries the full list. */}
+              {footerGuides.length > 0 && (
+                <>
+                  <h3 className="text-xs uppercase tracking-widest font-bold text-white/40 mt-6 mb-3">NJ Guides</h3>
+                  <ul className="space-y-2 text-sm">
+                    {footerGuides.slice(0, 5).map((g) => (
+                      <li key={g.slug}>
+                        <a href={`/${g.slug}`} className="text-muted-foreground hover:text-primary transition-colors" data-testid={`footer-guide-${g.slug}`}>
+                          {g.title}
+                        </a>
+                      </li>
+                    ))}
+                    <li>
+                      <a href="/guides" className="text-primary hover:underline font-semibold text-xs inline-flex items-center gap-1" data-testid="footer-see-all-guides">
+                        See all guides →
+                      </a>
+                    </li>
+                  </ul>
+                </>
+              )}
             </div>
           </div>
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
@@ -953,5 +991,170 @@ export default function Home() {
         onSuccess={() => setHeroSubscribed(true)}
       />
     </div>
+  );
+}
+
+/* ─── ExploreNjSection ─────────────────────────────────────────────────────
+   Homepage discovery block for landing pages (Guides) + blog posts. Both
+   strips hide themselves when their source list is empty so the section
+   doesn't render as empty on a fresh install. */
+
+type GuideLite = {
+  slug: string;
+  title: string;
+  metaDescription: string;
+  heroImageUrl: string | null;
+  ogImageUrl: string | null;
+  updatedAt: string | null;
+};
+
+type BlogLite = {
+  id: number;
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  coverImageUrl: string | null;
+  publishedAt: string | null;
+  createdAt: string | null;
+};
+
+function ExploreNjSection() {
+  const { data: guides } = useQuery<GuideLite[]>({
+    queryKey: ["/api/landing-pages"],
+    queryFn: async () => {
+      const r = await fetch("/api/landing-pages");
+      if (!r.ok) throw new Error(`${r.status}`);
+      return r.json();
+    },
+  });
+  const { data: posts } = useQuery<BlogLite[]>({
+    queryKey: ["/api/posts"],
+    queryFn: async () => {
+      const r = await fetch("/api/posts");
+      if (!r.ok) throw new Error(`${r.status}`);
+      return r.json();
+    },
+  });
+
+  const featuredGuides = (guides || []).slice(0, 6);
+  const recentPosts = (posts || []).slice(0, 4);
+  if (featuredGuides.length === 0 && recentPosts.length === 0) return null;
+
+  return (
+    <section id="explore-nj" className="py-24 border-y border-white/5 bg-black/30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
+        {/* ── Guides strip ── */}
+        {featuredGuides.length > 0 && (
+          <div>
+            <div className="flex items-end justify-between mb-8 gap-4 flex-wrap">
+              <div>
+                <h2 className="text-sm font-bold text-accent tracking-widest uppercase mb-3 flex items-center gap-2">
+                  <Compass className="w-4 h-4" /> NJ Guides
+                </h2>
+                <h3 className="text-3xl md:text-4xl font-black">Deep-dive event guides</h3>
+                <p className="text-muted-foreground mt-2 max-w-xl">
+                  Curated NJ topic guides — evergreen resources for the biggest events, holidays, and neighborhoods.
+                </p>
+              </div>
+              <Link href="/guides" className="text-primary hover:underline text-sm font-semibold inline-flex items-center gap-1" data-testid="link-see-all-guides">
+                See all guides <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {featuredGuides.map((g) => {
+                const cover = g.ogImageUrl || g.heroImageUrl;
+                return (
+                  <a
+                    key={g.slug}
+                    href={`/${g.slug}`}
+                    className="group block bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-white/25 rounded-2xl overflow-hidden transition-colors"
+                    data-testid={`link-guide-${g.slug}`}
+                  >
+                    {cover ? (
+                      <div className="aspect-[16/9] overflow-hidden bg-black/40">
+                        <img
+                          src={cover}
+                          alt=""
+                          loading="lazy"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="aspect-[16/9] bg-gradient-to-br from-primary/20 to-accent/10 flex items-center justify-center">
+                        <Compass className="w-8 h-8 text-white/30" />
+                      </div>
+                    )}
+                    <div className="p-5">
+                      <h4 className="font-black text-lg text-white group-hover:text-primary transition-colors line-clamp-2">{g.title}</h4>
+                      {g.metaDescription && (
+                        <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{g.metaDescription}</p>
+                      )}
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Blog strip ── */}
+        {recentPosts.length > 0 && (
+          <div>
+            <div className="flex items-end justify-between mb-8 gap-4 flex-wrap">
+              <div>
+                <h2 className="text-sm font-bold text-primary tracking-widest uppercase mb-3 flex items-center gap-2">
+                  <BookOpen className="w-4 h-4" /> Weekly Newsletter
+                </h2>
+                <h3 className="text-3xl md:text-4xl font-black">Fresh from the blog</h3>
+                <p className="text-muted-foreground mt-2 max-w-xl">
+                  New every Thursday — the week's essential NJ event roundups, neighborhood spotlights, and behind-the-scenes.
+                </p>
+              </div>
+              <a href="/blog" className="text-primary hover:underline text-sm font-semibold inline-flex items-center gap-1" data-testid="link-see-all-blog">
+                See all posts <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {recentPosts.map((p) => (
+                <a
+                  key={p.id}
+                  href={`/blog/${p.slug}`}
+                  className="group block bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 hover:border-white/25 rounded-2xl overflow-hidden transition-colors"
+                  data-testid={`link-blog-${p.slug}`}
+                >
+                  {p.coverImageUrl ? (
+                    <div className="aspect-[16/9] overflow-hidden bg-black/40">
+                      <img
+                        src={p.coverImageUrl}
+                        alt=""
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="aspect-[16/9] bg-gradient-to-br from-accent/20 to-primary/10 flex items-center justify-center">
+                      <BookOpen className="w-7 h-7 text-white/30" />
+                    </div>
+                  )}
+                  <div className="p-4">
+                    <h4 className="font-bold text-base text-white group-hover:text-primary transition-colors line-clamp-2">{p.title}</h4>
+                    {p.excerpt && (
+                      <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{p.excerpt}</p>
+                    )}
+                    {(p.publishedAt || p.createdAt) && (
+                      <p className="text-[11px] text-white/40 mt-2">
+                        {new Date(p.publishedAt || p.createdAt || "").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </p>
+                    )}
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
