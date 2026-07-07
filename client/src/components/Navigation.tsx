@@ -33,11 +33,11 @@ export function Navigation() {
   const navLinks: { name: string; href: string; type: "anchor" | "route" }[] = [
     { name: "Services", href: isHomePage ? "#services" : "/#services", type: "anchor" },
     { name: "World Cup", href: "/world-cup-2026-nj-watch-parties", type: "route" },
-    { name: "NBA Finals", href: "/nba-finals-2026-nj-watch-parties", type: "route" },
+    { name: "Guides", href: "/guides", type: "route" },
+    { name: "Blog", href: "/blog", type: "route" },
     { name: "Events", href: isHomePage ? "#events" : "/#events", type: "anchor" },
     { name: "Things to Do in NJ", href: "/things-to-do-in-nj", type: "route" },
     { name: "Pricing", href: isHomePage ? "#pricing" : "/#pricing", type: "anchor" },
-    { name: "Newsletter", href: "/blog", type: "route" },
     { name: "FAQ", href: "/faq", type: "route" },
   ];
 
