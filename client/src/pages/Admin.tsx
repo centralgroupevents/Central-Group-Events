@@ -6326,6 +6326,48 @@ export default function Admin() {
     enabled: !!user && activeTab === "bookings",
   });
 
+  // Filter + sort derivations for Events and Bookings live at the top of
+  // Admin so useSortableTable is called unconditionally (Rules of Hooks).
+  // Previously these lived inside the `activeTab === "..." && (() => { ... })()`
+  // IIFEs, which meant switching tabs changed the hook count and React
+  // errored out with "Rendered fewer hooks than expected" — the whole
+  // admin page went blank.
+  const filteredEvents = useMemo(() => {
+    const q = eventSearch.trim().toLowerCase();
+    if (!q) return events;
+    return events.filter((ev) => {
+      const hay = `${ev.title || ""} ${ev.venue || ""} ${ev.city || ""}`.toLowerCase();
+      return q.split(/\s+/).every((term) => hay.includes(term));
+    });
+  }, [events, eventSearch]);
+  const { sorted: sortedEvents, sortKey: eventSortKey, sortDir: eventSortDir, toggleSort: toggleEventSort } = useSortableTable(
+    filteredEvents,
+    { initial: { key: "date", dir: "asc" } },
+  );
+
+  const preFilteredBookings = useMemo(() => {
+    const searchTerms = bookingSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return bookings
+      .filter((b) => bookingStatusFilter === "All" || (b.status || "New") === bookingStatusFilter)
+      .filter((b) => {
+        if (searchTerms.length === 0) return true;
+        const hay = [
+          b.contactName, b.email, b.phone, b.eventName, b.venueName,
+          b.city, b.region, b.instagramHandle, b.mode, b.referenceId,
+        ].map((v) => (v || "").toLowerCase()).join(" ");
+        return searchTerms.every((t) => hay.includes(t));
+      });
+  }, [bookings, bookingSearch, bookingStatusFilter]);
+  const { sorted: filteredBookings, sortKey: bookingSortKey, sortDir: bookingSortDirNext, toggleSort: toggleBookingSort } = useSortableTable(
+    preFilteredBookings,
+    {
+      initial: { key: "createdAt", dir: "desc" },
+      accessors: {
+        createdAt: (r) => (r.createdAt ? new Date(r.createdAt).getTime() : 0),
+      },
+    },
+  );
+
   const updateBookingStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
       const res = await apiRequest("PATCH", `/api/admin/bookings/${id}/status`, { status });
@@ -6817,18 +6859,9 @@ export default function Admin() {
           // query against title, venue, and city (case-insensitive).
           // Splits on whitespace so "newark brunch" matches any event with
           // both terms across any of the three fields. Empty query = all events.
+          // filteredEvents + useSortableTable now live at the top of Admin so
+          // the hook is called unconditionally. Just consume the results here.
           const q = eventSearch.trim().toLowerCase();
-          const filteredEvents = !q ? events : events.filter((ev) => {
-            const hay = `${ev.title || ""} ${ev.venue || ""} ${ev.city || ""}`.toLowerCase();
-            return q.split(/\s+/).every((term) => hay.includes(term));
-          });
-          // Every column in the Events table is click-sortable. Default is
-          // date-asc so the next upcoming event surfaces first — matches how
-          // admins scan the list day-to-day.
-          const { sorted: sortedEvents, sortKey: eventSortKey, sortDir: eventSortDir, toggleSort: toggleEventSort } = useSortableTable(
-            filteredEvents,
-            { initial: { key: "date", dir: "asc" } },
-          );
           return (
           <>
             {/* Header row */}
@@ -7559,35 +7592,9 @@ export default function Admin() {
             Cancelled: "border-red-500/40 text-red-400 bg-red-500/10",
           };
 
-          // Whitespace-splitting search — every term must appear somewhere
-          // across the searchable fields for the row to match. Lets you type
-          // "newark brunch" to find a Newark brunch booking without caring
-          // which field each word came from.
-          const searchTerms = bookingSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
-          const preFilteredBookings = bookings
-            .filter((b) => bookingStatusFilter === "All" || (b.status || "New") === bookingStatusFilter)
-            .filter((b) => {
-              if (searchTerms.length === 0) return true;
-              const hay = [
-                b.contactName, b.email, b.phone, b.eventName, b.venueName,
-                b.city, b.region, b.instagramHandle, b.mode, b.referenceId,
-              ].map((v) => (v || "").toLowerCase()).join(" ");
-              return searchTerms.every((t) => hay.includes(t));
-            });
-          // Bookings-table sort — replaces the old sub-single-column
-          // Submitted sort with the general sortable-column pattern. Every
-          // column is now clickable; default is Submitted (createdAt) desc
-          // so newest bookings show first (matches prior behavior).
-          const { sorted: filteredBookings, sortKey: bookingSortKey, sortDir: bookingSortDirNext, toggleSort: toggleBookingSort } = useSortableTable(
-            preFilteredBookings,
-            {
-              initial: { key: "createdAt", dir: "desc" },
-              accessors: {
-                createdAt: (r) => (r.createdAt ? new Date(r.createdAt).getTime() : 0),
-              },
-            },
-          );
-
+          // preFilteredBookings + useSortableTable now live at the top of
+          // Admin so the hook is called unconditionally. Just consume the
+          // results here.
           const handleExportCSV = () => {
             const escape = (val: string | null | undefined) => {
               const s = val ?? "";
