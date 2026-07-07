@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { WorldCupEmailBanner } from "@/components/WorldCupEmailBanner";
+import { AiExtractCard } from "@/components/AiExtractCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -386,6 +387,16 @@ function SubmitForm({ slug, pageTitle }: { slug: string; pageTitle: string }) {
 
   return (
     <form onSubmit={handleSubmit} onFocus={trackEngagement} className="space-y-4">
+      <AiExtractCard
+        onExtracted={(f) => {
+          if (f.eventName) setEventName(f.eventName);
+          if (f.eventDate) setEventDate(f.eventDate);
+          if (f.venue) setVenueName(f.venue);
+          if (f.city) setTown(f.city);
+          if (f.instagramHandle) setInstagramHandle(f.instagramHandle);
+          if (f.ticketUrl) setLearnMoreUrl(f.ticketUrl);
+        }}
+      />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-white/80 text-xs">Your name <span className="text-red-400">*</span></Label>

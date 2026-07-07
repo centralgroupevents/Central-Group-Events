@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AiExtractCard } from "@/components/AiExtractCard";
 import {
   WORLD_CUP_2026_WEEKS,
   WORLD_CUP_2026_SCHEDULE,
@@ -140,6 +141,16 @@ export default function SubmitWatchParty() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          <AiExtractCard
+            label="Have a watch-party flyer? Upload it and we'll auto-fill the venue, event name, IG, and RSVP link."
+            onExtracted={(f) => {
+              if (f.eventName) setEventName(f.eventName);
+              if (f.venue) setVenueName(f.venue);
+              if (f.city) setTown(f.city);
+              if (f.instagramHandle) setInstagramHandle(f.instagramHandle);
+              if (f.ticketUrl) setLearnMoreUrl(f.ticketUrl);
+            }}
+          />
           <div className="space-y-1.5">
             <Label className="text-white/80">Tournament week <span className="text-red-400">*</span></Label>
             <Select

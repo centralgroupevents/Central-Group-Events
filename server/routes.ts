@@ -1011,6 +1011,68 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // AI-powered event extraction from a flyer / screenshot / poster image.
+  // Public — used by every submission form on the site (page submissions,
+  // /book, watch parties). Rate-limited via formLimiter to prevent abuse.
+  // Uses Gemini 2.5 Flash Lite for cost efficiency (~$0.019 per image).
+  //
+  // Model is called with a strict JSON schema so the response is always
+  // valid to parse. Any field the model can't determine comes back null,
+  // never invented — the user reviews + edits before submitting.
+  app.post("/api/ai/extract-event", formLimiter, upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ message: "No image provided" });
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ message: "AI extraction not configured (GEMINI_API_KEY missing on server)" });
+      }
+      const { GoogleGenerativeAI, SchemaType } = await import("@google/generative-ai");
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash-lite",
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: SchemaType.OBJECT,
+            properties: {
+              eventName:        { type: SchemaType.STRING, nullable: true, description: "Full event name / title as printed on the flyer" },
+              eventDate:        { type: SchemaType.STRING, nullable: true, description: "Date in YYYY-MM-DD. If year isn't shown, infer to the next upcoming year." },
+              eventTime:        { type: SchemaType.STRING, nullable: true, description: "Start time in human format, e.g. '9:00 PM' or '10 PM - 2 AM'" },
+              venue:            { type: SchemaType.STRING, nullable: true, description: "Venue name (e.g. 'The Sports Bar')" },
+              city:             { type: SchemaType.STRING, nullable: true, description: "City name only (e.g. 'Newark')" },
+              instagramHandle:  { type: SchemaType.STRING, nullable: true, description: "Instagram handle WITHOUT the @, or the promoter/venue account visible on the flyer" },
+              ticketUrl:        { type: SchemaType.STRING, nullable: true, description: "Full ticket / RSVP URL if visible" },
+              description:      { type: SchemaType.STRING, nullable: true, description: "1-2 sentence pitch summarizing what the event is" },
+            },
+          },
+        },
+      });
+      const prompt = `You are extracting event details from a flyer, screenshot, or poster image for a New Jersey event promotion site.
+
+Return every field you can confidently determine. Set null for any field the image doesn't show — don't invent details. For the date, output YYYY-MM-DD; if only "June 19" is shown, use the next upcoming year. For time, keep human formatting like "9:00 PM" or "10 PM - 2 AM". For the Instagram handle, strip the @ sign.`;
+
+      const imagePart = {
+        inlineData: {
+          data: req.file.buffer.toString("base64"),
+          mimeType: req.file.mimetype,
+        },
+      };
+
+      const result = await model.generateContent([prompt, imagePart]);
+      const text = result.response.text();
+      let parsed: Record<string, string | null>;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        return res.status(502).json({ message: "AI returned an unparseable response — try a clearer image" });
+      }
+      res.json({ extracted: parsed });
+    } catch (err) {
+      console.error("[ai/extract-event] error:", err);
+      const msg = err instanceof Error ? err.message.slice(0, 500) : "Extraction failed";
+      res.status(500).json({ message: msg });
+    }
+  });
+
   app.post("/api/upload", requireAuth(), upload.single("file"), async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file provided" });

@@ -17,6 +17,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
+import { AiExtractCard } from "@/components/AiExtractCard";
 import { apiRequest } from "@/lib/queryClient";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
@@ -621,6 +622,18 @@ export default function Book() {
                     <h2 className="text-2xl font-black mb-1">Event Details</h2>
                     <p className="text-muted-foreground text-sm">Tell us about your event.</p>
                   </div>
+
+                  <AiExtractCard
+                    label="Have a flyer or poster? Upload it and we'll auto-fill event name, date, time, venue, city, IG, and ticket URL."
+                    onExtracted={(f) => {
+                      if (f.eventName) set("eventName", f.eventName);
+                      if (f.eventDate) set("eventDate", f.eventDate);
+                      if (f.eventTime) set("eventTime", f.eventTime);
+                      if (f.venue) set("venueName", f.venue);
+                      if (f.city) set("city", f.city);
+                      if (f.instagramHandle) set("instagramHandle", f.instagramHandle);
+                    }}
+                  />
 
                   <div>
                     <Label htmlFor="eventName" className="text-white/80 mb-1.5 block">Event Name *</Label>

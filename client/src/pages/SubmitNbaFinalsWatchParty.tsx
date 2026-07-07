@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AiExtractCard } from "@/components/AiExtractCard";
 import { NBA_FINALS_2026_GAMES, getNbaGameByNumber } from "@shared/nba-finals-schedule";
 
 const SITE = "https://centralgroupevents.com";
@@ -112,6 +113,16 @@ export default function SubmitNbaFinalsWatchParty() {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          <AiExtractCard
+            label="Have a watch-party flyer? Upload it and we'll auto-fill the venue, event name, IG, and RSVP link."
+            onExtracted={(f) => {
+              if (f.eventName) setEventName(f.eventName);
+              if (f.venue) setVenueName(f.venue);
+              if (f.city) setTown(f.city);
+              if (f.instagramHandle) setInstagramHandle(f.instagramHandle);
+              if (f.ticketUrl) setLearnMoreUrl(f.ticketUrl);
+            }}
+          />
           <div className="space-y-1.5">
             <Label className="text-white/80">Game <span className="text-red-400">*</span></Label>
             <Select value={gameNumber ? String(gameNumber) : ""} onValueChange={(v) => setGameNumber(parseInt(v, 10))}>
