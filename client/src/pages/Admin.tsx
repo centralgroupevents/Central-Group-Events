@@ -3,6 +3,7 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useSortableTable, SortableHeader } from "@/hooks/use-sortable-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1193,6 +1194,22 @@ function BlogPostsTab() {
   const { data: posts = [], isLoading } = useQuery<Post[]>({
     queryKey: ["/api/posts/admin"],
   });
+  // Sort all columns in the Blog Posts table. Default: title asc.
+  // "Status" is derived from isPublished; "Gated" from isGated; both sort as booleans.
+  const { sorted: sortedPosts, sortKey: postSortKey, sortDir: postSortDir, toggleSort: togglePostSort } = useSortableTable(
+    posts,
+    {
+      initial: { key: "title", dir: "asc" },
+      accessors: {
+        status: (r) => !!r.isPublished,
+        gated: (r) => !!r.isGated,
+        publishedAt: (r) => {
+          const v = r.publishedAt || r.createdAt;
+          return v ? new Date(v).getTime() : 0;
+        },
+      },
+    },
+  );
 
   const { data: versions = [], isLoading: versionsLoading } = useQuery<PostVersion[]>({
     queryKey: ["/api/posts", showVersionsFor, "versions"],
@@ -1507,15 +1524,15 @@ function BlogPostsTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-muted-foreground text-left">
-                  <th className="px-4 py-3 font-medium">Title</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Gated</th>
-                  <th className="px-4 py-3 font-medium">Published Date</th>
+                  <SortableHeader label="Title" colKey="title" sortKey={postSortKey} sortDir={postSortDir} onSort={togglePostSort} className="px-4 py-3 font-medium" />
+                  <SortableHeader label="Status" colKey="status" sortKey={postSortKey} sortDir={postSortDir} onSort={togglePostSort} className="px-4 py-3 font-medium" />
+                  <SortableHeader label="Gated" colKey="gated" sortKey={postSortKey} sortDir={postSortDir} onSort={togglePostSort} className="px-4 py-3 font-medium" />
+                  <SortableHeader label="Published Date" colKey="publishedAt" sortKey={postSortKey} sortDir={postSortDir} onSort={togglePostSort} className="px-4 py-3 font-medium" />
                   <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {posts.map((post, i) => (
+                {sortedPosts.map((post, i) => (
                   <>
                     <tr
                       key={post.id}
@@ -6290,7 +6307,8 @@ export default function Admin() {
 
   const [bookingStatusFilter, setBookingStatusFilter] = useState<string>("All");
   const [bookingSearch, setBookingSearch] = useState<string>("");
-  const [bookingSortDir, setBookingSortDir] = useState<"desc" | "asc">("desc");
+  // Booking-list sort now handled by useSortableTable in the tab render;
+  // this legacy state was only wired to a single Submitted-column button.
   const [selectedBookingIds, setSelectedBookingIds] = useState<Set<number>>(new Set());
   const [showBookingDeleteConfirm, setShowBookingDeleteConfirm] = useState(false);
   const [expandedBookingId, setExpandedBookingId] = useState<number | null>(null);
@@ -6796,6 +6814,13 @@ export default function Admin() {
             const hay = `${ev.title || ""} ${ev.venue || ""} ${ev.city || ""}`.toLowerCase();
             return q.split(/\s+/).every((term) => hay.includes(term));
           });
+          // Every column in the Events table is click-sortable. Default is
+          // date-asc so the next upcoming event surfaces first — matches how
+          // admins scan the list day-to-day.
+          const { sorted: sortedEvents, sortKey: eventSortKey, sortDir: eventSortDir, toggleSort: toggleEventSort } = useSortableTable(
+            filteredEvents,
+            { initial: { key: "date", dir: "asc" } },
+          );
           return (
           <>
             {/* Header row */}
@@ -6896,21 +6921,21 @@ export default function Admin() {
                             title="Select all"
                           />
                         </th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap sticky left-0 z-10 bg-[#1a1a2e] min-w-[200px]">Name of Event</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[160px]">Day of Event</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[100px]">Time</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[140px]">Venue</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[120px]">City</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[110px]">Region</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[130px]">Organizer</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[130px]">Influencer</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[110px]">Genre</th>
-                        <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[140px]">Instagram</th>
+                        <SortableHeader label="Name of Event" colKey="title" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap sticky left-0 z-10 bg-[#1a1a2e] min-w-[200px]" />
+                        <SortableHeader label="Day of Event" colKey="date" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap min-w-[160px]" />
+                        <SortableHeader label="Time" colKey="eventTime" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap min-w-[100px]" />
+                        <SortableHeader label="Venue" colKey="venue" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap min-w-[140px]" />
+                        <SortableHeader label="City" colKey="city" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap min-w-[120px]" />
+                        <SortableHeader label="Region" colKey="region" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap min-w-[110px]" />
+                        <SortableHeader label="Organizer" colKey="organizer" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap min-w-[130px]" />
+                        <SortableHeader label="Influencer" colKey="influencer" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap min-w-[130px]" />
+                        <SortableHeader label="Genre" colKey="genre" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap min-w-[110px]" />
+                        <SortableHeader label="Instagram" colKey="instagramHandle" sortKey={eventSortKey} sortDir={eventSortDir} onSort={toggleEventSort} className="px-4 py-3 font-medium whitespace-nowrap min-w-[140px]" />
                         <th className="px-4 py-3 font-medium whitespace-nowrap text-right min-w-[100px]">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredEvents.map((event, i) => {
+                      {sortedEvents.map((event, i) => {
                         const rowBg = i % 2 !== 0 ? "bg-white/[0.02]" : "";
                         const stickyBg = i % 2 !== 0 ? "bg-[#161624]" : "bg-[#111120]";
 
@@ -7527,7 +7552,7 @@ export default function Admin() {
           };
 
           const searchLower = bookingSearch.toLowerCase();
-          const filteredBookings = bookings
+          const preFilteredBookings = bookings
             .filter((b) => bookingStatusFilter === "All" || (b.status || "New") === bookingStatusFilter)
             .filter((b) => {
               if (!searchLower) return true;
@@ -7535,13 +7560,20 @@ export default function Admin() {
                 (b.contactName || "").toLowerCase().includes(searchLower) ||
                 (b.email || "").toLowerCase().includes(searchLower)
               );
-            })
-            .slice()
-            .sort((a, b) => {
-              const da = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-              const db_ = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-              return bookingSortDir === "desc" ? db_ - da : da - db_;
             });
+          // Bookings-table sort — replaces the old sub-single-column
+          // Submitted sort with the general sortable-column pattern. Every
+          // column is now clickable; default is Submitted (createdAt) desc
+          // so newest bookings show first (matches prior behavior).
+          const { sorted: filteredBookings, sortKey: bookingSortKey, sortDir: bookingSortDirNext, toggleSort: toggleBookingSort } = useSortableTable(
+            preFilteredBookings,
+            {
+              initial: { key: "createdAt", dir: "desc" },
+              accessors: {
+                createdAt: (r) => (r.createdAt ? new Date(r.createdAt).getTime() : 0),
+              },
+            },
+          );
 
           const handleExportCSV = () => {
             const escape = (val: string | null | undefined) => {
@@ -7687,28 +7719,17 @@ export default function Admin() {
                               className="rounded border-white/20 bg-black/40"
                             />
                           </th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Ref #</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Status</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Package</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Deal Value</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Contact</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Email</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Event Name</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Event Date</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">Budget</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">City / Region</th>
-                          <th className="px-4 py-3 font-medium whitespace-nowrap">
-                            <button
-                              onClick={() => setBookingSortDir(d => d === "desc" ? "asc" : "desc")}
-                              className="flex items-center gap-1 hover:text-white transition-colors"
-                              data-testid="button-sort-submitted"
-                            >
-                              Submitted
-                              {bookingSortDir === "desc"
-                                ? <ChevronDown className="w-3 h-3" />
-                                : <ChevronUp className="w-3 h-3" />}
-                            </button>
-                          </th>
+                          <SortableHeader label="Ref #" colKey="referenceId" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
+                          <SortableHeader label="Status" colKey="status" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
+                          <SortableHeader label="Package" colKey="mode" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
+                          <SortableHeader label="Deal Value" colKey="budgetRange" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap text-right" align="right" />
+                          <SortableHeader label="Contact" colKey="contactName" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
+                          <SortableHeader label="Email" colKey="email" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
+                          <SortableHeader label="Event Name" colKey="eventName" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
+                          <SortableHeader label="Event Date" colKey="eventDate" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
+                          <SortableHeader label="Budget" colKey="budgetRange" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
+                          <SortableHeader label="City / Region" colKey="city" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
+                          <SortableHeader label="Submitted" colKey="createdAt" sortKey={bookingSortKey} sortDir={bookingSortDirNext} onSort={toggleBookingSort} className="px-4 py-3 font-medium whitespace-nowrap" />
                         </tr>
                       </thead>
                       <tbody>
