@@ -508,9 +508,17 @@ function SubscribersTab() {
   const filtered: Subscriber[] = (() => {
     let list = subscribers;
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(s => s.email.toLowerCase().includes(q));
+    // Multi-term whitespace-AND search across every text field on a subscriber.
+    // Lets you type "gmail newark" to find gmail.com subscribers in Newark
+    // without caring which field each word came from.
+    const searchTerms = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (searchTerms.length > 0) {
+      list = list.filter((s) => {
+        const hay = [s.email, s.name, s.region, s.referrer]
+          .map((v) => (v || "").toLowerCase())
+          .join(" ");
+        return searchTerms.every((t) => hay.includes(t));
+      });
     }
     if (regionFilter !== "All") {
       if (regionFilter === "No Region") {
@@ -800,7 +808,7 @@ function SubscribersTab() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by email…"
+          placeholder="Search email, name, region, or source…"
           className="bg-black/40 border-white/10 h-9 w-52"
           data-testid="input-subscriber-search"
         />
@@ -7551,15 +7559,20 @@ export default function Admin() {
             Cancelled: "border-red-500/40 text-red-400 bg-red-500/10",
           };
 
-          const searchLower = bookingSearch.toLowerCase();
+          // Whitespace-splitting search — every term must appear somewhere
+          // across the searchable fields for the row to match. Lets you type
+          // "newark brunch" to find a Newark brunch booking without caring
+          // which field each word came from.
+          const searchTerms = bookingSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
           const preFilteredBookings = bookings
             .filter((b) => bookingStatusFilter === "All" || (b.status || "New") === bookingStatusFilter)
             .filter((b) => {
-              if (!searchLower) return true;
-              return (
-                (b.contactName || "").toLowerCase().includes(searchLower) ||
-                (b.email || "").toLowerCase().includes(searchLower)
-              );
+              if (searchTerms.length === 0) return true;
+              const hay = [
+                b.contactName, b.email, b.phone, b.eventName, b.venueName,
+                b.city, b.region, b.instagramHandle, b.mode, b.referenceId,
+              ].map((v) => (v || "").toLowerCase()).join(" ");
+              return searchTerms.every((t) => hay.includes(t));
             });
           // Bookings-table sort — replaces the old sub-single-column
           // Submitted sort with the general sortable-column pattern. Every
@@ -7630,7 +7643,7 @@ export default function Admin() {
                   <Input
                     value={bookingSearch}
                     onChange={(e) => setBookingSearch(e.target.value)}
-                    placeholder="Search name or email…"
+                    placeholder="Search name, email, event, venue, city, IG…"
                     className="pl-8 h-8 text-xs bg-secondary/40 border-white/10 text-white placeholder:text-muted-foreground w-52"
                     data-testid="input-booking-search"
                   />
