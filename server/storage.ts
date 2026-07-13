@@ -83,6 +83,10 @@ export interface IStorage {
   createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber>;
   findSubscriberByEmail(email: string): Promise<Subscriber | null>;
   upsertSubscriber(email: string, referrer?: string, name?: string): Promise<{ subscriber: Subscriber; isNew: boolean }>;
+  unsubscribeByEmail(email: string): Promise<void>;
+  reactivateSubscriber(email: string, fields?: { region?: string; referrer?: string; landingPath?: string; utmSource?: string }): Promise<void>;
+  listActiveSubscribers(): Promise<Subscriber[]>;
+  getUnsubscribedEmails(emails: string[]): Promise<Set<string>>;
 
   importSubscribers(rows: Array<{ email: string; name?: string; region?: string; referrer?: string }>): Promise<{ imported: number; skipped: number }>;
   deleteSubscriber(id: number): Promise<void>;
@@ -410,6 +414,61 @@ export class DatabaseStorage implements IStorage {
     // Row already existed — fetch and return it
     const existing = await this.findSubscriberByEmail(email);
     return { subscriber: existing!, isNew: false };
+  }
+
+  // Mark an email as unsubscribed. If the email was never a subscriber
+  // (e.g. a page-blast recipient), insert a suppression row so no future
+  // send can reach it. Idempotent.
+  async unsubscribeByEmail(email: string): Promise<void> {
+    const normalized = email.toLowerCase().trim();
+    const updated = await db.update(newsletterSubscribers)
+      .set({ unsubscribedAt: sql`COALESCE(${newsletterSubscribers.unsubscribedAt}, NOW())` })
+      .where(eq(newsletterSubscribers.email, normalized))
+      .returning({ id: newsletterSubscribers.id });
+    if (updated.length === 0) {
+      await db.insert(newsletterSubscribers)
+        .values({
+          email: normalized,
+          name: normalized.split("@")[0],
+          referrer: "unsubscribe",
+          unsubscribedAt: sql`NOW()`,
+        })
+        .onConflictDoNothing();
+    }
+  }
+
+  // Clear the unsubscribed flag after an explicit re-signup by the person
+  // themselves (subscribe form). Never called from imports or auto-subscribes.
+  async reactivateSubscriber(email: string, fields?: { region?: string; referrer?: string; landingPath?: string; utmSource?: string }): Promise<void> {
+    await db.update(newsletterSubscribers)
+      .set({
+        unsubscribedAt: null,
+        ...(fields?.region ? { region: fields.region } : {}),
+        ...(fields?.referrer ? { referrer: fields.referrer } : {}),
+        ...(fields?.landingPath ? { landingPath: fields.landingPath } : {}),
+        ...(fields?.utmSource ? { utmSource: fields.utmSource } : {}),
+      })
+      .where(eq(newsletterSubscribers.email, email.toLowerCase().trim()));
+  }
+
+  // Subscribers eligible for marketing sends — excludes everyone who opted out.
+  async listActiveSubscribers(): Promise<Subscriber[]> {
+    return await db.select().from(newsletterSubscribers)
+      .where(isNull(newsletterSubscribers.unsubscribedAt))
+      .orderBy(desc(newsletterSubscribers.createdAt));
+  }
+
+  // Which of the given emails are on the suppression list. Used to filter
+  // non-newsletter sends (page blasts) against opt-outs.
+  async getUnsubscribedEmails(emails: string[]): Promise<Set<string>> {
+    if (emails.length === 0) return new Set();
+    const rows = await db.select({ email: newsletterSubscribers.email })
+      .from(newsletterSubscribers)
+      .where(and(
+        inArray(newsletterSubscribers.email, emails.map((e) => e.toLowerCase().trim())),
+        sql`${newsletterSubscribers.unsubscribedAt} IS NOT NULL`,
+      ));
+    return new Set(rows.map((r) => r.email));
   }
 
   // ── Bookings ──────────────────────────────────────────────────────────

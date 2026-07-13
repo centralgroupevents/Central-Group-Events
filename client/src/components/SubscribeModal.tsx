@@ -5,6 +5,7 @@ import { Dialog, DialogClose, DialogContent, DialogTitle, DialogDescription } fr
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConsentNotice } from "@/components/ConsentNotice";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 
 interface SubscribeModalProps {
@@ -170,6 +171,8 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }:
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Subscribe"}
             </Button>
+
+            <ConsentNotice className="text-center" />
           </form>
         </div>
       </DialogContent>

@@ -118,6 +118,7 @@ interface WizardData {
   phone: string;
   instagramHandle: string;
   agreedToTerms: boolean;
+  newsletterOptIn: boolean;
 }
 
 const INITIAL_DATA: WizardData = {
@@ -136,6 +137,7 @@ const INITIAL_DATA: WizardData = {
   phone: "",
   instagramHandle: "",
   agreedToTerms: false,
+  newsletterOptIn: true,
 };
 
 // ─── Steps config ────────────────────────────────────────────────────────────
@@ -373,6 +375,7 @@ export default function Book() {
       email: data.email,
       phone: data.phone || undefined,
       instagramHandle: data.instagramHandle,
+      newsletterOptIn: data.newsletterOptIn,
     };
 
     apiRequest("POST", "/api/bookings", payload)
@@ -809,6 +812,20 @@ export default function Book() {
                     />
                     <FieldError msg={getFieldError("email")} />
                   </div>
+
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <Checkbox
+                      checked={data.newsletterOptIn}
+                      onCheckedChange={(v) => set("newsletterOptIn", v === true)}
+                      className="mt-0.5"
+                      data-testid="checkbox-booking-newsletter-opt-in"
+                    />
+                    <span className="text-xs leading-relaxed text-white/60">
+                      Also send me the free weekly NJ events newsletter. Unsubscribe anytime — every
+                      email includes a one-click link.{" "}
+                      <Link href="/legal/privacy" className="underline hover:text-white/90">Privacy Policy</Link>
+                    </span>
+                  </label>
                 </div>
               )}
 

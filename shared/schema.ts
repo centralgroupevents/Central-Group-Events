@@ -17,6 +17,11 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
   landingPath: text("landing_path"),
   utmSource: text("utm_source"),
   hasAccess: boolean("has_access").default(true),
+  // Set when the person opts out (unsubscribe link, one-click header, or
+  // admin action). Rows are kept as a suppression list — never emailed again,
+  // and imports/auto-subscribes can't resurrect them. Only an explicit new
+  // signup by the person themselves clears it.
+  unsubscribedAt: timestamp("unsubscribed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -323,7 +328,7 @@ export const comments = pgTable("comments", {
 
 // ─── Insert schemas ────────────────────────────────────────────────────────
 
-export const insertSubscriberSchema = createInsertSchema(newsletterSubscribers).omit({ id: true, createdAt: true }).extend({
+export const insertSubscriberSchema = createInsertSchema(newsletterSubscribers).omit({ id: true, createdAt: true, unsubscribedAt: true }).extend({
   email: z.string().email(),
   referrer: z.string().max(500).optional(),
   landingPath: z.string().max(500).optional(),

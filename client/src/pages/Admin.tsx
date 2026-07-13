@@ -106,6 +106,7 @@ type Subscriber = {
   email: string;
   region: string | null;
   referrer: string | null;
+  unsubscribedAt: string | null;
   createdAt: string | null;
 };
 
@@ -967,6 +968,11 @@ function SubscribersTab() {
                     </td>
                     <td className="px-4 py-3 font-medium text-white">
                       <a href={`mailto:${sub.email}`} className="hover:text-primary transition-colors">{sub.email}</a>
+                      {sub.unsubscribedAt && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/15 text-red-400" title={`Unsubscribed ${formatDate(sub.unsubscribedAt)} — suppressed from all sends`}>
+                          Unsubscribed
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{sub.name || "—"}</td>
                     <td className="px-4 py-3 text-muted-foreground">{sub.region || "—"}</td>

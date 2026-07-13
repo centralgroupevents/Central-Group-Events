@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Loader2, Mail } from "lucide-react";
+import { ConsentNotice } from "@/components/ConsentNotice";
 
 interface Props {
   /** Tagged on the newsletter_subscribers.referrer column so source is attributable. */
@@ -144,7 +145,7 @@ export function WorldCupEmailBanner({ source, headline, subhead, buttonLabel }: 
         </div>
       </form>
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-      <p className="text-[11px] text-white/40 mt-3">Free. No spam. Unsubscribe anytime.</p>
+      <ConsentNotice className="mt-3" />
     </div>
   );
 }

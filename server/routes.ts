@@ -12,6 +12,7 @@ import crypto from "crypto";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import { requireAuth, verifyAdminToken } from "./auth";
+import { complianceFooter, listUnsubscribeHeaders, decodeEmail, verifyUnsubscribeToken } from "./email-compliance";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -77,6 +78,9 @@ function wrapEmailLinks(html: string, blastId: number, email: string): string {
   const base = emailTrackingBase();
   return html.replace(/href="(https?:\/\/[^"]+)"/gi, (match, url) => {
     if (url.includes("/api/email/track/")) return match;
+    // Unsubscribe must keep working even if the click tracker doesn't —
+    // never route opt-outs through the redirect.
+    if (url.includes("/unsubscribe")) return match;
     const tracked = `${base}/api/email/track/click?b=${blastId}&r=${r}&u=${encodeURIComponent(url)}`;
     return `href="${tracked}"`;
   });
@@ -559,7 +563,21 @@ ${blogList || "_No recent posts yet._"}
   app.post(api.subscribers.create.path, formLimiter, async (req, res) => {
     try {
       const input = api.subscribers.create.input.parse(req.body);
-      await storage.createSubscriber(input);
+      input.email = input.email.toLowerCase().trim();
+      // An explicit signup by the person themselves is fresh consent — it may
+      // reactivate a previously-unsubscribed email. Anything else (duplicate
+      // active subscriber) stays a 409 like before.
+      const existing = await storage.findSubscriberByEmail(input.email);
+      if (existing?.unsubscribedAt) {
+        await storage.reactivateSubscriber(input.email, {
+          region: input.region ?? undefined,
+          referrer: input.referrer,
+          landingPath: input.landingPath,
+          utmSource: input.utmSource,
+        });
+      } else {
+        await storage.createSubscriber(input);
+      }
       res.status(201).json({ message: "Successfully subscribed to the newsletter!" });
       try {
         await transporter.sendMail({
@@ -600,6 +618,7 @@ ${blogList || "_No recent posts yet._"}
           from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
           to: input.email,
           subject: "Welcome to the CGE Newsletter 🎉",
+          headers: listUnsubscribeHeaders(input.email),
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 40px 32px; border-radius: 12px; border: 1px solid #1e1e1e;">
               <div style="text-align: center; margin-bottom: 32px;">
@@ -619,11 +638,7 @@ ${blogList || "_No recent posts yet._"}
                 </a>
               </div>
 
-              <hr style="border: none; border-top: 1px solid #1e1e1e; margin-bottom: 24px;" />
-
-              <p style="color: #555555; font-size: 12px; text-align: center; margin: 0;">
-                You're receiving this because you subscribed at centralgroupevents.com
-              </p>
+              ${complianceFooter(input.email, "You're receiving this because you subscribed to the weekly newsletter at centralgroupevents.com.")}
             </div>
           `,
         });
@@ -646,6 +661,35 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // ── Unsubscribe (CAN-SPAM / RFC 8058 one-click) ──────────────────────
+  // Every marketing email carries a signed link: ?e=<base64url email>&t=<hmac>.
+  // The same URL is used in the List-Unsubscribe header, which mailbox
+  // providers POST to for one-click unsubscribe, and by the /unsubscribe
+  // page for people who click the footer link.
+  app.post("/api/unsubscribe", async (req: Request, res: Response) => {
+    try {
+      const e = String(req.query.e || (req.body as { e?: string } | undefined)?.e || "");
+      const t = String(req.query.t || (req.body as { t?: string } | undefined)?.t || "");
+      const email = decodeEmail(e);
+      if (!email || !verifyUnsubscribeToken(email, t)) {
+        return res.status(400).json({ message: "Invalid or expired unsubscribe link. Email centralgroupevents@gmail.com and we'll remove you manually." });
+      }
+      await storage.unsubscribeByEmail(email);
+      res.json({ message: "You've been unsubscribed. You won't receive any more marketing emails from us." });
+    } catch (err) {
+      console.error("[unsubscribe] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Some mail clients open the header URL with GET instead of the one-click
+  // POST — send them to the confirmation page rather than silently opting
+  // out on a prefetchable GET.
+  app.get("/api/unsubscribe", (req: Request, res: Response) => {
+    const qs = new URLSearchParams({ e: String(req.query.e || ""), t: String(req.query.t || "") });
+    res.redirect(`/unsubscribe?${qs.toString()}`);
+  });
+
   // ── Existing booking route ───────────────────────────────────────────
   app.post(api.bookings.create.path, formLimiter, ...bookingValidators, async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -659,12 +703,16 @@ ${blogList || "_No recent posts yet._"}
       const input = api.bookings.create.input.parse(req.body);
       const booking = await storage.createBooking(input);
       res.status(201).json({ message: "Booking request submitted successfully! We'll be in touch.", referenceId: booking.referenceId });
-      // Auto-subscribe the booker to the newsletter (non-blocking, ON CONFLICT DO NOTHING via upsert)
-      storage.upsertSubscriber(
-        input.email.toLowerCase().trim(),
-        "booking",
-        input.contactName || undefined
-      ).catch(() => {});
+      // Subscribe the booker to the newsletter only if they ticked the
+      // opt-in box on the form (non-blocking, ON CONFLICT DO NOTHING via
+      // upsert — never resurrects an unsubscribed email).
+      if (req.body.newsletterOptIn === true) {
+        storage.upsertSubscriber(
+          input.email.toLowerCase().trim(),
+          "booking",
+          input.contactName || undefined
+        ).catch(() => {});
+      }
       try {
         const submissionMode = input.mode || "Standard";
         const replyName = input.contactName || input.email;
@@ -1445,11 +1493,13 @@ Return every field you can confidently determine. Set null for any field the ima
       const cleaned = { ...parsed, learnMoreUrl: normalizeUrl(parsed.learnMoreUrl) };
       const created = await storage.createLandingPageSubmission(cleaned);
 
-      // Auto-subscribe (non-blocking)
-      storage.upsertSubscriber(
-        parsed.submitterEmail.toLowerCase().trim(),
-        `page:${page.slug}`,
-      ).catch(() => {});
+      // Subscribe only with explicit opt-in from the form (non-blocking)
+      if (req.body.newsletterOptIn === true) {
+        storage.upsertSubscriber(
+          parsed.submitterEmail.toLowerCase().trim(),
+          `page:${page.slug}`,
+        ).catch(() => {});
+      }
 
       // Submitter auto-reply
       transporter.sendMail({
@@ -1651,25 +1701,29 @@ Return every field you can confidently determine. Set null for any field the ima
         return res.status(400).json({ message: "html body is required" });
       }
       const approved = await storage.getApprovedLandingPageSubmissions(page.id);
-      const recipients = Array.from(new Set(approved.map((s) => s.submitterEmail).filter(Boolean)));
+      const allRecipients = Array.from(new Set(approved.map((s) => s.submitterEmail?.toLowerCase().trim()).filter(Boolean))) as string[];
+      // Honor the suppression list — submitters who unsubscribed from any
+      // CGE email never get blasted again.
+      const suppressed = await storage.getUnsubscribedEmails(allRecipients);
+      const recipients = allRecipients.filter((e) => !suppressed.has(e));
       if (recipients.length === 0) {
         return res.status(400).json({ message: "No approved submitters to email." });
       }
       // Record the blast first so we have an ID to embed in the tracking pixel
       // + link wrappers. Open/click events FK back to this row.
       const blastId = await storage.createEmailBlast("page-blast", subject.slice(0, 200), recipients.length, page.slug);
-      const footer = `<hr style="margin-top:32px;border:0;border-top:1px solid #eee" />
-              <p style="color:#999;font-size:11px">You're receiving this because you submitted a venue on <a href="https://centralgroupevents.com/${page.slug}">${escapeHtml(page.title)}</a> at Central Group Events. Reply to unsubscribe.</p>`;
+      const reason = `You're receiving this because you submitted a venue on <a href="https://centralgroupevents.com/${page.slug}" style="color:#8B2FC9;">${escapeHtml(page.title)}</a> at Central Group Events.`;
       let sent = 0;
       let failed = 0;
       for (const to of recipients) {
         try {
-          const wrapped = wrapEmailLinks(`${html}${footer}`, blastId, to);
+          const wrapped = wrapEmailLinks(`${html}${complianceFooter(to, reason, { dark: false })}`, blastId, to);
           const withPixel = appendTrackingPixel(wrapped, blastId, to);
           await transporter.sendMail({
             from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
             to,
             subject: subject.slice(0, 200),
+            headers: listUnsubscribeHeaders(to),
             html: withPixel,
           });
           sent++;
@@ -1680,7 +1734,7 @@ Return every field you can confidently determine. Set null for any field the ima
           failed++;
         }
       }
-      res.json({ sent, failed, total: recipients.length, blastId });
+      res.json({ sent, failed, total: recipients.length, suppressed: suppressed.size, blastId });
     } catch (err) {
       console.error("[email-blast] error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -1973,31 +2027,31 @@ Return every field you can confidently determine. Set null for any field the ima
     try {
       const { subject, body } = req.body;
       if (!subject || !body) return res.status(400).json({ message: "Subject and body are required" });
-      const subscribers = await storage.listSubscribers();
+      // Only active subscribers — anyone who unsubscribed is suppressed.
+      const subscribers = await storage.listActiveSubscribers();
       const blastId = await storage.createEmailBlast("newsletter", String(subject).slice(0, 200), subscribers.length);
-      const baseHtml = `
+      // Footer is per-recipient (signed unsubscribe link), so build the body
+      // shell once and stamp the footer inside the send loop.
+      const htmlFor = (email: string) => `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
                 <div style="text-align: center; margin-bottom: 24px;">
                   <h1 style="color: #8B2FC9; margin: 0;">Central Group Events</h1>
                   <p style="color: #888; font-size: 12px; margin: 4px 0 0;">NJ Nightlife Newsletter</p>
                 </div>
                 <div style="color: #e0e0e0; line-height: 1.7; white-space: pre-wrap;">${body}</div>
-                <hr style="border-color: #333; margin: 32px 0;" />
-                <p style="color: #555; font-size: 12px; text-align: center;">
-                  You're receiving this because you subscribed at centralgroupevents.com.<br/>
-                  <a href="https://centralgroupevents.com" style="color: #8B2FC9;">Unsubscribe</a>
-                </p>
+                ${complianceFooter(email, "You're receiving this because you subscribed to the weekly newsletter at centralgroupevents.com.")}
               </div>
             `;
       let sent = 0;
       for (const sub of subscribers) {
         try {
-          const wrapped = wrapEmailLinks(baseHtml, blastId, sub.email);
+          const wrapped = wrapEmailLinks(htmlFor(sub.email), blastId, sub.email);
           const withPixel = appendTrackingPixel(wrapped, blastId, sub.email);
           await transporter.sendMail({
             from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
             to: sub.email,
             subject,
+            headers: listUnsubscribeHeaders(sub.email),
             html: withPixel,
           });
           sent++;
@@ -2215,12 +2269,13 @@ Return every field you can confidently determine. Set null for any field the ima
             from: `"CGE Website" <${process.env.GMAIL_USER}>`,
             to: email,
             subject: "You're on the CGE insider list 🎉",
+            headers: listUnsubscribeHeaders(email),
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
                 <h1 style="color: #8B2FC9;">Welcome to the CGE insider list!</h1>
                 <p>You now have full access to all CGE newsletter posts.</p>
                 <p>Head over to <a href="https://centralgroupevents.com/things-to-do-in-nj" style="color: #8B2FC9;">centralgroupevents.com/things-to-do-in-nj</a> to see what's happening across NJ this week.</p>
-                <p style="color: #555; font-size: 12px; margin-top: 24px;">Central Group Events • centralgroupevents@gmail.com</p>
+                ${complianceFooter(email, "You're receiving this because you signed up for the CGE list at centralgroupevents.com.")}
               </div>
             `,
           });
@@ -2742,12 +2797,14 @@ Return every field you can confidently determine. Set null for any field the ima
       }
       const created = await storage.createWorldCupSubmission(parsed);
 
-      // Auto-subscribe the submitter to the newsletter (non-blocking, ON CONFLICT DO NOTHING).
-      // Matches the same pattern used for /api/bookings — every email captured is a lead.
-      storage.upsertSubscriber(
-        parsed.submitterEmail.toLowerCase().trim(),
-        "world-cup-watch-party",
-      ).catch(() => {});
+      // Subscribe the submitter only if they ticked the opt-in box on the
+      // form (non-blocking, ON CONFLICT DO NOTHING).
+      if (req.body.newsletterOptIn === true) {
+        storage.upsertSubscriber(
+          parsed.submitterEmail.toLowerCase().trim(),
+          "world-cup-watch-party",
+        ).catch(() => {});
+      }
 
       // Auto-reply to submitter
       transporter.sendMail({
@@ -3020,10 +3077,12 @@ Return every field you can confidently determine. Set null for any field the ima
       const cleaned = { ...parsed, learnMoreUrl: normalizeUrl(parsed.learnMoreUrl) };
       const created = await storage.createNbaFinalsSubmission(cleaned);
 
-      storage.upsertSubscriber(
-        parsed.submitterEmail.toLowerCase().trim(),
-        "nba-finals-watch-party",
-      ).catch(() => {});
+      if (req.body.newsletterOptIn === true) {
+        storage.upsertSubscriber(
+          parsed.submitterEmail.toLowerCase().trim(),
+          "nba-finals-watch-party",
+        ).catch(() => {});
+      }
 
       transporter.sendMail({
         from: `"CGE Watch Parties" <${process.env.GMAIL_USER}>`,

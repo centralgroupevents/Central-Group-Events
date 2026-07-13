@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AiExtractCard } from "@/components/AiExtractCard";
+import { NewsletterOptIn } from "@/components/ConsentNotice";
 import {
   WORLD_CUP_2026_WEEKS,
   WORLD_CUP_2026_SCHEDULE,
@@ -30,6 +31,7 @@ export default function SubmitWatchParty() {
   const [instagramHandle, setInstagramHandle] = useState("");
   const [learnMoreUrl, setLearnMoreUrl] = useState("");
   const [submitterEmail, setSubmitterEmail] = useState("");
+  const [newsletterOptIn, setNewsletterOptIn] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -71,6 +73,7 @@ export default function SubmitWatchParty() {
           instagramHandle: instagramHandle.trim() || null,
           learnMoreUrl: learnMoreUrl.trim() || null,
           submitterEmail: submitterEmail.trim().toLowerCase(),
+          newsletterOptIn,
         }),
       });
       if (!res.ok) {
@@ -243,6 +246,8 @@ export default function SubmitWatchParty() {
             <Input type="email" value={submitterEmail} onChange={(e) => setSubmitterEmail(e.target.value)} placeholder="you@venue.com" className="bg-black/40 border-white/10 h-11" data-testid="input-submitter-email" required />
             <p className="text-xs text-muted-foreground">We email you when your watch party is approved.</p>
           </div>
+
+          <NewsletterOptIn checked={newsletterOptIn} onChange={setNewsletterOptIn} testId="checkbox-wc-newsletter-opt-in" />
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 

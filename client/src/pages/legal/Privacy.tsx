@@ -6,7 +6,7 @@ export default function Privacy() {
       <Navigation />
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-32">
         <h1 className="text-4xl font-black mb-2">Privacy Policy</h1>
-        <p className="text-muted-foreground mb-12">Last updated: February 25, 2026</p>
+        <p className="text-muted-foreground mb-12">Last updated: July 13, 2026</p>
 
         <div className="space-y-10 text-white/80 leading-relaxed">
 
@@ -21,13 +21,15 @@ export default function Privacy() {
           </section>
 
           <section>
-            <h2 className="text-xl font-bold text-white mb-3">3. Newsletter</h2>
-            <p>If you subscribe to our newsletter, we will send you weekly event recommendations for your selected NJ region. You may unsubscribe at any time by clicking the unsubscribe link in any email or by contacting us at centralgroupevents@gmail.com.</p>
+            <h2 className="text-xl font-bold text-white mb-3">3. Newsletter &amp; Email Marketing</h2>
+            <p className="mb-3">We only send marketing email to people who opted in: by subscribing through a signup form on our site, or by checking the newsletter opt-in box on a booking or event-submission form. When you subscribe we record your email address, the page you subscribed from, and the date, so we can demonstrate consent.</p>
+            <p className="mb-3">Every marketing email we send includes a one-click unsubscribe link and a List-Unsubscribe header (so you can also unsubscribe directly from your email app). Unsubscribing takes effect immediately — your address is added to a suppression list and we will not email you again unless you personally re-subscribe. You can also opt out by emailing centralgroupevents@gmail.com.</p>
+            <p>Our emails may contain a tracking pixel and tracked links that tell us whether an email was opened and which links were clicked. We use this only to measure the performance of our own emails — it is never sold or shared. Many email apps let you block remote images if you prefer not to be counted in open metrics.</p>
           </section>
 
           <section>
             <h2 className="text-xl font-bold text-white mb-3">4. Data Storage</h2>
-            <p>Your information is stored securely on our platform. We retain booking inquiry data for up to 2 years for business record purposes. Newsletter subscriber data is retained until you unsubscribe.</p>
+            <p>Your information is stored securely on our platform. We retain booking inquiry data for up to 2 years for business record purposes. Newsletter subscriber data is retained while you're subscribed; after you unsubscribe we keep only your email address on our suppression list so that we never email you again. You may request full deletion (including from the suppression list) at any time — see Your Rights below.</p>
           </section>
 
           <section>
