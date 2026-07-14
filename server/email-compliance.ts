@@ -31,20 +31,30 @@ function unsubscribeSecret(): string {
   return secret;
 }
 
-export function unsubscribeToken(email: string): string {
+// Generic signed-token helpers. Used for unsubscribe links and for
+// client-facing invoice links — anything where a URL must prove it was
+// minted by us for that exact value.
+export function signToken(value: string): string {
   return crypto
     .createHmac("sha256", unsubscribeSecret())
-    .update(email.toLowerCase().trim())
+    .update(value.toLowerCase().trim())
     .digest("base64url")
     .slice(0, 32);
 }
 
-export function verifyUnsubscribeToken(email: string, token: string): boolean {
+export function verifySignedToken(value: string, token: string): boolean {
   if (!token) return false;
-  const expected = unsubscribeToken(email);
-  const a = Buffer.from(expected);
+  const a = Buffer.from(signToken(value));
   const b = Buffer.from(token);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export function unsubscribeToken(email: string): string {
+  return signToken(email);
+}
+
+export function verifyUnsubscribeToken(email: string, token: string): boolean {
+  return verifySignedToken(email, token);
 }
 
 export function encodeEmail(email: string): string {

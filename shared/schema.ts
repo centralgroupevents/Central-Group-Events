@@ -197,6 +197,32 @@ export const scheduledEmailSends = pgTable("scheduled_email_sends", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Client invoices generated from the admin dashboard, optionally linked to
+// a promotion booking. Line items live as a JSON string (array of
+// {description, quantity, unitPriceCents}); all money is integer cents so
+// totals never pick up float error. status: draft → sent → paid (or void).
+export const invoices = pgTable("invoices", {
+  id: serial("id").primaryKey(),
+  invoiceNumber: text("invoice_number").notNull().unique(), // e.g. CGE-2026-0007
+  bookingId: integer("booking_id"),
+  clientName: text("client_name").notNull(),
+  clientEmail: text("client_email").notNull(),
+  clientPhone: text("client_phone"),
+  eventName: text("event_name"),
+  items: text("items").notNull(), // JSON: [{description, quantity, unitPriceCents}]
+  discountCents: integer("discount_cents").notNull().default(0),
+  taxCents: integer("tax_cents").notNull().default(0),
+  totalCents: integer("total_cents").notNull(),
+  notes: text("notes"),
+  paymentInstructions: text("payment_instructions"),
+  status: text("status").notNull().default("draft"), // draft | sent | paid | void
+  dueDate: text("due_date"), // YYYY-MM-DD
+  sentAt: timestamp("sent_at"),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Simple key/value settings table. Currently used for `cronDryRun`
 // (string "true"/"false"), but reusable for future runtime flags.
 export const appSettings = pgTable("app_settings", {
@@ -327,6 +353,29 @@ export const comments = pgTable("comments", {
 });
 
 // ─── Insert schemas ────────────────────────────────────────────────────────
+
+// What the admin submits when creating/editing an invoice. Number, totals,
+// status, and timestamps are all server-controlled.
+export const invoiceItemSchema = z.object({
+  description: z.string().min(1).max(300),
+  quantity: z.number().int().min(1).max(999),
+  unitPriceCents: z.number().int().min(0).max(50_000_000),
+});
+export const invoiceInputSchema = z.object({
+  clientName: z.string().min(1).max(200),
+  clientEmail: z.string().email(),
+  clientPhone: z.string().max(40).optional().nullable(),
+  eventName: z.string().max(200).optional().nullable(),
+  bookingId: z.number().int().positive().optional().nullable(),
+  items: z.array(invoiceItemSchema).min(1).max(50),
+  discountCents: z.number().int().min(0).max(50_000_000).optional().default(0),
+  taxCents: z.number().int().min(0).max(50_000_000).optional().default(0),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+  paymentInstructions: z.string().max(2000).optional().nullable(),
+});
+export type InvoiceItem = z.infer<typeof invoiceItemSchema>;
+export type InvoiceInput = z.infer<typeof invoiceInputSchema>;
 
 export const insertSubscriberSchema = createInsertSchema(newsletterSubscribers).omit({ id: true, createdAt: true, unsubscribedAt: true }).extend({
   email: z.string().email(),
@@ -471,6 +520,8 @@ export const insertPageSchema = createInsertSchema(pages).omit({ id: true, updat
 });
 
 // ─── Types ────────────────────────────────────────────────────────────────
+
+export type Invoice = typeof invoices.$inferSelect;
 
 export type Subscriber = typeof newsletterSubscribers.$inferSelect;
 export type InsertSubscriber = z.infer<typeof insertSubscriberSchema>;

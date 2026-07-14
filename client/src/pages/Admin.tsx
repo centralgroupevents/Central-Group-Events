@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 import { SEO } from "@/components/SEO";
+import { InvoicesTab } from "@/components/InvoicesTab";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 
 type AdminUser = { email: string; role: string };
@@ -271,6 +272,7 @@ const TABS = [
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "seo", label: "SEO", icon: BarChart2 },
   { id: "email-schedule", label: "Email Schedule", icon: Send },
+  { id: "invoices", label: "Invoices", icon: FileText },
   { id: "reminders", label: "Reminders", icon: Mail },
   { id: "world-cup", label: "World Cup", icon: Star },
   { id: "nba-finals", label: "NBA Finals", icon: Star },
@@ -8069,6 +8071,7 @@ export default function Admin() {
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "seo" && <SeoHealthTab />}
         {activeTab === "email-schedule" && <EmailScheduleTab />}
+        {activeTab === "invoices" && <InvoicesTab />}
         {activeTab === "reminders" && <RemindersTab />}
         {activeTab === "world-cup" && <WorldCupTab />}
         {activeTab === "nba-finals" && <NbaFinalsTab />}

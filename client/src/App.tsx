@@ -23,6 +23,7 @@ import WatchParties from "@/pages/WatchParties";
 import SubmitNbaFinalsWatchParty from "@/pages/SubmitNbaFinalsWatchParty";
 import NbaFinalsWatchParties from "@/pages/NbaFinalsWatchParties";
 import Unsubscribe from "@/pages/Unsubscribe";
+import Invoice from "@/pages/Invoice";
 
 function Router() {
   return (
@@ -40,6 +41,7 @@ function Router() {
       <Route path="/faq" component={FAQ} />
       <Route path="/welcome" component={Welcome} />
       <Route path="/unsubscribe" component={Unsubscribe} />
+      <Route path="/invoice/:number" component={Invoice} />
       <Route path="/admin/accept-invite" component={AcceptInvite} />
       <Route path="/submit-world-cup-watch-party" component={SubmitWatchParty} />
       <Route path="/world-cup-2026-nj-watch-parties" component={WatchParties} />

@@ -12,7 +12,7 @@ import crypto from "crypto";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import { requireAuth, verifyAdminToken } from "./auth";
-import { complianceFooter, listUnsubscribeHeaders, decodeEmail, verifyUnsubscribeToken } from "./email-compliance";
+import { complianceFooter, listUnsubscribeHeaders, decodeEmail, verifyUnsubscribeToken, signToken, verifySignedToken, postalAddress } from "./email-compliance";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -2707,6 +2707,247 @@ Return every field you can confidently determine. Set null for any field the ima
       await storage.setSetting("cronDryRun", enabled ? "true" : "false");
       res.json({ dryRun: enabled });
     } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Invoices ─────────────────────────────────────────────────────────
+  // Admin-generated client invoices. The client-facing copy lives at
+  // /invoice/:number?t=<hmac> — signed link, no login needed, printable.
+
+  function invoiceMoney(cents: number): string {
+    return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  }
+
+  function invoicePublicUrl(invoiceNumber: string): string {
+    return `${emailTrackingBase()}/invoice/${encodeURIComponent(invoiceNumber)}?t=${signToken(invoiceNumber)}`;
+  }
+
+  function computeInvoiceTotals(items: Array<{ quantity: number; unitPriceCents: number }>, discountCents: number, taxCents: number) {
+    const subtotalCents = items.reduce((sum, it) => sum + it.quantity * it.unitPriceCents, 0);
+    const totalCents = Math.max(0, subtotalCents - discountCents + taxCents);
+    return { subtotalCents, totalCents };
+  }
+
+  function buildInvoiceEmail(inv: { invoiceNumber: string; clientName: string; eventName: string | null; items: string; discountCents: number; taxCents: number; totalCents: number; dueDate: string | null; notes: string | null; paymentInstructions: string | null }): { subject: string; html: string } {
+    const items = JSON.parse(inv.items) as Array<{ description: string; quantity: number; unitPriceCents: number }>;
+    const { subtotalCents } = computeInvoiceTotals(items, inv.discountCents, inv.taxCents);
+    const firstName = (inv.clientName || "").trim().split(/\s+/)[0] || "there";
+    const subject = `Invoice ${inv.invoiceNumber} from Central Group Events${inv.eventName ? ` — ${inv.eventName}` : ""}`;
+    const rows = items.map((it) => `
+      <tr>
+        <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#222">${escapeHtml(it.description)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#222;text-align:center">${it.quantity}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#222;text-align:right">${invoiceMoney(it.unitPriceCents)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#222;text-align:right">${invoiceMoney(it.quantity * it.unitPriceCents)}</td>
+      </tr>`).join("");
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; background:#ffffff; color:#111; padding: 32px; border:1px solid #e5e5e5; border-radius: 12px;">
+        <table style="width:100%;margin-bottom:24px"><tr>
+          <td><h1 style="color:#8B2FC9;font-size:22px;margin:0">Central Group Events</h1>
+              <p style="color:#888;font-size:12px;margin:4px 0 0">NJ event promotion</p></td>
+          <td style="text-align:right"><p style="font-size:18px;font-weight:bold;margin:0">INVOICE</p>
+              <p style="color:#555;font-size:13px;margin:4px 0 0">${escapeHtml(inv.invoiceNumber)}</p>
+              ${inv.dueDate ? `<p style="color:#555;font-size:13px;margin:2px 0 0">Due ${escapeHtml(inv.dueDate)}</p>` : ""}</td>
+        </tr></table>
+        <p style="font-size:14px;color:#333;margin:0 0 6px">Hi ${escapeHtml(firstName)},</p>
+        <p style="font-size:14px;color:#333;margin:0 0 20px">Here's your invoice${inv.eventName ? ` for <strong>${escapeHtml(inv.eventName)}</strong>` : ""}. You can view and print it any time from the button below.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <tr style="background:#f7f2fb">
+            <th style="padding:10px 8px;text-align:left;color:#555;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Description</th>
+            <th style="padding:10px 8px;text-align:center;color:#555;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Qty</th>
+            <th style="padding:10px 8px;text-align:right;color:#555;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Unit</th>
+            <th style="padding:10px 8px;text-align:right;color:#555;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Amount</th>
+          </tr>
+          ${rows}
+          <tr><td colspan="3" style="padding:10px 8px;text-align:right;color:#666">Subtotal</td><td style="padding:10px 8px;text-align:right;color:#222">${invoiceMoney(subtotalCents)}</td></tr>
+          ${inv.discountCents ? `<tr><td colspan="3" style="padding:4px 8px;text-align:right;color:#666">Discount</td><td style="padding:4px 8px;text-align:right;color:#0a7d33">−${invoiceMoney(inv.discountCents)}</td></tr>` : ""}
+          ${inv.taxCents ? `<tr><td colspan="3" style="padding:4px 8px;text-align:right;color:#666">Tax</td><td style="padding:4px 8px;text-align:right;color:#222">${invoiceMoney(inv.taxCents)}</td></tr>` : ""}
+          <tr><td colspan="3" style="padding:12px 8px;text-align:right;font-weight:bold;color:#111;border-top:2px solid #111">Total due</td><td style="padding:12px 8px;text-align:right;font-weight:bold;font-size:16px;color:#111;border-top:2px solid #111">${invoiceMoney(inv.totalCents)}</td></tr>
+        </table>
+        ${inv.paymentInstructions ? `<div style="margin-top:20px;padding:14px;background:#f7f7f7;border-radius:8px"><p style="font-size:12px;color:#555;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 6px;font-weight:bold">How to pay</p><p style="font-size:13px;color:#333;margin:0;white-space:pre-wrap">${escapeHtml(inv.paymentInstructions)}</p></div>` : ""}
+        ${inv.notes ? `<p style="font-size:13px;color:#555;margin:16px 0 0;white-space:pre-wrap">${escapeHtml(inv.notes)}</p>` : ""}
+        <p style="text-align:center;margin:28px 0 8px">
+          <a href="${invoicePublicUrl(inv.invoiceNumber)}" style="display:inline-block;padding:12px 28px;background:#8B2FC9;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px">View / print invoice</a>
+        </p>
+        <p style="color:#999;font-size:11px;text-align:center;margin:16px 0 0">Questions? Just reply to this email.<br/>Central Group Events · ${postalAddress()}</p>
+      </div>`;
+    return { subject, html };
+  }
+
+  app.get("/api/admin/invoices", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const rows = await storage.listInvoices();
+      // Ship the signed public URL so the admin UI can open/print any invoice.
+      res.json(rows.map((r) => ({ ...r, publicUrl: invoicePublicUrl(r.invoiceNumber) })));
+    } catch (err) {
+      console.error("[invoices] list error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/invoices", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { invoiceInputSchema } = await import("@shared/schema");
+      const input = invoiceInputSchema.parse(req.body);
+      const { totalCents } = computeInvoiceTotals(input.items, input.discountCents, input.taxCents);
+      const invoiceNumber = await storage.nextInvoiceNumber(new Date().getFullYear());
+      const created = await storage.createInvoice({
+        invoiceNumber,
+        bookingId: input.bookingId ?? null,
+        clientName: input.clientName.trim(),
+        clientEmail: input.clientEmail.toLowerCase().trim(),
+        clientPhone: input.clientPhone?.trim() || null,
+        eventName: input.eventName?.trim() || null,
+        items: JSON.stringify(input.items),
+        discountCents: input.discountCents,
+        taxCents: input.taxCents,
+        totalCents,
+        notes: input.notes?.trim() || null,
+        paymentInstructions: input.paymentInstructions?.trim() || null,
+        status: "draft",
+        dueDate: input.dueDate || null,
+      });
+      res.status(201).json({ ...created, publicUrl: invoicePublicUrl(created.invoiceNumber) });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      console.error("[invoices] create error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/invoices/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const existing = await storage.getInvoice(id);
+      if (!existing) return res.status(404).json({ message: "Invoice not found" });
+      if (existing.status === "paid") return res.status(400).json({ message: "Paid invoices can't be edited — void it and issue a new one." });
+      const { invoiceInputSchema } = await import("@shared/schema");
+      const input = invoiceInputSchema.parse(req.body);
+      const { totalCents } = computeInvoiceTotals(input.items, input.discountCents, input.taxCents);
+      const updated = await storage.updateInvoice(id, {
+        bookingId: input.bookingId ?? null,
+        clientName: input.clientName.trim(),
+        clientEmail: input.clientEmail.toLowerCase().trim(),
+        clientPhone: input.clientPhone?.trim() || null,
+        eventName: input.eventName?.trim() || null,
+        items: JSON.stringify(input.items),
+        discountCents: input.discountCents,
+        taxCents: input.taxCents,
+        totalCents,
+        notes: input.notes?.trim() || null,
+        paymentInstructions: input.paymentInstructions?.trim() || null,
+        dueDate: input.dueDate || null,
+      });
+      res.json({ ...updated, publicUrl: invoicePublicUrl(existing.invoiceNumber) });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      console.error("[invoices] update error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/invoices/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const ok = await storage.deleteInvoice(id);
+      if (!ok) return res.status(404).json({ message: "Invoice not found" });
+      res.json({ deleted: true });
+    } catch (err) {
+      console.error("[invoices] delete error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Email the invoice to the client and flip draft → sent. Transactional
+  // email (it's about their purchase), so no marketing footer required —
+  // the postal address + reply contact are included anyway.
+  app.post("/api/admin/invoices/:id/send", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const inv = await storage.getInvoice(id);
+      if (!inv) return res.status(404).json({ message: "Invoice not found" });
+      if (inv.status === "void") return res.status(400).json({ message: "This invoice is void." });
+      const { subject, html } = buildInvoiceEmail(inv);
+      await transporter.sendMail({
+        from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+        to: inv.clientEmail,
+        bcc: "centralgroupevents@gmail.com",
+        subject,
+        html,
+      });
+      const updated = await storage.updateInvoice(id, {
+        status: inv.status === "paid" ? "paid" : "sent",
+        sentAt: new Date(),
+      });
+      res.json({ ...updated, publicUrl: invoicePublicUrl(inv.invoiceNumber) });
+    } catch (err) {
+      console.error("[invoices] send error:", err);
+      const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
+      res.status(500).json({ message: `Send failed: ${detail}` });
+    }
+  });
+
+  app.post("/api/admin/invoices/:id/status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      const { status } = req.body as { status?: string };
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      if (!status || !["draft", "sent", "paid", "void"].includes(status)) {
+        return res.status(400).json({ message: "status must be draft | sent | paid | void" });
+      }
+      const inv = await storage.getInvoice(id);
+      if (!inv) return res.status(404).json({ message: "Invoice not found" });
+      const updated = await storage.updateInvoice(id, {
+        status,
+        paidAt: status === "paid" ? new Date() : null,
+      });
+      res.json({ ...updated, publicUrl: invoicePublicUrl(inv.invoiceNumber) });
+    } catch (err) {
+      console.error("[invoices] status error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Public, signed-link invoice fetch for the client-facing /invoice page.
+  // The HMAC token proves the link came from us; no login required.
+  app.get("/api/invoices/:number", async (req: Request, res: Response) => {
+    try {
+      const number = String(req.params.number || "");
+      const token = String(req.query.t || "");
+      if (!number || !verifySignedToken(number, token)) {
+        return res.status(403).json({ message: "Invalid invoice link" });
+      }
+      const inv = await storage.getInvoiceByNumber(number);
+      if (!inv || inv.status === "void") return res.status(404).json({ message: "Invoice not found" });
+      const items = JSON.parse(inv.items) as Array<{ description: string; quantity: number; unitPriceCents: number }>;
+      const { subtotalCents } = computeInvoiceTotals(items, inv.discountCents, inv.taxCents);
+      res.json({
+        invoiceNumber: inv.invoiceNumber,
+        clientName: inv.clientName,
+        clientEmail: inv.clientEmail,
+        eventName: inv.eventName,
+        items,
+        subtotalCents,
+        discountCents: inv.discountCents,
+        taxCents: inv.taxCents,
+        totalCents: inv.totalCents,
+        notes: inv.notes,
+        paymentInstructions: inv.paymentInstructions,
+        status: inv.status,
+        dueDate: inv.dueDate,
+        createdAt: inv.createdAt,
+        paidAt: inv.paidAt,
+      });
+    } catch (err) {
+      console.error("[invoices] public fetch error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
