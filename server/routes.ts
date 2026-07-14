@@ -2453,7 +2453,9 @@ Return every field you can confidently determine. Set null for any field the ima
         </p>
 
         <p style="color:#e0e0e0;font-size:15px;margin:22px 0 16px">
-          We don't take it for granted that you trusted us with your event. There are a hundred ways you could have spent that promotion budget — our hope is we earned the choice. And if we didn't quite hit the mark, that's exactly what we need to hear.
+          ${b.paidAt
+            ? "We don't take it for granted that you trusted us with your event. There are a hundred ways you could have spent that promotion budget — our hope is we earned the choice. And if we didn't quite hit the mark, that's exactly what we need to hear."
+            : "We don't take it for granted that you trusted us with your event. Our hope is we made getting the word out a little easier — and if we didn't quite hit the mark, that's exactly what we need to hear."}
         </p>
 
         <p style="color:#e0e0e0;font-size:15px;margin:0 0 24px">
@@ -2487,23 +2489,36 @@ Return every field you can confidently determine. Set null for any field the ima
   // The whole "process scheduled emails" loop, extracted so both the
   // secret-protected cron endpoint AND the admin "Run now" button can
   // call the same logic. Backfills rows, sends pending ones.
-  async function runScheduledEmailsTick(): Promise<{ today: string; dryRun: boolean; backfilled: number; sent: number; failed: number; skipped: number; pendingProcessed: number; remindersSent: number; remindersFailed: number }> {
+  async function runScheduledEmailsTick(): Promise<{ today: string; dryRun: boolean; backfilled: number; sent: number; failed: number; skipped: number; pendingProcessed: number; remindersSent: number; remindersFailed: number; errors: string[] }> {
     const today = todayInET();
     const dryRunSetting = await storage.getSetting("cronDryRun");
     const dryRun = dryRunSetting !== "false";
+    // Sub-step failures land here instead of 500ing the whole tick, so one
+    // bad booking row or a missing table can't block every other send.
+    const errors: string[] = [];
 
     const allBookings = await storage.getBookings();
     let backfilled = 0;
     for (const b of allBookings) {
-      if (!b.paidAt) continue;
       if (b.status && b.status.toLowerCase() === "cancelled") continue;
       const iso = parseFlexibleWcDate(b.eventDate);
       if (!iso) continue;
-      const t4 = shiftIsoDate(iso, -4);
-      const t1 = shiftIsoDate(iso, 1);
-      await storage.ensureScheduledEmailRows(b.id, "reminder_t4", t4, INTERNAL_REMINDER_RECIPIENTS.join(","));
-      await storage.ensureScheduledEmailRows(b.id, "feedback_t1", t1, b.email);
-      backfilled++;
+      try {
+        // T-4 heads-up is internal prep for a *paid* promotion — paid only.
+        if (b.paidAt) {
+          const t4 = shiftIsoDate(iso, -4);
+          await storage.ensureScheduledEmailRows(b.id, "reminder_t4", t4, INTERNAL_REMINDER_RECIPIENTS.join(","));
+        }
+        // T+1 feedback survey goes to every booker, paid or not — anyone
+        // who ran an event with us can tell us how it went.
+        const t1 = shiftIsoDate(iso, 1);
+        await storage.ensureScheduledEmailRows(b.id, "feedback_t1", t1, b.email);
+        backfilled++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[scheduled-emails] backfill failed for booking #${b.id}:`, err);
+        errors.push(`backfill booking #${b.id}: ${msg.slice(0, 200)}`);
+      }
     }
 
     const pending = await storage.listPendingScheduledEmails(today);
@@ -2540,7 +2555,16 @@ Return every field you can confidently determine. Set null for any field the ima
     // Standalone reminders piggyback on the same tick. Any reminder
     // with sendAt <= now and status='pending' gets fired and marked sent.
     // Same dry-run honored — preview lands in centralgroupevents@gmail.com.
-    const dueReminders = await storage.listDueReminders(new Date());
+    // If the reminders table isn't reachable (e.g. schema not pushed yet),
+    // the scheduled emails above still count as a successful run.
+    let dueReminders: Awaited<ReturnType<typeof storage.listDueReminders>> = [];
+    try {
+      dueReminders = await storage.listDueReminders(new Date());
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[scheduled-emails] listDueReminders failed:", err);
+      errors.push(`reminders lookup: ${msg.slice(0, 200)}`);
+    }
     let remindersSent = 0;
     let remindersFailed = 0;
     for (const r of dueReminders) {
@@ -2573,7 +2597,7 @@ Return every field you can confidently determine. Set null for any field the ima
       }
     }
 
-    return { today, dryRun, backfilled, sent, failed, skipped, pendingProcessed: pending.length, remindersSent, remindersFailed };
+    return { today, dryRun, backfilled, sent, failed, skipped, pendingProcessed: pending.length, remindersSent, remindersFailed, errors };
   }
 
   // Public, secret-protected. Pinged daily at 9am ET by cron-job.org.
@@ -2611,7 +2635,10 @@ Return every field you can confidently determine. Set null for any field the ima
       res.json(result);
     } catch (err) {
       console.error("[scheduled-emails/run-now] error:", err);
-      res.status(500).json({ message: "Internal server error" });
+      // Admin-only endpoint — include the real reason so the dashboard
+      // toast says what actually broke instead of a generic 500.
+      const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
+      res.status(500).json({ message: `Run failed: ${detail}` });
     }
   });
 
