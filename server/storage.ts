@@ -14,6 +14,7 @@ import {
   emailBlasts,
   emailBlastEvents,
   reminders,
+  invoices,
   worldCupSubmissions,
   nbaFinalsSubmissions,
   landingPageSubmissions,
@@ -41,6 +42,7 @@ import {
   type InsertNbaFinalsSubmission,
   type LandingPageSubmission,
   type InsertLandingPageSubmission,
+  type Invoice,
 } from "@shared/schema";
 import { eq, desc, sql, count, and, isNull, gte, lt, inArray } from "drizzle-orm";
 import slugifyLib from "slugify";
@@ -83,6 +85,10 @@ export interface IStorage {
   createSubscriber(subscriber: InsertSubscriber): Promise<Subscriber>;
   findSubscriberByEmail(email: string): Promise<Subscriber | null>;
   upsertSubscriber(email: string, referrer?: string, name?: string): Promise<{ subscriber: Subscriber; isNew: boolean }>;
+  unsubscribeByEmail(email: string): Promise<void>;
+  reactivateSubscriber(email: string, fields?: { region?: string; referrer?: string; landingPath?: string; utmSource?: string }): Promise<void>;
+  listActiveSubscribers(): Promise<Subscriber[]>;
+  getUnsubscribedEmails(emails: string[]): Promise<Set<string>>;
 
   importSubscribers(rows: Array<{ email: string; name?: string; region?: string; referrer?: string }>): Promise<{ imported: number; skipped: number }>;
   deleteSubscriber(id: number): Promise<void>;
@@ -174,6 +180,15 @@ export interface IStorage {
   getReminder(id: number): Promise<{ id: number; title: string; body: string | null; sendAt: Date; recipientEmails: string; status: string } | null>;
   listDueReminders(now: Date): Promise<Array<{ id: number; title: string; body: string | null; sendAt: Date; recipientEmails: string }>>;
   markReminderSent(id: number, status: "sent" | "failed" | "cancelled", opts?: { error?: string }): Promise<void>;
+
+  // Invoices
+  createInvoice(data: Omit<Invoice, "id" | "createdAt" | "updatedAt" | "sentAt" | "paidAt">): Promise<Invoice>;
+  listInvoices(): Promise<Invoice[]>;
+  getInvoice(id: number): Promise<Invoice | null>;
+  getInvoiceByNumber(invoiceNumber: string): Promise<Invoice | null>;
+  updateInvoice(id: number, patch: Partial<Invoice>): Promise<Invoice | null>;
+  deleteInvoice(id: number): Promise<boolean>;
+  nextInvoiceNumber(year: number): Promise<string>;
   deleteReminder(id: number): Promise<boolean>;
 
   // Email blast tracking — opens + clicks
@@ -410,6 +425,61 @@ export class DatabaseStorage implements IStorage {
     // Row already existed — fetch and return it
     const existing = await this.findSubscriberByEmail(email);
     return { subscriber: existing!, isNew: false };
+  }
+
+  // Mark an email as unsubscribed. If the email was never a subscriber
+  // (e.g. a page-blast recipient), insert a suppression row so no future
+  // send can reach it. Idempotent.
+  async unsubscribeByEmail(email: string): Promise<void> {
+    const normalized = email.toLowerCase().trim();
+    const updated = await db.update(newsletterSubscribers)
+      .set({ unsubscribedAt: sql`COALESCE(${newsletterSubscribers.unsubscribedAt}, NOW())` })
+      .where(eq(newsletterSubscribers.email, normalized))
+      .returning({ id: newsletterSubscribers.id });
+    if (updated.length === 0) {
+      await db.insert(newsletterSubscribers)
+        .values({
+          email: normalized,
+          name: normalized.split("@")[0],
+          referrer: "unsubscribe",
+          unsubscribedAt: sql`NOW()`,
+        })
+        .onConflictDoNothing();
+    }
+  }
+
+  // Clear the unsubscribed flag after an explicit re-signup by the person
+  // themselves (subscribe form). Never called from imports or auto-subscribes.
+  async reactivateSubscriber(email: string, fields?: { region?: string; referrer?: string; landingPath?: string; utmSource?: string }): Promise<void> {
+    await db.update(newsletterSubscribers)
+      .set({
+        unsubscribedAt: null,
+        ...(fields?.region ? { region: fields.region } : {}),
+        ...(fields?.referrer ? { referrer: fields.referrer } : {}),
+        ...(fields?.landingPath ? { landingPath: fields.landingPath } : {}),
+        ...(fields?.utmSource ? { utmSource: fields.utmSource } : {}),
+      })
+      .where(eq(newsletterSubscribers.email, email.toLowerCase().trim()));
+  }
+
+  // Subscribers eligible for marketing sends — excludes everyone who opted out.
+  async listActiveSubscribers(): Promise<Subscriber[]> {
+    return await db.select().from(newsletterSubscribers)
+      .where(isNull(newsletterSubscribers.unsubscribedAt))
+      .orderBy(desc(newsletterSubscribers.createdAt));
+  }
+
+  // Which of the given emails are on the suppression list. Used to filter
+  // non-newsletter sends (page blasts) against opt-outs.
+  async getUnsubscribedEmails(emails: string[]): Promise<Set<string>> {
+    if (emails.length === 0) return new Set();
+    const rows = await db.select({ email: newsletterSubscribers.email })
+      .from(newsletterSubscribers)
+      .where(and(
+        inArray(newsletterSubscribers.email, emails.map((e) => e.toLowerCase().trim())),
+        sql`${newsletterSubscribers.unsubscribedAt} IS NOT NULL`,
+      ));
+    return new Set(rows.map((r) => r.email));
   }
 
   // ── Bookings ──────────────────────────────────────────────────────────
@@ -1056,6 +1126,52 @@ export class DatabaseStorage implements IStorage {
   async deleteReminder(id: number): Promise<boolean> {
     const result = await db.delete(reminders).where(eq(reminders.id, id)).returning({ id: reminders.id });
     return result.length > 0;
+  }
+
+  // ── Invoices ──────────────────────────────────────────────────────────
+
+  async createInvoice(data: Omit<Invoice, "id" | "createdAt" | "updatedAt" | "sentAt" | "paidAt">): Promise<Invoice> {
+    const [row] = await db.insert(invoices).values(data).returning();
+    return row;
+  }
+
+  async listInvoices(): Promise<Invoice[]> {
+    return await db.select().from(invoices).orderBy(desc(invoices.createdAt));
+  }
+
+  async getInvoice(id: number): Promise<Invoice | null> {
+    const [row] = await db.select().from(invoices).where(eq(invoices.id, id));
+    return row ?? null;
+  }
+
+  async getInvoiceByNumber(invoiceNumber: string): Promise<Invoice | null> {
+    const [row] = await db.select().from(invoices).where(eq(invoices.invoiceNumber, invoiceNumber));
+    return row ?? null;
+  }
+
+  async updateInvoice(id: number, patch: Partial<Invoice>): Promise<Invoice | null> {
+    const [row] = await db.update(invoices)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(invoices.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  async deleteInvoice(id: number): Promise<boolean> {
+    const result = await db.delete(invoices).where(eq(invoices.id, id)).returning({ id: invoices.id });
+    return result.length > 0;
+  }
+
+  // Sequential per-year numbering: CGE-2026-0001, CGE-2026-0002, …
+  // Single-admin usage, so a count-based next number is race-safe enough;
+  // the unique constraint on invoice_number backstops any collision.
+  async nextInvoiceNumber(year: number): Promise<string> {
+    const [row] = await db
+      .select({ n: count() })
+      .from(invoices)
+      .where(sql`${invoices.invoiceNumber} LIKE ${`CGE-${year}-%`}`);
+    const next = Number(row?.n ?? 0) + 1;
+    return `CGE-${year}-${String(next).padStart(4, "0")}`;
   }
 
   // ── Email blast tracking ──────────────────────────────────────────────

@@ -12,6 +12,7 @@ import crypto from "crypto";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import { requireAuth, verifyAdminToken } from "./auth";
+import { complianceFooter, listUnsubscribeHeaders, decodeEmail, verifyUnsubscribeToken, signToken, verifySignedToken, postalAddress } from "./email-compliance";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -77,6 +78,9 @@ function wrapEmailLinks(html: string, blastId: number, email: string): string {
   const base = emailTrackingBase();
   return html.replace(/href="(https?:\/\/[^"]+)"/gi, (match, url) => {
     if (url.includes("/api/email/track/")) return match;
+    // Unsubscribe must keep working even if the click tracker doesn't —
+    // never route opt-outs through the redirect.
+    if (url.includes("/unsubscribe")) return match;
     const tracked = `${base}/api/email/track/click?b=${blastId}&r=${r}&u=${encodeURIComponent(url)}`;
     return `href="${tracked}"`;
   });
@@ -559,7 +563,21 @@ ${blogList || "_No recent posts yet._"}
   app.post(api.subscribers.create.path, formLimiter, async (req, res) => {
     try {
       const input = api.subscribers.create.input.parse(req.body);
-      await storage.createSubscriber(input);
+      input.email = input.email.toLowerCase().trim();
+      // An explicit signup by the person themselves is fresh consent — it may
+      // reactivate a previously-unsubscribed email. Anything else (duplicate
+      // active subscriber) stays a 409 like before.
+      const existing = await storage.findSubscriberByEmail(input.email);
+      if (existing?.unsubscribedAt) {
+        await storage.reactivateSubscriber(input.email, {
+          region: input.region ?? undefined,
+          referrer: input.referrer,
+          landingPath: input.landingPath,
+          utmSource: input.utmSource,
+        });
+      } else {
+        await storage.createSubscriber(input);
+      }
       res.status(201).json({ message: "Successfully subscribed to the newsletter!" });
       try {
         await transporter.sendMail({
@@ -600,6 +618,7 @@ ${blogList || "_No recent posts yet._"}
           from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
           to: input.email,
           subject: "Welcome to the CGE Newsletter 🎉",
+          headers: listUnsubscribeHeaders(input.email),
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 40px 32px; border-radius: 12px; border: 1px solid #1e1e1e;">
               <div style="text-align: center; margin-bottom: 32px;">
@@ -619,11 +638,7 @@ ${blogList || "_No recent posts yet._"}
                 </a>
               </div>
 
-              <hr style="border: none; border-top: 1px solid #1e1e1e; margin-bottom: 24px;" />
-
-              <p style="color: #555555; font-size: 12px; text-align: center; margin: 0;">
-                You're receiving this because you subscribed at centralgroupevents.com
-              </p>
+              ${complianceFooter(input.email, "You're receiving this because you subscribed to the weekly newsletter at centralgroupevents.com.")}
             </div>
           `,
         });
@@ -646,6 +661,35 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // ── Unsubscribe (CAN-SPAM / RFC 8058 one-click) ──────────────────────
+  // Every marketing email carries a signed link: ?e=<base64url email>&t=<hmac>.
+  // The same URL is used in the List-Unsubscribe header, which mailbox
+  // providers POST to for one-click unsubscribe, and by the /unsubscribe
+  // page for people who click the footer link.
+  app.post("/api/unsubscribe", async (req: Request, res: Response) => {
+    try {
+      const e = String(req.query.e || (req.body as { e?: string } | undefined)?.e || "");
+      const t = String(req.query.t || (req.body as { t?: string } | undefined)?.t || "");
+      const email = decodeEmail(e);
+      if (!email || !verifyUnsubscribeToken(email, t)) {
+        return res.status(400).json({ message: "Invalid or expired unsubscribe link. Email centralgroupevents@gmail.com and we'll remove you manually." });
+      }
+      await storage.unsubscribeByEmail(email);
+      res.json({ message: "You've been unsubscribed. You won't receive any more marketing emails from us." });
+    } catch (err) {
+      console.error("[unsubscribe] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Some mail clients open the header URL with GET instead of the one-click
+  // POST — send them to the confirmation page rather than silently opting
+  // out on a prefetchable GET.
+  app.get("/api/unsubscribe", (req: Request, res: Response) => {
+    const qs = new URLSearchParams({ e: String(req.query.e || ""), t: String(req.query.t || "") });
+    res.redirect(`/unsubscribe?${qs.toString()}`);
+  });
+
   // ── Existing booking route ───────────────────────────────────────────
   app.post(api.bookings.create.path, formLimiter, ...bookingValidators, async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -659,12 +703,16 @@ ${blogList || "_No recent posts yet._"}
       const input = api.bookings.create.input.parse(req.body);
       const booking = await storage.createBooking(input);
       res.status(201).json({ message: "Booking request submitted successfully! We'll be in touch.", referenceId: booking.referenceId });
-      // Auto-subscribe the booker to the newsletter (non-blocking, ON CONFLICT DO NOTHING via upsert)
-      storage.upsertSubscriber(
-        input.email.toLowerCase().trim(),
-        "booking",
-        input.contactName || undefined
-      ).catch(() => {});
+      // Subscribe the booker to the newsletter only if they ticked the
+      // opt-in box on the form (non-blocking, ON CONFLICT DO NOTHING via
+      // upsert — never resurrects an unsubscribed email).
+      if (req.body.newsletterOptIn === true) {
+        storage.upsertSubscriber(
+          input.email.toLowerCase().trim(),
+          "booking",
+          input.contactName || undefined
+        ).catch(() => {});
+      }
       try {
         const submissionMode = input.mode || "Standard";
         const replyName = input.contactName || input.email;
@@ -1445,11 +1493,13 @@ Return every field you can confidently determine. Set null for any field the ima
       const cleaned = { ...parsed, learnMoreUrl: normalizeUrl(parsed.learnMoreUrl) };
       const created = await storage.createLandingPageSubmission(cleaned);
 
-      // Auto-subscribe (non-blocking)
-      storage.upsertSubscriber(
-        parsed.submitterEmail.toLowerCase().trim(),
-        `page:${page.slug}`,
-      ).catch(() => {});
+      // Subscribe only with explicit opt-in from the form (non-blocking)
+      if (req.body.newsletterOptIn === true) {
+        storage.upsertSubscriber(
+          parsed.submitterEmail.toLowerCase().trim(),
+          `page:${page.slug}`,
+        ).catch(() => {});
+      }
 
       // Submitter auto-reply
       transporter.sendMail({
@@ -1651,25 +1701,29 @@ Return every field you can confidently determine. Set null for any field the ima
         return res.status(400).json({ message: "html body is required" });
       }
       const approved = await storage.getApprovedLandingPageSubmissions(page.id);
-      const recipients = Array.from(new Set(approved.map((s) => s.submitterEmail).filter(Boolean)));
+      const allRecipients = Array.from(new Set(approved.map((s) => s.submitterEmail?.toLowerCase().trim()).filter(Boolean))) as string[];
+      // Honor the suppression list — submitters who unsubscribed from any
+      // CGE email never get blasted again.
+      const suppressed = await storage.getUnsubscribedEmails(allRecipients);
+      const recipients = allRecipients.filter((e) => !suppressed.has(e));
       if (recipients.length === 0) {
         return res.status(400).json({ message: "No approved submitters to email." });
       }
       // Record the blast first so we have an ID to embed in the tracking pixel
       // + link wrappers. Open/click events FK back to this row.
       const blastId = await storage.createEmailBlast("page-blast", subject.slice(0, 200), recipients.length, page.slug);
-      const footer = `<hr style="margin-top:32px;border:0;border-top:1px solid #eee" />
-              <p style="color:#999;font-size:11px">You're receiving this because you submitted a venue on <a href="https://centralgroupevents.com/${page.slug}">${escapeHtml(page.title)}</a> at Central Group Events. Reply to unsubscribe.</p>`;
+      const reason = `You're receiving this because you submitted a venue on <a href="https://centralgroupevents.com/${page.slug}" style="color:#8B2FC9;">${escapeHtml(page.title)}</a> at Central Group Events.`;
       let sent = 0;
       let failed = 0;
       for (const to of recipients) {
         try {
-          const wrapped = wrapEmailLinks(`${html}${footer}`, blastId, to);
+          const wrapped = wrapEmailLinks(`${html}${complianceFooter(to, reason, { dark: false })}`, blastId, to);
           const withPixel = appendTrackingPixel(wrapped, blastId, to);
           await transporter.sendMail({
             from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
             to,
             subject: subject.slice(0, 200),
+            headers: listUnsubscribeHeaders(to),
             html: withPixel,
           });
           sent++;
@@ -1680,7 +1734,7 @@ Return every field you can confidently determine. Set null for any field the ima
           failed++;
         }
       }
-      res.json({ sent, failed, total: recipients.length, blastId });
+      res.json({ sent, failed, total: recipients.length, suppressed: suppressed.size, blastId });
     } catch (err) {
       console.error("[email-blast] error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -1973,31 +2027,31 @@ Return every field you can confidently determine. Set null for any field the ima
     try {
       const { subject, body } = req.body;
       if (!subject || !body) return res.status(400).json({ message: "Subject and body are required" });
-      const subscribers = await storage.listSubscribers();
+      // Only active subscribers — anyone who unsubscribed is suppressed.
+      const subscribers = await storage.listActiveSubscribers();
       const blastId = await storage.createEmailBlast("newsletter", String(subject).slice(0, 200), subscribers.length);
-      const baseHtml = `
+      // Footer is per-recipient (signed unsubscribe link), so build the body
+      // shell once and stamp the footer inside the send loop.
+      const htmlFor = (email: string) => `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
                 <div style="text-align: center; margin-bottom: 24px;">
                   <h1 style="color: #8B2FC9; margin: 0;">Central Group Events</h1>
                   <p style="color: #888; font-size: 12px; margin: 4px 0 0;">NJ Nightlife Newsletter</p>
                 </div>
                 <div style="color: #e0e0e0; line-height: 1.7; white-space: pre-wrap;">${body}</div>
-                <hr style="border-color: #333; margin: 32px 0;" />
-                <p style="color: #555; font-size: 12px; text-align: center;">
-                  You're receiving this because you subscribed at centralgroupevents.com.<br/>
-                  <a href="https://centralgroupevents.com" style="color: #8B2FC9;">Unsubscribe</a>
-                </p>
+                ${complianceFooter(email, "You're receiving this because you subscribed to the weekly newsletter at centralgroupevents.com.")}
               </div>
             `;
       let sent = 0;
       for (const sub of subscribers) {
         try {
-          const wrapped = wrapEmailLinks(baseHtml, blastId, sub.email);
+          const wrapped = wrapEmailLinks(htmlFor(sub.email), blastId, sub.email);
           const withPixel = appendTrackingPixel(wrapped, blastId, sub.email);
           await transporter.sendMail({
             from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
             to: sub.email,
             subject,
+            headers: listUnsubscribeHeaders(sub.email),
             html: withPixel,
           });
           sent++;
@@ -2215,12 +2269,13 @@ Return every field you can confidently determine. Set null for any field the ima
             from: `"CGE Website" <${process.env.GMAIL_USER}>`,
             to: email,
             subject: "You're on the CGE insider list 🎉",
+            headers: listUnsubscribeHeaders(email),
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #0a0a0a; color: #ffffff; padding: 32px; border-radius: 12px;">
                 <h1 style="color: #8B2FC9;">Welcome to the CGE insider list!</h1>
                 <p>You now have full access to all CGE newsletter posts.</p>
                 <p>Head over to <a href="https://centralgroupevents.com/things-to-do-in-nj" style="color: #8B2FC9;">centralgroupevents.com/things-to-do-in-nj</a> to see what's happening across NJ this week.</p>
-                <p style="color: #555; font-size: 12px; margin-top: 24px;">Central Group Events • centralgroupevents@gmail.com</p>
+                ${complianceFooter(email, "You're receiving this because you signed up for the CGE list at centralgroupevents.com.")}
               </div>
             `,
           });
@@ -2398,7 +2453,9 @@ Return every field you can confidently determine. Set null for any field the ima
         </p>
 
         <p style="color:#e0e0e0;font-size:15px;margin:22px 0 16px">
-          We don't take it for granted that you trusted us with your event. There are a hundred ways you could have spent that promotion budget — our hope is we earned the choice. And if we didn't quite hit the mark, that's exactly what we need to hear.
+          ${b.paidAt
+            ? "We don't take it for granted that you trusted us with your event. There are a hundred ways you could have spent that promotion budget — our hope is we earned the choice. And if we didn't quite hit the mark, that's exactly what we need to hear."
+            : "We don't take it for granted that you trusted us with your event. Our hope is we made getting the word out a little easier — and if we didn't quite hit the mark, that's exactly what we need to hear."}
         </p>
 
         <p style="color:#e0e0e0;font-size:15px;margin:0 0 24px">
@@ -2432,23 +2489,36 @@ Return every field you can confidently determine. Set null for any field the ima
   // The whole "process scheduled emails" loop, extracted so both the
   // secret-protected cron endpoint AND the admin "Run now" button can
   // call the same logic. Backfills rows, sends pending ones.
-  async function runScheduledEmailsTick(): Promise<{ today: string; dryRun: boolean; backfilled: number; sent: number; failed: number; skipped: number; pendingProcessed: number; remindersSent: number; remindersFailed: number }> {
+  async function runScheduledEmailsTick(): Promise<{ today: string; dryRun: boolean; backfilled: number; sent: number; failed: number; skipped: number; pendingProcessed: number; remindersSent: number; remindersFailed: number; errors: string[] }> {
     const today = todayInET();
     const dryRunSetting = await storage.getSetting("cronDryRun");
     const dryRun = dryRunSetting !== "false";
+    // Sub-step failures land here instead of 500ing the whole tick, so one
+    // bad booking row or a missing table can't block every other send.
+    const errors: string[] = [];
 
     const allBookings = await storage.getBookings();
     let backfilled = 0;
     for (const b of allBookings) {
-      if (!b.paidAt) continue;
       if (b.status && b.status.toLowerCase() === "cancelled") continue;
       const iso = parseFlexibleWcDate(b.eventDate);
       if (!iso) continue;
-      const t4 = shiftIsoDate(iso, -4);
-      const t1 = shiftIsoDate(iso, 1);
-      await storage.ensureScheduledEmailRows(b.id, "reminder_t4", t4, INTERNAL_REMINDER_RECIPIENTS.join(","));
-      await storage.ensureScheduledEmailRows(b.id, "feedback_t1", t1, b.email);
-      backfilled++;
+      try {
+        // T-4 heads-up is internal prep for a *paid* promotion — paid only.
+        if (b.paidAt) {
+          const t4 = shiftIsoDate(iso, -4);
+          await storage.ensureScheduledEmailRows(b.id, "reminder_t4", t4, INTERNAL_REMINDER_RECIPIENTS.join(","));
+        }
+        // T+1 feedback survey goes to every booker, paid or not — anyone
+        // who ran an event with us can tell us how it went.
+        const t1 = shiftIsoDate(iso, 1);
+        await storage.ensureScheduledEmailRows(b.id, "feedback_t1", t1, b.email);
+        backfilled++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[scheduled-emails] backfill failed for booking #${b.id}:`, err);
+        errors.push(`backfill booking #${b.id}: ${msg.slice(0, 200)}`);
+      }
     }
 
     const pending = await storage.listPendingScheduledEmails(today);
@@ -2485,7 +2555,16 @@ Return every field you can confidently determine. Set null for any field the ima
     // Standalone reminders piggyback on the same tick. Any reminder
     // with sendAt <= now and status='pending' gets fired and marked sent.
     // Same dry-run honored — preview lands in centralgroupevents@gmail.com.
-    const dueReminders = await storage.listDueReminders(new Date());
+    // If the reminders table isn't reachable (e.g. schema not pushed yet),
+    // the scheduled emails above still count as a successful run.
+    let dueReminders: Awaited<ReturnType<typeof storage.listDueReminders>> = [];
+    try {
+      dueReminders = await storage.listDueReminders(new Date());
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[scheduled-emails] listDueReminders failed:", err);
+      errors.push(`reminders lookup: ${msg.slice(0, 200)}`);
+    }
     let remindersSent = 0;
     let remindersFailed = 0;
     for (const r of dueReminders) {
@@ -2518,7 +2597,7 @@ Return every field you can confidently determine. Set null for any field the ima
       }
     }
 
-    return { today, dryRun, backfilled, sent, failed, skipped, pendingProcessed: pending.length, remindersSent, remindersFailed };
+    return { today, dryRun, backfilled, sent, failed, skipped, pendingProcessed: pending.length, remindersSent, remindersFailed, errors };
   }
 
   // Public, secret-protected. Pinged daily at 9am ET by cron-job.org.
@@ -2556,7 +2635,10 @@ Return every field you can confidently determine. Set null for any field the ima
       res.json(result);
     } catch (err) {
       console.error("[scheduled-emails/run-now] error:", err);
-      res.status(500).json({ message: "Internal server error" });
+      // Admin-only endpoint — include the real reason so the dashboard
+      // toast says what actually broke instead of a generic 500.
+      const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
+      res.status(500).json({ message: `Run failed: ${detail}` });
     }
   });
 
@@ -2625,6 +2707,247 @@ Return every field you can confidently determine. Set null for any field the ima
       await storage.setSetting("cronDryRun", enabled ? "true" : "false");
       res.json({ dryRun: enabled });
     } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Invoices ─────────────────────────────────────────────────────────
+  // Admin-generated client invoices. The client-facing copy lives at
+  // /invoice/:number?t=<hmac> — signed link, no login needed, printable.
+
+  function invoiceMoney(cents: number): string {
+    return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+  }
+
+  function invoicePublicUrl(invoiceNumber: string): string {
+    return `${emailTrackingBase()}/invoice/${encodeURIComponent(invoiceNumber)}?t=${signToken(invoiceNumber)}`;
+  }
+
+  function computeInvoiceTotals(items: Array<{ quantity: number; unitPriceCents: number }>, discountCents: number, taxCents: number) {
+    const subtotalCents = items.reduce((sum, it) => sum + it.quantity * it.unitPriceCents, 0);
+    const totalCents = Math.max(0, subtotalCents - discountCents + taxCents);
+    return { subtotalCents, totalCents };
+  }
+
+  function buildInvoiceEmail(inv: { invoiceNumber: string; clientName: string; eventName: string | null; items: string; discountCents: number; taxCents: number; totalCents: number; dueDate: string | null; notes: string | null; paymentInstructions: string | null }): { subject: string; html: string } {
+    const items = JSON.parse(inv.items) as Array<{ description: string; quantity: number; unitPriceCents: number }>;
+    const { subtotalCents } = computeInvoiceTotals(items, inv.discountCents, inv.taxCents);
+    const firstName = (inv.clientName || "").trim().split(/\s+/)[0] || "there";
+    const subject = `Invoice ${inv.invoiceNumber} from Central Group Events${inv.eventName ? ` — ${inv.eventName}` : ""}`;
+    const rows = items.map((it) => `
+      <tr>
+        <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#222">${escapeHtml(it.description)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#222;text-align:center">${it.quantity}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#222;text-align:right">${invoiceMoney(it.unitPriceCents)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #eee;color:#222;text-align:right">${invoiceMoney(it.quantity * it.unitPriceCents)}</td>
+      </tr>`).join("");
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto; background:#ffffff; color:#111; padding: 32px; border:1px solid #e5e5e5; border-radius: 12px;">
+        <table style="width:100%;margin-bottom:24px"><tr>
+          <td><h1 style="color:#8B2FC9;font-size:22px;margin:0">Central Group Events</h1>
+              <p style="color:#888;font-size:12px;margin:4px 0 0">NJ event promotion</p></td>
+          <td style="text-align:right"><p style="font-size:18px;font-weight:bold;margin:0">INVOICE</p>
+              <p style="color:#555;font-size:13px;margin:4px 0 0">${escapeHtml(inv.invoiceNumber)}</p>
+              ${inv.dueDate ? `<p style="color:#555;font-size:13px;margin:2px 0 0">Due ${escapeHtml(inv.dueDate)}</p>` : ""}</td>
+        </tr></table>
+        <p style="font-size:14px;color:#333;margin:0 0 6px">Hi ${escapeHtml(firstName)},</p>
+        <p style="font-size:14px;color:#333;margin:0 0 20px">Here's your invoice${inv.eventName ? ` for <strong>${escapeHtml(inv.eventName)}</strong>` : ""}. You can view and print it any time from the button below.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <tr style="background:#f7f2fb">
+            <th style="padding:10px 8px;text-align:left;color:#555;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Description</th>
+            <th style="padding:10px 8px;text-align:center;color:#555;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Qty</th>
+            <th style="padding:10px 8px;text-align:right;color:#555;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Unit</th>
+            <th style="padding:10px 8px;text-align:right;color:#555;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Amount</th>
+          </tr>
+          ${rows}
+          <tr><td colspan="3" style="padding:10px 8px;text-align:right;color:#666">Subtotal</td><td style="padding:10px 8px;text-align:right;color:#222">${invoiceMoney(subtotalCents)}</td></tr>
+          ${inv.discountCents ? `<tr><td colspan="3" style="padding:4px 8px;text-align:right;color:#666">Discount</td><td style="padding:4px 8px;text-align:right;color:#0a7d33">−${invoiceMoney(inv.discountCents)}</td></tr>` : ""}
+          ${inv.taxCents ? `<tr><td colspan="3" style="padding:4px 8px;text-align:right;color:#666">Tax</td><td style="padding:4px 8px;text-align:right;color:#222">${invoiceMoney(inv.taxCents)}</td></tr>` : ""}
+          <tr><td colspan="3" style="padding:12px 8px;text-align:right;font-weight:bold;color:#111;border-top:2px solid #111">Total due</td><td style="padding:12px 8px;text-align:right;font-weight:bold;font-size:16px;color:#111;border-top:2px solid #111">${invoiceMoney(inv.totalCents)}</td></tr>
+        </table>
+        ${inv.paymentInstructions ? `<div style="margin-top:20px;padding:14px;background:#f7f7f7;border-radius:8px"><p style="font-size:12px;color:#555;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 6px;font-weight:bold">How to pay</p><p style="font-size:13px;color:#333;margin:0;white-space:pre-wrap">${escapeHtml(inv.paymentInstructions)}</p></div>` : ""}
+        ${inv.notes ? `<p style="font-size:13px;color:#555;margin:16px 0 0;white-space:pre-wrap">${escapeHtml(inv.notes)}</p>` : ""}
+        <p style="text-align:center;margin:28px 0 8px">
+          <a href="${invoicePublicUrl(inv.invoiceNumber)}" style="display:inline-block;padding:12px 28px;background:#8B2FC9;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px">View / print invoice</a>
+        </p>
+        <p style="color:#999;font-size:11px;text-align:center;margin:16px 0 0">Questions? Just reply to this email.<br/>Central Group Events · ${postalAddress()}</p>
+      </div>`;
+    return { subject, html };
+  }
+
+  app.get("/api/admin/invoices", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const rows = await storage.listInvoices();
+      // Ship the signed public URL so the admin UI can open/print any invoice.
+      res.json(rows.map((r) => ({ ...r, publicUrl: invoicePublicUrl(r.invoiceNumber) })));
+    } catch (err) {
+      console.error("[invoices] list error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/invoices", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { invoiceInputSchema } = await import("@shared/schema");
+      const input = invoiceInputSchema.parse(req.body);
+      const { totalCents } = computeInvoiceTotals(input.items, input.discountCents, input.taxCents);
+      const invoiceNumber = await storage.nextInvoiceNumber(new Date().getFullYear());
+      const created = await storage.createInvoice({
+        invoiceNumber,
+        bookingId: input.bookingId ?? null,
+        clientName: input.clientName.trim(),
+        clientEmail: input.clientEmail.toLowerCase().trim(),
+        clientPhone: input.clientPhone?.trim() || null,
+        eventName: input.eventName?.trim() || null,
+        items: JSON.stringify(input.items),
+        discountCents: input.discountCents,
+        taxCents: input.taxCents,
+        totalCents,
+        notes: input.notes?.trim() || null,
+        paymentInstructions: input.paymentInstructions?.trim() || null,
+        status: "draft",
+        dueDate: input.dueDate || null,
+      });
+      res.status(201).json({ ...created, publicUrl: invoicePublicUrl(created.invoiceNumber) });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      console.error("[invoices] create error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/invoices/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const existing = await storage.getInvoice(id);
+      if (!existing) return res.status(404).json({ message: "Invoice not found" });
+      if (existing.status === "paid") return res.status(400).json({ message: "Paid invoices can't be edited — void it and issue a new one." });
+      const { invoiceInputSchema } = await import("@shared/schema");
+      const input = invoiceInputSchema.parse(req.body);
+      const { totalCents } = computeInvoiceTotals(input.items, input.discountCents, input.taxCents);
+      const updated = await storage.updateInvoice(id, {
+        bookingId: input.bookingId ?? null,
+        clientName: input.clientName.trim(),
+        clientEmail: input.clientEmail.toLowerCase().trim(),
+        clientPhone: input.clientPhone?.trim() || null,
+        eventName: input.eventName?.trim() || null,
+        items: JSON.stringify(input.items),
+        discountCents: input.discountCents,
+        taxCents: input.taxCents,
+        totalCents,
+        notes: input.notes?.trim() || null,
+        paymentInstructions: input.paymentInstructions?.trim() || null,
+        dueDate: input.dueDate || null,
+      });
+      res.json({ ...updated, publicUrl: invoicePublicUrl(existing.invoiceNumber) });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      console.error("[invoices] update error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/invoices/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const ok = await storage.deleteInvoice(id);
+      if (!ok) return res.status(404).json({ message: "Invoice not found" });
+      res.json({ deleted: true });
+    } catch (err) {
+      console.error("[invoices] delete error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Email the invoice to the client and flip draft → sent. Transactional
+  // email (it's about their purchase), so no marketing footer required —
+  // the postal address + reply contact are included anyway.
+  app.post("/api/admin/invoices/:id/send", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const inv = await storage.getInvoice(id);
+      if (!inv) return res.status(404).json({ message: "Invoice not found" });
+      if (inv.status === "void") return res.status(400).json({ message: "This invoice is void." });
+      const { subject, html } = buildInvoiceEmail(inv);
+      await transporter.sendMail({
+        from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+        to: inv.clientEmail,
+        bcc: "centralgroupevents@gmail.com",
+        subject,
+        html,
+      });
+      const updated = await storage.updateInvoice(id, {
+        status: inv.status === "paid" ? "paid" : "sent",
+        sentAt: new Date(),
+      });
+      res.json({ ...updated, publicUrl: invoicePublicUrl(inv.invoiceNumber) });
+    } catch (err) {
+      console.error("[invoices] send error:", err);
+      const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
+      res.status(500).json({ message: `Send failed: ${detail}` });
+    }
+  });
+
+  app.post("/api/admin/invoices/:id/status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      const { status } = req.body as { status?: string };
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      if (!status || !["draft", "sent", "paid", "void"].includes(status)) {
+        return res.status(400).json({ message: "status must be draft | sent | paid | void" });
+      }
+      const inv = await storage.getInvoice(id);
+      if (!inv) return res.status(404).json({ message: "Invoice not found" });
+      const updated = await storage.updateInvoice(id, {
+        status,
+        paidAt: status === "paid" ? new Date() : null,
+      });
+      res.json({ ...updated, publicUrl: invoicePublicUrl(inv.invoiceNumber) });
+    } catch (err) {
+      console.error("[invoices] status error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Public, signed-link invoice fetch for the client-facing /invoice page.
+  // The HMAC token proves the link came from us; no login required.
+  app.get("/api/invoices/:number", async (req: Request, res: Response) => {
+    try {
+      const number = String(req.params.number || "");
+      const token = String(req.query.t || "");
+      if (!number || !verifySignedToken(number, token)) {
+        return res.status(403).json({ message: "Invalid invoice link" });
+      }
+      const inv = await storage.getInvoiceByNumber(number);
+      if (!inv || inv.status === "void") return res.status(404).json({ message: "Invoice not found" });
+      const items = JSON.parse(inv.items) as Array<{ description: string; quantity: number; unitPriceCents: number }>;
+      const { subtotalCents } = computeInvoiceTotals(items, inv.discountCents, inv.taxCents);
+      res.json({
+        invoiceNumber: inv.invoiceNumber,
+        clientName: inv.clientName,
+        clientEmail: inv.clientEmail,
+        eventName: inv.eventName,
+        items,
+        subtotalCents,
+        discountCents: inv.discountCents,
+        taxCents: inv.taxCents,
+        totalCents: inv.totalCents,
+        notes: inv.notes,
+        paymentInstructions: inv.paymentInstructions,
+        status: inv.status,
+        dueDate: inv.dueDate,
+        createdAt: inv.createdAt,
+        paidAt: inv.paidAt,
+      });
+    } catch (err) {
+      console.error("[invoices] public fetch error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -2742,12 +3065,14 @@ Return every field you can confidently determine. Set null for any field the ima
       }
       const created = await storage.createWorldCupSubmission(parsed);
 
-      // Auto-subscribe the submitter to the newsletter (non-blocking, ON CONFLICT DO NOTHING).
-      // Matches the same pattern used for /api/bookings — every email captured is a lead.
-      storage.upsertSubscriber(
-        parsed.submitterEmail.toLowerCase().trim(),
-        "world-cup-watch-party",
-      ).catch(() => {});
+      // Subscribe the submitter only if they ticked the opt-in box on the
+      // form (non-blocking, ON CONFLICT DO NOTHING).
+      if (req.body.newsletterOptIn === true) {
+        storage.upsertSubscriber(
+          parsed.submitterEmail.toLowerCase().trim(),
+          "world-cup-watch-party",
+        ).catch(() => {});
+      }
 
       // Auto-reply to submitter
       transporter.sendMail({
@@ -3020,10 +3345,12 @@ Return every field you can confidently determine. Set null for any field the ima
       const cleaned = { ...parsed, learnMoreUrl: normalizeUrl(parsed.learnMoreUrl) };
       const created = await storage.createNbaFinalsSubmission(cleaned);
 
-      storage.upsertSubscriber(
-        parsed.submitterEmail.toLowerCase().trim(),
-        "nba-finals-watch-party",
-      ).catch(() => {});
+      if (req.body.newsletterOptIn === true) {
+        storage.upsertSubscriber(
+          parsed.submitterEmail.toLowerCase().trim(),
+          "nba-finals-watch-party",
+        ).catch(() => {});
+      }
 
       transporter.sendMail({
         from: `"CGE Watch Parties" <${process.env.GMAIL_USER}>`,

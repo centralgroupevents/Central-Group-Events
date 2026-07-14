@@ -5,6 +5,7 @@ import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { WorldCupEmailBanner } from "@/components/WorldCupEmailBanner";
 import { AiExtractCard } from "@/components/AiExtractCard";
+import { NewsletterOptIn } from "@/components/ConsentNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -311,6 +312,7 @@ function SubmitForm({ slug, pageTitle }: { slug: string; pageTitle: string }) {
   const [eventName, setEventName] = useState("");
   const [instagramHandle, setInstagramHandle] = useState("");
   const [learnMoreUrl, setLearnMoreUrl] = useState("");
+  const [newsletterOptIn, setNewsletterOptIn] = useState(true);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
@@ -357,6 +359,7 @@ function SubmitForm({ slug, pageTitle }: { slug: string; pageTitle: string }) {
           eventName: eventName.trim() || null,
           instagramHandle: instagramHandle.trim() || null,
           learnMoreUrl: learnMoreUrl.trim() || null,
+          newsletterOptIn,
         }),
       });
       if (!res.ok) {
@@ -445,6 +448,7 @@ function SubmitForm({ slug, pageTitle }: { slug: string; pageTitle: string }) {
         <Label className="text-white/80 text-xs">Learn-more URL <span className="text-white/40">(optional)</span></Label>
         <Input type="url" value={learnMoreUrl} onChange={(e) => setLearnMoreUrl(e.target.value)} placeholder="https://your-event-page.com" className="bg-black/40 border-white/10 h-10" />
       </div>
+      <NewsletterOptIn checked={newsletterOptIn} onChange={setNewsletterOptIn} testId={`checkbox-landing-newsletter-opt-in-${slug}`} />
       {error && <p className="text-sm text-red-400">{error}</p>}
       <Button type="submit" disabled={loading} className="w-full h-11 bg-primary hover:bg-primary/90 font-semibold">
         {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Submitting…</> : `Submit to "${pageTitle}"`}

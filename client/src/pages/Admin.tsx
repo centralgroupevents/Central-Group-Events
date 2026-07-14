@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 import { SEO } from "@/components/SEO";
+import { InvoicesTab } from "@/components/InvoicesTab";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 
 type AdminUser = { email: string; role: string };
@@ -106,6 +107,7 @@ type Subscriber = {
   email: string;
   region: string | null;
   referrer: string | null;
+  unsubscribedAt: string | null;
   createdAt: string | null;
 };
 
@@ -270,6 +272,7 @@ const TABS = [
   { id: "analytics", label: "Analytics", icon: BarChart2 },
   { id: "seo", label: "SEO", icon: BarChart2 },
   { id: "email-schedule", label: "Email Schedule", icon: Send },
+  { id: "invoices", label: "Invoices", icon: FileText },
   { id: "reminders", label: "Reminders", icon: Mail },
   { id: "world-cup", label: "World Cup", icon: Star },
   { id: "nba-finals", label: "NBA Finals", icon: Star },
@@ -967,6 +970,11 @@ function SubscribersTab() {
                     </td>
                     <td className="px-4 py-3 font-medium text-white">
                       <a href={`mailto:${sub.email}`} className="hover:text-primary transition-colors">{sub.email}</a>
+                      {sub.unsubscribedAt && (
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/15 text-red-400" title={`Unsubscribed ${formatDate(sub.unsubscribedAt)} — suppressed from all sends`}>
+                          Unsubscribed
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{sub.name || "—"}</td>
                     <td className="px-4 py-3 text-muted-foreground">{sub.region || "—"}</td>
@@ -2019,7 +2027,15 @@ function EmailScheduleTab() {
     try {
       const res = await apiRequest("POST", "/api/admin/scheduled-emails/run-now", {});
       const json = await res.json();
-      toast({ title: `Tick complete — ${json.sent} sent, ${json.failed} failed, ${json.skipped} skipped, ${json.backfilled} backfilled${json.dryRun ? " (dry-run)" : ""}` });
+      if (json.errors?.length) {
+        toast({
+          title: `Tick finished with ${json.errors.length} problem${json.errors.length === 1 ? "" : "s"} — ${json.sent} sent, ${json.failed} failed`,
+          description: json.errors.join(" · "),
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: `Tick complete — ${json.sent} sent, ${json.failed} failed, ${json.skipped} skipped, ${json.backfilled} backfilled${json.dryRun ? " (dry-run)" : ""}` });
+      }
       qc.invalidateQueries({ queryKey: ["/api/admin/scheduled-emails"] });
     } catch (err) {
       toast({ title: "Run failed", description: String((err as Error).message), variant: "destructive" });
@@ -2108,9 +2124,9 @@ function EmailScheduleTab() {
           <div className="flex-1 min-w-[280px]">
             <h2 className="text-xl font-black">Scheduled emails for promotion bookings</h2>
             <p className="text-sm text-muted-foreground mt-2">
-              A daily cron pings <code className="text-primary">/api/cron/scheduled-emails</code> at 9am ET. For every paid, non-cancelled booking it queues two emails:
-              a <strong>T-4 reminder</strong> to centralgroupevents@gmail.com + aagu1999@gmail.com, and a <strong>T+1 feedback</strong> email to the booker
-              with the <a className="text-primary underline" href="https://form.jotform.com/261385070354051" target="_blank" rel="noopener noreferrer">JotForm survey</a>.
+              A daily cron pings <code className="text-primary">/api/cron/scheduled-emails</code> at 9am ET. For every non-cancelled booking it queues a
+              <strong> T+1 feedback</strong> email to the booker (paid or not) with the <a className="text-primary underline" href="https://form.jotform.com/261385070354051" target="_blank" rel="noopener noreferrer">JotForm survey</a>;
+              paid bookings also get a <strong>T-4 reminder</strong> to centralgroupevents@gmail.com + aagu1999@gmail.com.
             </p>
           </div>
           <Button
@@ -8055,6 +8071,7 @@ export default function Admin() {
         {activeTab === "analytics" && <AnalyticsTab />}
         {activeTab === "seo" && <SeoHealthTab />}
         {activeTab === "email-schedule" && <EmailScheduleTab />}
+        {activeTab === "invoices" && <InvoicesTab />}
         {activeTab === "reminders" && <RemindersTab />}
         {activeTab === "world-cup" && <WorldCupTab />}
         {activeTab === "nba-finals" && <NbaFinalsTab />}

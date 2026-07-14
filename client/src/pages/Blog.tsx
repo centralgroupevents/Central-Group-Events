@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { ConsentNotice } from "@/components/ConsentNotice";
 
 type Post = {
   id: number;
@@ -118,6 +119,7 @@ function NewsletterSignup() {
             )}
           </Button>
         </form>
+        <ConsentNotice className="mt-4 text-center" />
       </div>
     </div>
   );

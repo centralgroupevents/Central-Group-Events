@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getQueryFn } from "@/lib/queryClient";
+import { ConsentNotice } from "@/components/ConsentNotice";
 import type { Page } from "@shared/schema";
 
 const SLUG = "things-to-do-in-nj";
@@ -166,6 +167,7 @@ function UnlockPrompt() {
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Unlock the full list"}
           </Button>
+          <ConsentNotice className="text-center" />
         </form>
       </div>
     </div>
