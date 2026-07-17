@@ -174,10 +174,30 @@ function parseFlexibleWcDate(input: string): string | null {
     const yr = slash[3].length === 2 ? "20" + slash[3] : slash[3];
     return `${yr}-${slash[1].padStart(2, "0")}-${slash[2].padStart(2, "0")}`;
   }
-  // Fall back to JS Date parser for natural-language ("Jun 11, 2026")
+  // Bare M/D with no year (e.g. "7/18" in the weekly events export) —
+  // assume the nearest sensible occurrence: current year, rolling to next
+  // year when that date is more than ~6 months in the past.
+  const bare = head.match(/^(\d{1,2})[/.\-](\d{1,2})$/);
+  if (bare) {
+    const mo = parseInt(bare[1], 10);
+    const dy = parseInt(bare[2], 10);
+    if (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31) {
+      const now = new Date();
+      let yr = now.getFullYear();
+      if ((now.getTime() - new Date(yr, mo - 1, dy).getTime()) / 86_400_000 > 180) yr += 1;
+      return `${yr}-${String(mo).padStart(2, "0")}-${String(dy).padStart(2, "0")}`;
+    }
+  }
+  // Fall back to JS Date parser for natural-language ("Jun 11, 2026").
+  // Reject the V8 "year 2001" default (fires for year-less inputs) and
+  // anything outside a sane range — better to flag the row than to
+  // silently import an event dated two decades ago.
   const d = new Date(head);
   if (!isNaN(d.getTime())) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const year = d.getFullYear();
+    if (year === 2001 && !/2001/.test(head)) return null;
+    if (year < 1970 || year > 2100) return null;
+    return `${year}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
   return null;
 }
