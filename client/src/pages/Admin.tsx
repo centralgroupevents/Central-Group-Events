@@ -3684,6 +3684,18 @@ function normalizeEventDate(input: string): string {
     return buildIsoDate(parseInt(y, 10), parseInt(mo, 10), parseInt(d, 10));
   }
 
+  // Bare M/D with no year (e.g. "7/18" in the weekly export) — infer the
+  // year the same way month-name dates do: current year, rolling to next
+  // year when the date is more than ~6 months past.
+  m = s.match(/^(\d{1,2})[/.\-](\d{1,2})$/);
+  if (m) {
+    const mo = parseInt(m[1], 10);
+    const d = parseInt(m[2], 10);
+    if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
+      return buildIsoDate(inferYearForMonthDay(mo, d), mo, d);
+    }
+  }
+
   // Numeric day + month name: "15-May", "15 May", "15/May"
   m = s.match(/^(\d{1,2})[-/\s]+([A-Za-z]+)(?:[-/\s]+(\d{2,4}))?$/);
   if (m) {
