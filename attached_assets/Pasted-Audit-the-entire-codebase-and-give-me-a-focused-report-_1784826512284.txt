@@ -1,0 +1,51 @@
+Audit the entire codebase and give me a focused report on our customer conversion and lead generation engine. Do not make any changes. Read the code and tell me exactly what is currently built. Cover every item below:
+
+---
+
+1. LEAD CAPTURE POINTS
+List every place on the site where a user's email or contact info is collected. For each one tell me:
+- Where it appears (which page/section)
+- What fields are collected
+- Where the data goes (which database table)
+- Whether a confirmation or follow-up email is triggered
+- Whether it feeds into the subscribers table
+
+2. CONVERSION FUNNEL — PRICING TO PAYMENT
+Trace the exact path a potential client takes from landing on the site to completing a payment:
+- What CTAs exist and where (buttons, links)
+- Where they lead (which page or section)
+- What the booking/wizard flow looks like step by step
+- What happens after they submit (emails sent, data saved, confirmation shown)
+- Where CashApp and Calendly are linked and how
+
+3. EMAIL AUTOMATION
+List every automated email that is currently triggered in the system:
+- What triggers it
+- Who it goes to (client, admin, or both)
+- What the email contains
+- Which email service sends it (nodemailer, SendGrid, etc.)
+
+4. SUBSCRIBER & LEAD DATABASE
+Describe the current state of the subscribers table and bookings table:
+- What columns exist
+- What data is currently in them (row counts if possible)
+- How leads from different sources are tagged or differentiated (referrer field, source, mode, etc.)
+
+5. NURTURE & FOLLOW-UP
+What systems exist (if any) to follow up with leads after initial contact:
+- Email sequences
+- Re-engagement flows
+- Admin notifications when new leads come in
+- Any automation beyond the first confirmation email
+
+6. ADMIN VISIBILITY INTO LEADS
+What can the admin currently see about leads and conversions:
+- What the Bookings tab shows
+- What the Subscribers tab shows
+- What the Analytics tab shows
+- Whether there is any way to track a lead from first touch to payment
+
+7. GAPS — WHAT IS MISSING
+Based on what you find, flag everything that is referenced in the code but not fully implemented, broken, missing credentials, or only partially built as it relates to lead generation and conversion.
+
+Present this as a clean report organized by the sections above. Be specific — reference actual file names, route names, and table names where relevant.
