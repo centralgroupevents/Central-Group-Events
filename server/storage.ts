@@ -108,6 +108,7 @@ export interface IStorage {
   getEvents(region?: string, includePast?: boolean): Promise<Event[]>;
   createEvent(event: InsertEvent): Promise<Event>;
   updateEvent(id: number, event: Partial<InsertEvent>): Promise<Event>;
+  upsertIntegrationEvent(event: InsertEvent & { sourceId: string }): Promise<Event>;
   deleteEvent(id: number): Promise<void>;
   bulkDeleteEvents(ids: number[]): Promise<void>;
   bulkImportEvents(
@@ -587,6 +588,17 @@ export class DatabaseStorage implements IStorage {
     const normalized = data.region ? { ...data, region: normalizeRegion(data.region) || data.region } : data;
     const [updated] = await db.update(events).set(normalized).where(eq(events.id, id)).returning();
     return updated;
+  }
+
+  async upsertIntegrationEvent(event: InsertEvent & { sourceId: string }): Promise<Event> {
+    const normalized = { ...event, region: normalizeRegion(event.region) || event.region };
+    const [existing] = await db.select().from(events).where(eq(events.sourceId, event.sourceId));
+    if (existing) {
+      const [updated] = await db.update(events).set(normalized).where(eq(events.id, existing.id)).returning();
+      return updated;
+    }
+    const [inserted] = await db.insert(events).values(normalized).returning();
+    return inserted;
   }
 
   async deleteEvent(id: number): Promise<void> {

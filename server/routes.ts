@@ -1048,6 +1048,69 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Upsert events pushed from CGE Tools. Matches existing rows by source_id.
+  app.post("/api/integrations/events/upsert", async (req: Request, res: Response) => {
+    try {
+      const expected = (process.env.CGE_INTEGRATION_TOKEN || "").trim();
+      if (!expected) {
+        return res.status(503).json({ error: "not_configured", message: "CGE_INTEGRATION_TOKEN is not set on the website." });
+      }
+      const auth = req.headers.authorization || "";
+      const provided = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+      const a = Buffer.from(provided);
+      const b = Buffer.from(expected);
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+
+      const incoming = Array.isArray(req.body?.events) ? req.body.events : null;
+      if (!incoming) {
+        return res.status(400).json({ error: "bad_request", message: "Body must be { events: [...] }" });
+      }
+
+      const PLACEHOLDER_IMAGE = "https://res.cloudinary.com/demo/image/upload/v1/samples/placeholder-event.jpg";
+      let upserted = 0;
+      const errors: Array<{ index: number; message: string }> = [];
+
+      for (let i = 0; i < incoming.length; i++) {
+        const e = incoming[i];
+        try {
+          const sourceId = String(e?.source_id || "").trim();
+          const title = String(e?.title || "").trim();
+          const date = String(e?.date || "").trim();
+          const region = String(e?.region || "").trim();
+          if (!sourceId || !title || !date || !region) {
+            errors.push({ index: i, message: "source_id, title, date, and region are required" });
+            continue;
+          }
+          await storage.upsertIntegrationEvent({
+            sourceId,
+            title,
+            date,
+            region,
+            description: String(e?.description || "").trim() || title,
+            imageUrl: String(e?.image_url || "").trim() || PLACEHOLDER_IMAGE,
+            eventTime: e?.event_time ?? null,
+            city: e?.city ?? null,
+            venue: e?.venue ?? null,
+            ticketLink: e?.ticket_link ?? null,
+            genre: e?.genre ?? null,
+            instagramHandle: e?.instagram_handle ?? null,
+            isFeatured: Boolean(e?.is_featured),
+          });
+          upserted++;
+        } catch (rowErr) {
+          errors.push({ index: i, message: String((rowErr as Error)?.message || rowErr) });
+        }
+      }
+
+      res.status(200).json(errors.length ? { upserted, errors } : { upserted });
+    } catch (err) {
+      console.error("[integrations/events/upsert] error:", err);
+      res.status(500).json({ error: "internal_error" });
+    }
+  });
+
   app.get("/api/admin/bookings", requireAuth(), async (req: Request, res: Response) => {
     try {
       const bookings = await storage.getBookings();

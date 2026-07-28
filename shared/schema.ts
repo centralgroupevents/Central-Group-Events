@@ -67,6 +67,8 @@ export const events = pgTable("events", {
   genre: text("genre"),
   instagramHandle: text("instagram_handle"),
   isFeatured: boolean("is_featured").default(false),
+  // Set when this event was synced in from CGE Tools (integration upsert).
+  sourceId: text("source_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
