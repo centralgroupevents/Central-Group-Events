@@ -1,0 +1,40 @@
+I'm connecting my other app (CGE Tools) so it can publish curated event GUIDES
+to this site's Pages. Please answer precisely, with real table/column names and code.
+
+## A. Page model
+A1. What table stores a Page, and what are its exact columns? (I see: slug, title,
+    SEO meta, hero image, body content, FAQ, published status, views — confirm the
+    real field names + types.)
+A2. Is "body content" stored as HTML, Markdown, or plain text? Can it hold the
+    multi-paragraph editorial write-up like the Juneteenth page?
+A3. Is there an existing API/route to create or update a Page? What is it and how is
+    it authed (admin JWT)?
+
+## B. The "Approved listings" on a page
+B1. How are the listings stored and linked to a page? (Separate table keyed by page
+    id/slug? Same events table with a page tag? Show the table + columns.)
+B2. Exact fields per listing — I see NAME, an EVENT TYPE/subtitle, city, region/state,
+    a date, an @instagram handle, and a "Learn more →" link. Give the real column
+    names + types, and one sample row.
+B3. Where does the "Learn more →" URL come from — the @handle, or a submitted link field?
+
+## C. The submissions / CSV upload path
+C1. When I toggle "submissions" on a page and upload a CSV/Excel, which endpoint
+    receives it, and how does it map columns → listings? (I want to match that shape.)
+
+## D. A new integration endpoint (this is what I'll call from CGE Tools)
+Can you add a token-protected endpoint — same pattern as the /api/integrations/*
+bookings + events ones — that lets my app publish a whole guide in one call:
+
+  POST /api/integrations/pages/upsert
+  Auth: Authorization: Bearer <process.env.CGE_INTEGRATION_TOKEN>
+  Body: {
+    slug, title, hero_image_url (optional), body_content (the editorial write-up),
+    published (bool),
+    listings: [ { name, event_type, city, region, date, instagram_handle, learn_more_url } ]
+  }
+  Behavior: create the page if slug is new, else update it; REPLACE its listings with
+  the provided array; return { ok, slug, listings: <count> }.
+
+Tell me if the current data model supports that as-is, and if not, what you'd change.
+Show me the final endpoint code + the Page/listings schema you referenced.

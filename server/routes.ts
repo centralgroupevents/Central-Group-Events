@@ -1058,6 +1058,71 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Publish a whole curated guide (page + listings) from CGE Tools in one call.
+  // Creates the page if the slug is new, else updates it, then REPLACES the
+  // integration-sourced listings with the provided array (public-form and
+  // admin-imported submissions on the same page are left untouched).
+  app.post("/api/integrations/pages/upsert", requireIntegrationToken, async (req: Request, res: Response) => {
+    try {
+      const INTEGRATION_SOURCE = "cge-tools";
+      const slug = String(req.body?.slug || "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+      const title = String(req.body?.title || "").trim();
+      if (!slug || !title) {
+        return res.status(400).json({ error: "bad_request", message: "slug and title are required" });
+      }
+      const listings = Array.isArray(req.body?.listings) ? req.body.listings : [];
+
+      const page = await storage.upsertPage(slug, {
+        title,
+        editorContent: String(req.body?.body_content || ""),
+        ...(req.body?.hero_image_url ? { heroImageUrl: String(req.body.hero_image_url) } : {}),
+        published: Boolean(req.body?.published),
+        // Guide pages headline the event name, not the venue.
+        listingHeaderField: "eventName",
+      });
+
+      // Replace this integration's listings.
+      await storage.deleteLandingPageSubmissionsBySource(page.id, INTEGRATION_SOURCE);
+      let inserted = 0;
+      const errors: Array<{ index: number; message: string }> = [];
+      for (let i = 0; i < listings.length; i++) {
+        const l = listings[i];
+        try {
+          const name = String(l?.name || "").trim();
+          const date = String(l?.date || "").trim();
+          if (!name || !date) {
+            errors.push({ index: i, message: "name and date are required" });
+            continue;
+          }
+          await storage.createLandingPageSubmissionRaw({
+            pageId: page.id,
+            submitterEmail: "integration@cge-tools",
+            eventDate: date,
+            eventName: name,
+            venueName: String(l?.event_type || "").trim() || name,
+            town: String(l?.city || "").trim() || "NJ",
+            region: l?.region ? String(l.region) : null,
+            instagramHandle: l?.instagram_handle ? String(l.instagram_handle) : null,
+            learnMoreUrl: l?.learn_more_url ? String(l.learn_more_url) : null,
+            status: "approved",
+            source: INTEGRATION_SOURCE,
+            reviewedAt: new Date(),
+          });
+          inserted++;
+        } catch (rowErr) {
+          errors.push({ index: i, message: String((rowErr as Error)?.message || rowErr) });
+        }
+      }
+
+      res.status(200).json(errors.length
+        ? { ok: true, slug: page.slug, listings: inserted, errors }
+        : { ok: true, slug: page.slug, listings: inserted });
+    } catch (err) {
+      console.error("[integrations/pages/upsert] error:", err);
+      res.status(500).json({ error: "internal_error" });
+    }
+  });
+
   // Upsert events pushed from CGE Tools. Matches existing rows by source_id.
   app.post("/api/integrations/events/upsert", requireIntegrationToken, async (req: Request, res: Response) => {
     try {
