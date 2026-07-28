@@ -991,6 +991,63 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // ── Integration endpoint for CGE Tools ────────────────────────────────
+  // Pull-based: CGE Tools calls this with a shared bearer token to fetch
+  // promoter bookings. Optional ?since=<ISO timestamp> filters by created_at.
+  app.get("/api/integrations/bookings", publicReadLimiter, async (req: Request, res: Response) => {
+    try {
+      const expected = (process.env.CGE_INTEGRATION_TOKEN || "").trim();
+      if (!expected) {
+        return res.status(503).json({ error: "not_configured", message: "CGE_INTEGRATION_TOKEN is not set on the website." });
+      }
+      const auth = req.headers.authorization || "";
+      const provided = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+      const a = Buffer.from(provided);
+      const b = Buffer.from(expected);
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        return res.status(401).json({ error: "unauthorized" });
+      }
+
+      let bookings = await storage.getBookings();
+
+      const sinceRaw = String(req.query.since || "").trim();
+      if (sinceRaw) {
+        const since = new Date(sinceRaw);
+        if (isNaN(since.getTime())) {
+          return res.status(400).json({ error: "bad_request", message: "Invalid 'since' timestamp — use ISO 8601, e.g. 2026-07-01T00:00:00Z" });
+        }
+        bookings = bookings.filter(bk => bk.createdAt && new Date(bk.createdAt) >= since);
+      }
+
+      // snake_case keys to match the schema CGE Tools expects.
+      res.json({
+        bookings: bookings.map(bk => ({
+          id: bk.id,
+          reference_id: bk.referenceId,
+          event_name: bk.eventName,
+          venue_name: bk.venueName,
+          contact_name: bk.contactName,
+          phone: bk.phone,
+          email: bk.email,
+          event_date: bk.eventDate,
+          event_time: bk.eventTime,
+          city: bk.city,
+          region: bk.region,
+          event_type: bk.eventType,
+          event_type_other: bk.eventTypeOther,
+          budget_range: bk.budgetRange,
+          instagram_handle: bk.instagramHandle,
+          ready_to_move_forward: bk.readyToMoveForward,
+          status: bk.status,
+          created_at: bk.createdAt,
+        })),
+      });
+    } catch (err) {
+      console.error("[integrations/bookings] error:", err);
+      res.status(500).json({ error: "internal_error" });
+    }
+  });
+
   app.get("/api/admin/bookings", requireAuth(), async (req: Request, res: Response) => {
     try {
       const bookings = await storage.getBookings();

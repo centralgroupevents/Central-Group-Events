@@ -1,0 +1,151 @@
+Make these edits to this repo (CGE Tools). This adds a "pull promoter bookings
+from my events website into the Review queue" feature. Apply the code EXACTLY.
+
+=== EDIT 1: server.js ===
+Find the line that says:
+  // === VITE MIDDLEWARE / STATIC ===
+Immediately ABOVE that line, insert this block:
+
+// === WEBSITE INTEGRATION (centralgroupevents.com) ===
+const WEBSITE_BASE = (process.env.CGE_WEBSITE_URL || "https://centralgroupevents.com").replace(/\/+$/, "");
+const INTEGRATION_TOKEN = (process.env.CGE_INTEGRATION_TOKEN || "").trim();
+
+app.get("/api/website/bookings", async (req, res) => {
+  if (!INTEGRATION_TOKEN) {
+    return res.status(503).json({ error: "not_configured", message: "Set CGE_INTEGRATION_TOKEN in this app's Replit Secrets (same value as the website)." });
+  }
+  try {
+    const since = String(req.query.since || "").trim();
+    const url = new URL(`${WEBSITE_BASE}/api/integrations/bookings`);
+    if (since) url.searchParams.set("since", since);
+    const r = await fetch(url.href, { headers: { Authorization: `Bearer ${INTEGRATION_TOKEN}`, Accept: "application/json" } });
+    const text = await r.text();
+    if (!r.ok) return res.status(r.status === 401 ? 401 : 502).json({ error: "website_error", status: r.status, detail: text.slice(0, 300) });
+    let data; try { data = JSON.parse(text); } catch { data = {}; }
+    const bookings = Array.isArray(data) ? data : (Array.isArray(data.bookings) ? data.bookings : []);
+    res.json({ bookings });
+  } catch (e) {
+    res.status(502).json({ error: "fetch_failed", message: String(e?.message || e) });
+  }
+});
+
+=== EDIT 2: src/pages/ReviewQueue.jsx — imports ===
+Find:
+  import { parseRows, DAYFUL, getEmoji, sortChrono } from "../shared/parseEvents";
+Replace with:
+  import { parseRows, DAYFUL, getEmoji, sortChrono, parseRegion, parseDateToDay } from "../shared/parseEvents";
+
+=== EDIT 3: src/pages/ReviewQueue.jsx — handler ===
+Find the comment line:
+  // Column-mapper state. After file upload, raw rows + filename are
+Immediately ABOVE that line, insert this block:
+
+  // === Website booking intake (Pipe 1) ===
+  const IMPORTED_BOOKINGS_KEY = "cge_imported_bookings";
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMsg, setImportMsg] = useState(null);
+
+  const mapBooking = (b) => {
+    const ref = String(b.reference_id || b.id || "");
+    const di = b.event_date ? parseDateToDay(b.event_date) : null;
+    const type = (b.event_type === "Other" && b.event_type_other) ? b.event_type_other : (b.event_type || "");
+    return {
+      id: "booking_" + ref,
+      name: b.event_name || "(untitled booking)",
+      day: di?.day || "Fri",
+      date: di?.date || b.event_date || "",
+      time: b.event_time || "",
+      venue: b.venue_name || "",
+      area: b.city || "",
+      region: parseRegion(b.region) || "North",
+      type,
+      emoji: getEmoji(type),
+      igHandle: normalizeHandle(b.instagram_handle || ""),
+      link: "",
+      featured: false,
+      _source: "website-booking",
+      _booking: {
+        reference_id: ref, contact_name: b.contact_name || "", email: b.email || "",
+        phone: b.phone || "", budget_range: b.budget_range || "", ready: b.ready_to_move_forward || "",
+        status: b.status || "", created_at: b.created_at || "",
+      },
+    };
+  };
+
+  const importFromWebsite = async () => {
+    if (importBusy) return;
+    setImportBusy(true); setImportMsg(null);
+    try {
+      const r = await fetch("/api/website/bookings");
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const hint = r.status === 503 ? "Add CGE_INTEGRATION_TOKEN in this app's Replit Secrets (same value as the website)."
+          : r.status === 401 ? "Token mismatch — the website rejected it. Make sure both secrets are identical."
+          : (j.message || j.detail || `Server responded ${r.status}`);
+        throw new Error(hint);
+      }
+      const bookings = Array.isArray(j.bookings) ? j.bookings : [];
+      let seen;
+      try { seen = new Set(JSON.parse(localStorage.getItem(IMPORTED_BOOKINGS_KEY) || "[]")); } catch { seen = new Set(); }
+      const fresh = [];
+      for (const b of bookings) {
+        const ref = String(b.reference_id || b.id || "");
+        if (!ref || seen.has(ref)) continue;
+        seen.add(ref);
+        fresh.push(mapBooking(b));
+      }
+      if (fresh.length) {
+        setPending((prev) => {
+          const existing = new Set(prev.map((e) => String(e.id)));
+          return [...prev, ...fresh.filter((e) => !existing.has(String(e.id)))];
+        });
+      }
+      try { localStorage.setItem(IMPORTED_BOOKINGS_KEY, JSON.stringify([...seen])); } catch {}
+      setImportMsg({ ok: true, text: fresh.length ? `Imported ${fresh.length} new booking${fresh.length === 1 ? "" : "s"} from your website.` : "No new bookings — you're all caught up." });
+    } catch (e) {
+      setImportMsg({ ok: false, text: String(e?.message || e) });
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+=== EDIT 4: src/pages/ReviewQueue.jsx — the button ===
+Find this button:
+  <button onClick={() => fileRef.current?.click()} style={Bgold}>
+    {pending.length === 0 ? "Upload sheet" : "+ Add sheet"}
+  </button>
+Immediately AFTER that closing </button>, insert:
+
+          <button
+            onClick={importFromWebsite}
+            disabled={importBusy}
+            title="Pull new promoter bookings submitted on centralgroupevents.com into this review queue"
+            style={{ ...B, background: "rgba(99,179,237,0.12)", color: "#63B3ED", border: "1px solid rgba(99,179,237,0.4)", cursor: importBusy ? "wait" : "pointer" }}
+          >
+            {importBusy ? "⬇ Importing…" : "⬇ Import bookings from website"}
+          </button>
+
+=== EDIT 5: src/pages/ReviewQueue.jsx — the result banner ===
+Find the block that renders {intakeBanner && ( ... )} and locate its closing:
+        )}
+Immediately AFTER that closing `)}` of the intakeBanner block, insert:
+
+        {importMsg && (
+          <div style={{
+            padding: "10px 14px", marginBottom: "1rem",
+            background: importMsg.ok ? "rgba(99,179,237,0.1)" : "rgba(251,113,133,0.1)",
+            border: `1px solid ${importMsg.ok ? "rgba(99,179,237,0.4)" : "rgba(251,113,133,0.4)"}`,
+            borderLeft: `4px solid ${importMsg.ok ? "#63B3ED" : "#FB7185"}`,
+            borderRadius: 4, fontSize: "0.85rem", color: importMsg.ok ? "#63B3ED" : "#FB7185",
+            display: "flex", alignItems: "center", gap: 12,
+          }}>
+            <span style={{ flex: 1 }}>{importMsg.ok ? "✓ " : "⚠ "}{importMsg.text}</span>
+            <button onClick={() => setImportMsg(null)} style={{
+              background: "transparent", border: `1px solid ${importMsg.ok ? "rgba(99,179,237,0.4)" : "rgba(251,113,133,0.4)"}`,
+              color: importMsg.ok ? "#63B3ED" : "#FB7185", borderRadius: 3, padding: "2px 8px", fontSize: "0.75rem", cursor: "pointer",
+            }}>×</button>
+          </div>
+        )}
+
+After applying: run the build to confirm no errors, then commit + push. Also add a
+Replit Secret named CGE_INTEGRATION_TOKEN (I'll provide the value).
