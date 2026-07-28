@@ -991,23 +991,27 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
-  // ── Integration endpoint for CGE Tools ────────────────────────────────
-  // Pull-based: CGE Tools calls this with a shared bearer token to fetch
-  // promoter bookings. Optional ?since=<ISO timestamp> filters by created_at.
-  app.get("/api/integrations/bookings", publicReadLimiter, async (req: Request, res: Response) => {
-    try {
-      const expected = (process.env.CGE_INTEGRATION_TOKEN || "").trim();
-      if (!expected) {
-        return res.status(503).json({ error: "not_configured", message: "CGE_INTEGRATION_TOKEN is not set on the website." });
-      }
-      const auth = req.headers.authorization || "";
-      const provided = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-      const a = Buffer.from(provided);
-      const b = Buffer.from(expected);
-      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-        return res.status(401).json({ error: "unauthorized" });
-      }
+  // ── Integration endpoints for CGE Tools ───────────────────────────────
+  // Authed by a shared bearer token (CGE_INTEGRATION_TOKEN) — NOT the admin JWT.
+  const requireIntegrationToken = (req: Request, res: Response, next: NextFunction) => {
+    const expected = (process.env.CGE_INTEGRATION_TOKEN || "").trim();
+    if (!expected) {
+      return res.status(503).json({ error: "not_configured", message: "CGE_INTEGRATION_TOKEN is not set on the website." });
+    }
+    const auth = req.headers.authorization || "";
+    const provided = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    next();
+  };
 
+  // Pull-based: CGE Tools fetches promoter bookings. Newest first, max 200.
+  // Optional ?since=<ISO timestamp> filters by created_at.
+  app.get("/api/integrations/bookings", publicReadLimiter, requireIntegrationToken, async (req: Request, res: Response) => {
+    try {
       let bookings = await storage.getBookings();
 
       const sinceRaw = String(req.query.since || "").trim();
@@ -1018,6 +1022,12 @@ ${blogList || "_No recent posts yet._"}
         }
         bookings = bookings.filter(bk => bk.createdAt && new Date(bk.createdAt) >= since);
       }
+
+      // Newest first, capped at 200 rows.
+      bookings = bookings
+        .slice()
+        .sort((x, y) => new Date(y.createdAt ?? 0).getTime() - new Date(x.createdAt ?? 0).getTime())
+        .slice(0, 200);
 
       // snake_case keys to match the schema CGE Tools expects.
       res.json({
@@ -1049,20 +1059,8 @@ ${blogList || "_No recent posts yet._"}
   });
 
   // Upsert events pushed from CGE Tools. Matches existing rows by source_id.
-  app.post("/api/integrations/events/upsert", async (req: Request, res: Response) => {
+  app.post("/api/integrations/events/upsert", requireIntegrationToken, async (req: Request, res: Response) => {
     try {
-      const expected = (process.env.CGE_INTEGRATION_TOKEN || "").trim();
-      if (!expected) {
-        return res.status(503).json({ error: "not_configured", message: "CGE_INTEGRATION_TOKEN is not set on the website." });
-      }
-      const auth = req.headers.authorization || "";
-      const provided = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-      const a = Buffer.from(provided);
-      const b = Buffer.from(expected);
-      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-        return res.status(401).json({ error: "unauthorized" });
-      }
-
       const incoming = Array.isArray(req.body?.events) ? req.body.events : null;
       if (!incoming) {
         return res.status(400).json({ error: "bad_request", message: "Body must be { events: [...] }" });
