@@ -1,0 +1,46 @@
+I'm connecting this website to another app of mine ("CGE Tools") via an API, both ways:
+- submissions/bookings from THIS site should flow OUT to CGE Tools
+- an event list + brand voice should flow IN from CGE Tools to display/use here
+I've never built site-to-site APIs. Please answer ALL of the following about THIS repo,
+in order, with specifics (file names, exact field names, real code snippets). If something
+doesn't exist yet, say "doesn't exist yet."
+
+## 1. Site overview & hosting
+1a. What is this site FOR in one line (public events calendar / ticketing / blog / other)?
+1b. What's its live public URL?
+1c. Framework + language (Next.js, plain React, Express, static HTML, Python, etc.)?
+1d. Is it hosted on Replit or Vercel? 
+1e. Is it a STATIC site (frontend only) or does it run server-side code (a backend / API routes / serverless functions)?
+1f. On Replit: is it a Deployment (Reserved VM / Autoscale) or just the dev repl — i.e. does it stay awake 24/7 or does it sleep? On Vercel: are serverless/API functions enabled, or is it a static export?
+
+## 2. What it can do technically
+2a. Can this site EXPOSE an HTTP endpoint (an API route the outside world can POST to)? If yes, show me how routes are defined here (one example file/path).
+2b. Can this site MAKE outbound HTTP requests (fetch/axios to another server)? From the backend, the browser, or both?
+2c. Does it use a database? Which one (Replit DB, Postgres, Supabase, Prisma, none)? 
+2d. Can it store SECRETS / environment variables? (Replit Secrets / Vercel Environment Variables) — confirm yes/no and how you access them in code here.
+2e. Is there any existing login/auth system?
+
+## 3. Submissions & bookings (data that should flow OUT to CGE Tools)
+3a. Is there already a "submit an event" or booking/RSVP form on this site? If yes, which page/file?
+3b. When someone submits/books, where does that data go RIGHT NOW (a database table, an email, a Google Sheet, a third-party tool like Eventbrite)?
+3c. If a third-party tool handles bookings, name it and say whether we have API access/keys to it.
+3d. Paste the EXACT data schema of a submission/booking — every field name and type — and one real (or sample) record.
+3e. Roughly how many submissions/bookings per week?
+3f. Should a submission flow to CGE Tools instantly (as it happens) or is a periodic batch fine?
+
+## 4. Events display (data that should flow IN from CGE Tools)
+4a. Which page/file shows events to the public?
+4b. Where does that page get its event data TODAY (hardcoded, a database, a JSON file, an external fetch)?
+4c. Paste the exact event data shape this page expects (field names).
+4d. When event data changes, does this site need a REBUILD/redeploy to show it, or does it read data live at runtime?
+
+## 5. Blog / content generation + brand voice (flows IN from CGE Tools)
+5a. Is there any auto-generated blog/content feature here now, or planned? 
+5b. If yes, what generates it (which AI/API), and in which file?
+5c. Where would a "brand voice/tone" input plug in?
+
+## 6. Anything else
+6a. List every external API/service this site already talks to (with what, for what).
+6b. Any constraints I should know — rate limits, no-backend, budget, etc.
+
+Please answer inline, numbered, and paste real code/schemas where asked.
