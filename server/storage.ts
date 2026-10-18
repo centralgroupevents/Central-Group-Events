@@ -111,6 +111,7 @@ export interface IStorage {
   upsertIntegrationEvent(event: InsertEvent & { sourceId: string }): Promise<Event>;
   deleteEvent(id: number): Promise<void>;
   bulkDeleteEvents(ids: number[]): Promise<void>;
+  bulkClearEventLinks(ids: number[]): Promise<number>;
   bulkImportEvents(
     rows: InsertEvent[],
   ): Promise<{ imported: number; duplicates: { title: string; existingId: number; existingDate: string }[] }>;
@@ -233,6 +234,7 @@ export interface IStorage {
   getApprovedLandingPageSubmissions(pageId: number): Promise<LandingPageSubmission[]>;
   bulkUpdateLandingPageSubmissionStatus(ids: number[], status: string): Promise<number>;
   bulkDeleteLandingPageSubmissions(ids: number[]): Promise<number>;
+  deleteLandingPageSubmissionsBySource(pageId: number, source: string): Promise<number>;
 
   // Bulk operations (admin multi-select)
   bulkUpdateWorldCupSubmissionStatus(ids: number[], status: string): Promise<number>;
@@ -613,6 +615,17 @@ export class DatabaseStorage implements IStorage {
     if (ids.length === 0) return;
     await db.update(linkClicks).set({ eventId: null }).where(inArray(linkClicks.eventId, ids));
     await db.delete(events).where(inArray(events.id, ids));
+  }
+
+  // Bulk-clear the ticket/learn-more link. The public card falls back to
+  // the CGE Instagram when ticketLink is null.
+  async bulkClearEventLinks(ids: number[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const updated = await db.update(events)
+      .set({ ticketLink: null })
+      .where(inArray(events.id, ids))
+      .returning({ id: events.id });
+    return updated.length;
   }
 
   async bulkImportEvents(
@@ -1403,6 +1416,16 @@ export class DatabaseStorage implements IStorage {
     if (ids.length === 0) return 0;
     const deleted = await db.delete(landingPageSubmissions)
       .where(inArray(landingPageSubmissions.id, ids))
+      .returning({ id: landingPageSubmissions.id });
+    return deleted.length;
+  }
+
+  // Wipe a page's listings that came from one integration source, so a
+  // re-publish from that source fully replaces its previous sync without
+  // touching public-form or admin-imported submissions.
+  async deleteLandingPageSubmissionsBySource(pageId: number, source: string): Promise<number> {
+    const deleted = await db.delete(landingPageSubmissions)
+      .where(and(eq(landingPageSubmissions.pageId, pageId), eq(landingPageSubmissions.source, source)))
       .returning({ id: landingPageSubmissions.id });
     return deleted.length;
   }

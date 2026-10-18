@@ -1371,6 +1371,22 @@ Return every field you can confidently determine. Set null for any field the ima
     }
   });
 
+  // Clear the ticket/learn-more link on selected events (bulk). The public
+  // event card then falls back to the CGE Instagram profile.
+  app.post("/api/events/bulk-clear-link", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body as { ids?: unknown[] };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      const numIds = ids.map((id) => Number(id)).filter((id) => !isNaN(id) && Number.isInteger(id));
+      if (numIds.length === 0) return res.status(400).json({ message: "No valid event IDs" });
+      const updated = await storage.bulkClearEventLinks(numIds);
+      res.json({ updated });
+    } catch (err) {
+      console.error("[events-bulk-clear-link] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.delete("/api/events/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -1488,6 +1504,97 @@ Return every field you can confidently determine. Set null for any field the ima
       }
     } catch (err) {
       res.status(400).json({ message: err instanceof Error ? err.message : "Invalid request" });
+    }
+  });
+
+  // ── CGE tool integration: "Publish to Guide" ─────────────────────────
+  // External publishes land here and write ONLY to pages +
+  // landing_page_submissions — never to blog posts. Uses the same
+  // CGE_INTEGRATION_TOKEN bearer auth as /api/integrations/bookings and
+  // /api/integrations/events/upsert.
+  // Re-publishing the same slug replaces the page fields and swaps out the
+  // previous integration-sourced listings (source-scoped delete), leaving
+  // public-form and admin-imported submissions untouched.
+  const INTEGRATION_LISTING_SOURCE = "cge-integration";
+  // Slugs owned by real app routes — a guide publish must never shadow them.
+  const INTEGRATION_RESERVED_SLUGS = new Set([
+    "admin", "blog", "book", "booking-confirmation", "faq", "guides",
+    "welcome", "unsubscribe", "invoice", "legal", "api", "build-to-last",
+    "submit-world-cup-watch-party", "world-cup-2026-nj-watch-parties",
+    "submit-nba-finals-watch-party", "nba-finals-2026-nj-watch-parties",
+  ]);
+  app.post("/api/integrations/pages/upsert", requireIntegrationToken, async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const slug = String(body.slug ?? "").trim().toLowerCase();
+      const title = String(body.title ?? "").trim();
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+        return res.status(400).json({ message: "slug is required and must be kebab-case (letters, numbers, hyphens)" });
+      }
+      if (INTEGRATION_RESERVED_SLUGS.has(slug)) {
+        return res.status(400).json({ message: `slug "${slug}" is reserved by an app route` });
+      }
+      if (!title) return res.status(400).json({ message: "title is required" });
+
+      // Accept both snake_case (documented) and camelCase field names.
+      const bodyContent = typeof body.body_content === "string" ? body.body_content
+        : typeof body.bodyContent === "string" ? body.bodyContent : undefined;
+      const heroImageUrl = typeof body.hero_image_url === "string" ? body.hero_image_url
+        : typeof body.heroImageUrl === "string" ? body.heroImageUrl : undefined;
+      const listings = Array.isArray(body.listings) ? (body.listings as Record<string, unknown>[]) : null;
+
+      const patch: Record<string, unknown> = { title };
+      if (bodyContent !== undefined) patch.editorContent = bodyContent;
+      if (heroImageUrl !== undefined) patch.heroImageUrl = heroImageUrl.trim() || null;
+      if (typeof body.published === "boolean") patch.published = body.published;
+      // A guide arriving with listings should render them on the page.
+      if (listings && listings.length > 0) patch.submissionsEnabled = true;
+
+      const page = await storage.upsertPage(slug, patch);
+
+      const errors: string[] = [];
+      let listingCount = 0;
+      if (listings) {
+        await storage.deleteLandingPageSubmissionsBySource(page.id, INTEGRATION_LISTING_SOURCE);
+        for (let i = 0; i < listings.length; i++) {
+          const l = listings[i] ?? {};
+          const eventDate = parseFlexibleWcDate(String(l.event_date ?? l.eventDate ?? l.date ?? "")) || "";
+          const venueName = String(l.venue_name ?? l.venueName ?? l.venue ?? "").trim();
+          const town = String(l.town ?? l.city ?? "").trim();
+          if (!eventDate || !venueName || !town) {
+            errors.push(`listing ${i + 1}: missing/invalid ${!eventDate ? "event_date" : !venueName ? "venue_name" : "town"}`);
+            continue;
+          }
+          try {
+            await storage.createLandingPageSubmissionRaw({
+              pageId: page.id,
+              submitterEmail: String(l.submitter_email ?? l.submitterEmail ?? "integration@centralgroupevents.com").trim().toLowerCase(),
+              submitterName: String(l.submitter_name ?? l.submitterName ?? "").trim() || null,
+              eventDate,
+              venueName,
+              town,
+              eventName: String(l.event_name ?? l.eventName ?? "").trim() || null,
+              instagramHandle: String(l.instagram_handle ?? l.instagramHandle ?? "").trim() || null,
+              learnMoreUrl: normalizeUrl(String(l.learn_more_url ?? l.learnMoreUrl ?? "")),
+              region: String(l.region ?? "").trim() || null,
+              status: "approved",
+              source: INTEGRATION_LISTING_SOURCE,
+              reviewedAt: new Date(),
+            });
+            listingCount++;
+          } catch (err) {
+            errors.push(`listing ${i + 1}: ${err instanceof Error ? err.message.slice(0, 150) : "insert failed"}`);
+          }
+        }
+      }
+
+      if (page.published) {
+        pingIndexNow([`https://centralgroupevents.com/${page.slug}`]).catch(() => {});
+      }
+      res.json({ slug: page.slug, listings: listingCount, errors });
+    } catch (err) {
+      console.error("[integrations/pages/upsert] error:", err);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 

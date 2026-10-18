@@ -8,6 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useEvents } from "@/hooks/use-landing";
 import { normalizeRegion } from "@shared/region";
 
+// Where "Learn more" points when an event has no link of its own — the CGE
+// Instagram beats a dead button. Still routed through /go so clicks count.
+const FALLBACK_LEARN_MORE_URL = "https://www.instagram.com/centralgroupevents/";
+
 interface EventBrowserProps {
   /** Cap the number of rows shown. Defaults to no cap. */
   maxItems?: number;
@@ -309,7 +313,7 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
                                       data-testid={`button-tickets-${event.id}`}
                                     >
                                       <a
-                                        href={event.ticketLink ? `/go?url=${encodeURIComponent(event.ticketLink)}&eventId=${event.id}` : "#"}
+                                        href={`/go?url=${encodeURIComponent(event.ticketLink || FALLBACK_LEARN_MORE_URL)}&eventId=${event.id}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                       >
