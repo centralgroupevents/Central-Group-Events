@@ -812,6 +812,252 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Admin: check-in toggle (day-of). followup_48h only goes to checked-in.
+  app.patch("/api/admin/btl/rsvps/:id/checkin", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const { checkedIn } = req.body as { checkedIn?: boolean };
+      const updated = await storage.updateBtlRsvp(id, { checkedInAt: checkedIn === false ? null : new Date() });
+      if (!updated) return res.status(404).json({ message: "RSVP not found" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[btl/checkin] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: invite list
+  app.get("/api/admin/btl/invitees", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      res.json(await storage.listBtlInvitees(slug));
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Import rows (from CSV parsed client-side, or a single manual add).
+  app.post("/api/admin/btl/invitees/import", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const rows = (req.body as { rows?: unknown[] })?.rows;
+      if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ message: "rows[] required" });
+      if (rows.length > 1000) return res.status(400).json({ message: "Max 1000 rows per import" });
+      const cleaned = rows
+        .map((r) => r as Record<string, unknown>)
+        .map((r) => ({
+          name: String(r.name ?? "").trim(),
+          email: String(r.email ?? "").trim().toLowerCase(),
+          instagramHandle: String(r.instagramHandle ?? r.instagram ?? "").trim() || null,
+          category: String(r.category ?? "").trim() || null,
+          priorityTier: Number(r.priorityTier ?? r.tier ?? 2) === 1 ? 1 : 2,
+        }))
+        .filter((r) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const result = await storage.upsertBtlInvitees(slug, cleaned);
+      res.json({ ...result, invalid: rows.length - cleaned.length });
+    } catch (err) {
+      console.error("[btl/invitees import] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/btl/invitees/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const { rsvpStatus, notes, priorityTier, category } = req.body as { rsvpStatus?: string; notes?: string; priorityTier?: number; category?: string };
+      const patch: Record<string, unknown> = {};
+      if (rsvpStatus !== undefined) {
+        if (!["pending", "confirmed", "declined"].includes(rsvpStatus)) return res.status(400).json({ message: "Invalid rsvpStatus" });
+        patch.rsvpStatus = rsvpStatus;
+      }
+      if (notes !== undefined) patch.notes = String(notes).slice(0, 2000) || null;
+      if (priorityTier !== undefined) patch.priorityTier = Number(priorityTier) === 1 ? 1 : 2;
+      if (category !== undefined) patch.category = String(category).trim() || null;
+      const updated = await storage.updateBtlInvitee(id, patch);
+      if (!updated) return res.status(404).json({ message: "Invitee not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: bulk sends. Initial invites → anyone not yet sent; second wave →
+  // pending invitees who got the first one and never RSVP'd. Both stamp the
+  // per-row *SentAt so re-clicks never re-send (plus the send-log dedup).
+  app.post("/api/admin/btl/invites/send-initial", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_SLUG: slug, tplInitialInvite } = await import("./btl-emails");
+      const { deliverBtlEmail, btlSendPause, getBtlSettings, btlRsvpUrl } = await import("./btl-mailer");
+      const settings = await getBtlSettings();
+      const invitees = await storage.listBtlInvitees(slug);
+      const targets = invitees.filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined");
+      let sent = 0, skipped = 0, failed = 0;
+      for (const i of targets) {
+        const tpl = tplInitialInvite({
+          name: i.name,
+          venueName: settings.venueName,
+          venueAddress: settings.venueAddress,
+          doorsTime: settings.doorsTime,
+          programStartTime: settings.programStartTime,
+          rsvpUrl: btlRsvpUrl("invite"),
+        });
+        const outcome = await deliverBtlEmail({ email: i.email, inviteeId: i.id }, "initial_invite", tpl);
+        if (outcome === "sent") {
+          sent++;
+          await storage.updateBtlInvitee(i.id, { initialInviteSentAt: new Date() });
+          await btlSendPause();
+        } else if (outcome === "skipped") {
+          skipped++;
+          await storage.updateBtlInvitee(i.id, { initialInviteSentAt: new Date() });
+        } else failed++;
+      }
+      res.json({ sent, skipped, failed, total: targets.length });
+    } catch (err) {
+      console.error("[btl/send-initial] error:", err);
+      const detail = err instanceof Error ? err.message.slice(0, 200) : "unknown";
+      res.status(500).json({ message: `Send failed: ${detail}` });
+    }
+  });
+
+  app.post("/api/admin/btl/invites/send-second-wave", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { sendBtlTemplate } = await import("./btl-cadence");
+      const result = await sendBtlTemplate("touch_5");
+      if (result.blocked) return res.status(400).json({ message: result.blocked });
+      // Stamp secondWaveSentAt on everyone the send reached.
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const invitees = await storage.listBtlInvitees(slug);
+      for (const i of invitees) {
+        if (!i.secondWaveSentAt && (await storage.hasBtlEmailSend(slug, i.email, "touch_5"))) {
+          await storage.updateBtlInvitee(i.id, { secondWaveSentAt: new Date() });
+        }
+      }
+      res.json(result);
+    } catch (err) {
+      console.error("[btl/send-second-wave] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: cadence status board — every template with audience size, sends
+  // so far, schedule, and any blocker.
+  app.get("/api/admin/btl/cadence", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_CADENCE, btlSendAtFor, buildBtlRenderCtx } = await import("./btl-cadence");
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const sends = await storage.listBtlEmailSends(slug);
+      const rsvps = await storage.listBtlRsvps(slug);
+      const invitees = await storage.listBtlInvitees(slug);
+      const ctx = await buildBtlRenderCtx();
+      const activeRsvps = rsvps.filter((r) => !r.unsubscribed).length;
+      const checkedIn = rsvps.filter((r) => !r.unsubscribed && r.checkedInAt).length;
+      const rsvpEmails = new Set(rsvps.map((r) => r.email));
+      const secondWave = invitees.filter((i) => !i.unsubscribed && i.rsvpStatus === "pending" && i.initialInviteSentAt && !rsvpEmails.has(i.email)).length;
+      const uninvited = invitees.filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined").length;
+      const out = [] as unknown[];
+      for (const entry of BTL_CADENCE) {
+        const sentCount = sends.filter((x) => x.templateKey === entry.key && x.status === "sent").reduce((a, x) => a + x.count, 0);
+        const failedCount = sends.filter((x) => x.templateKey === entry.key && x.status === "failed").reduce((a, x) => a + x.count, 0);
+        const audienceCount = entry.audience === "rsvps" ? activeRsvps
+          : entry.audience === "checked_in" ? checkedIn
+          : entry.audience === "invitees_second_wave" ? secondWave
+          : uninvited;
+        const missing = (entry.requiresSettings ?? []).filter((k) => {
+          const v = (ctx.settings as unknown as Record<string, unknown>)[k];
+          return Array.isArray(v) ? v.length === 0 : !String(v ?? "").trim();
+        });
+        out.push({
+          key: entry.key,
+          label: entry.label,
+          audience: entry.audience,
+          audienceCount,
+          sentCount,
+          failedCount,
+          sendAtEt: await btlSendAtFor(entry.key),
+          blocked: missing.length > 0 ? `needs ${missing.join(", ")}` : null,
+        });
+      }
+      res.json(out);
+    } catch (err) {
+      console.error("[btl/cadence] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/btl/cadence/:key/preview", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { renderBtlTemplate, buildBtlRenderCtx } = await import("./btl-cadence");
+      const { btlShell } = await import("./btl-emails");
+      const { btlUnsubscribeUrl } = await import("./btl-mailer");
+      const ctx = await buildBtlRenderCtx();
+      const tpl = renderBtlTemplate(String(req.params.key), { name: "Jordan", contactSheetOptin: true }, ctx);
+      if (!tpl) return res.status(404).json({ message: "Unknown template" });
+      res.json({ subject: tpl.subject, html: btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com")) });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/btl/cadence/:key/send-now", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { sendBtlTemplate } = await import("./btl-cadence");
+      const result = await sendBtlTemplate(String(req.params.key));
+      if (result.blocked) return res.status(400).json({ message: result.blocked });
+      res.json(result);
+    } catch (err) {
+      console.error("[btl/send-now] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: event settings (venue, times, themes, speakers, follow-up URLs,
+  // per-template send-date overrides "sendAt.<key>" as ET "YYYY-MM-DDTHH:mm").
+  app.get("/api/admin/btl/settings", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { getBtlSettings } = await import("./btl-mailer");
+      const { BTL_CADENCE, btlSendAtFor } = await import("./btl-cadence");
+      const settings = await getBtlSettings();
+      const sendAt: Record<string, string | null> = {};
+      for (const c of BTL_CADENCE) sendAt[c.key] = await btlSendAtFor(c.key);
+      res.json({ ...settings, sendAt });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/btl/settings", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const stringKeys = ["venueName", "venueAddress", "doorsTime", "programStartTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
+      for (const key of stringKeys) {
+        if (typeof body[key] === "string") await storage.setSetting(`btl.${key}`, String(body[key]).slice(0, 4000));
+      }
+      if (Array.isArray(body.speakers)) {
+        const speakers = (body.speakers as Record<string, unknown>[])
+          .map((sp) => ({
+            name: String(sp.name ?? "").trim(),
+            credential: String(sp.credential ?? "").trim(),
+            topic: String(sp.topic ?? "").trim(),
+          }))
+          .filter((sp) => sp.name);
+        await storage.setSetting("btl.speakers", JSON.stringify(speakers));
+      }
+      if (body.sendAt && typeof body.sendAt === "object") {
+        for (const [key, val] of Object.entries(body.sendAt as Record<string, unknown>)) {
+          if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val)) {
+            await storage.setSetting(`btl.sendAt.${key}`, val);
+          }
+        }
+      }
+      res.json({ saved: true });
+    } catch (err) {
+      console.error("[btl/settings] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── Unsubscribe (CAN-SPAM / RFC 8058 one-click) ──────────────────────
   // Every marketing email carries a signed link: ?e=<base64url email>&t=<hmac>.
   // The same URL is used in the List-Unsubscribe header, which mailbox
@@ -2985,7 +3231,16 @@ Return every field you can confidently determine. Set null for any field the ima
       }
       if (secret !== process.env.CRON_SECRET) return res.status(401).json({ message: "Unauthorized" });
       const result = await runScheduledEmailsTick();
-      res.json(result);
+      // Build to Last cadence rides the same tick — dedup makes it idempotent
+      // however often the external cron fires.
+      let btl: unknown[] = [];
+      try {
+        const { runBtlCadenceTick } = await import("./btl-cadence");
+        btl = await runBtlCadenceTick();
+      } catch (err) {
+        console.error("[cron] btl cadence tick failed:", err);
+      }
+      res.json({ ...result, btl });
     } catch (err) {
       console.error("[cron/scheduled-emails] error:", err);
       res.status(500).json({ message: "Internal server error" });
