@@ -8,17 +8,7 @@
 // send until those inputs exist — reported as blockers, never half-sent.
 
 import { storage } from "./storage";
-import {
-  BTL_SLUG,
-  tplInitialInvite,
-  tplTouch4,
-  tplTouch5SecondWave,
-  tplTouch6Room,
-  tplTouch7Speakers,
-  tplTouch8FourDays,
-  tplTouch9Tomorrow,
-  tplFollowup48h,
-} from "./btl-emails";
+import { BTL_SLUG, btlTemplateDef, renderBtlText } from "./btl-emails";
 import { deliverBtlEmail, btlRsvpUrl, btlSendPause, getBtlSettings, type BtlSettings } from "./btl-mailer";
 import type { EventRsvp, EventInvitee } from "@shared/schema";
 
@@ -101,36 +91,81 @@ export interface BtlRenderCtx {
   breakdown: string;
 }
 
-export function renderBtlTemplate(
+export interface BtlTemplateTexts {
+  subject: string;
+  body: string;
+  customized: boolean;
+}
+
+/** Current subject/body for a template: the admin's saved edit if one
+ *  exists ("btl.tpl.<key>.subject" / ".body" in app_settings), otherwise
+ *  the code default. An empty stored value means "not customized". */
+export async function getBtlTemplateTexts(key: string): Promise<BtlTemplateTexts | null> {
+  const def = btlTemplateDef(key);
+  if (!def) return null;
+  const subject = (await storage.getSetting(`btl.tpl.${key}.subject`)) || "";
+  const body = (await storage.getSetting(`btl.tpl.${key}.body`)) || "";
+  return {
+    subject: subject.trim() || def.subject,
+    body: body.trim() || def.body,
+    customized: !!(subject.trim() || body.trim()),
+  };
+}
+
+/** Every placeholder, for every template — a recipient-specific map fed to
+ *  renderBtlText. Unknown placeholders typed into an edited template stay
+ *  visible in the preview instead of silently disappearing. */
+export function buildBtlVars(
+  recipient: { name: string; contactSheetOptin?: boolean },
+  ctx: BtlRenderCtx,
+): Record<string, string> {
+  const s = ctx.settings;
+  const contactSheetLine = recipient.contactSheetOptin && s.contactSheetUrl
+    ? `Attendee contact sheet (those who opted in): ${s.contactSheetUrl}`
+    : "";
+  const speakerLineup = s.speakers
+    .map((sp) => `- ${sp.name}, ${sp.credential} — on ${sp.topic}`)
+    .join("\n");
+  return {
+    name: recipient.name,
+    first_name: recipient.name.trim().split(/\s+/)[0] || recipient.name,
+    rsvp_url: btlRsvpUrl("invite"),
+    venue_name: s.venueName,
+    venue_address: s.venueAddress,
+    doors_time: s.doorsTime,
+    program_start_time: s.programStartTime,
+    confirmed_count: String(ctx.confirmedCount),
+    question_themes: s.questionThemes,
+    category_breakdown: ctx.breakdown,
+    speaker_lineup: speakerLineup,
+    photo_gallery_url: s.photoGalleryUrl,
+    recap_video_url: s.recapVideoUrl,
+    field_notes_url: s.fieldNotesUrl,
+    contact_sheet_line: contactSheetLine,
+  };
+}
+
+/** Substitute one recipient into resolved template texts. */
+export function renderBtlFromTexts(
+  texts: BtlTemplateTexts,
+  recipient: { name: string; contactSheetOptin?: boolean },
+  ctx: BtlRenderCtx,
+): { subject: string; body: string } {
+  const vars = buildBtlVars(recipient, ctx);
+  return {
+    subject: renderBtlText(texts.subject, vars),
+    body: renderBtlText(texts.body, vars),
+  };
+}
+
+export async function renderBtlTemplate(
   key: string,
   recipient: { name: string; contactSheetOptin?: boolean },
   ctx: BtlRenderCtx,
-): { subject: string; body: string } | null {
-  const vars = {
-    venueName: ctx.settings.venueName,
-    venueAddress: ctx.settings.venueAddress,
-    doorsTime: ctx.settings.doorsTime,
-    programStartTime: ctx.settings.programStartTime,
-    rsvpUrl: btlRsvpUrl("invite"),
-  };
-  switch (key) {
-    case "initial_invite": return tplInitialInvite({ name: recipient.name, ...vars });
-    case "touch_4": return tplTouch4({ name: recipient.name, questionThemes: ctx.settings.questionThemes });
-    case "touch_5": return tplTouch5SecondWave({ name: recipient.name, confirmedCount: ctx.confirmedCount, rsvpUrl: vars.rsvpUrl });
-    case "touch_6": return tplTouch6Room({ name: recipient.name, categoryBreakdown: ctx.breakdown });
-    case "touch_7": return tplTouch7Speakers({ name: recipient.name, speakers: ctx.settings.speakers, ...vars });
-    case "touch_8": return tplTouch8FourDays({ name: recipient.name });
-    case "touch_9": return tplTouch9Tomorrow({ name: recipient.name, ...vars });
-    case "followup_48h": return tplFollowup48h({
-      name: recipient.name,
-      photoGalleryUrl: ctx.settings.photoGalleryUrl,
-      recapVideoUrl: ctx.settings.recapVideoUrl,
-      fieldNotesUrl: ctx.settings.fieldNotesUrl,
-      contactSheetOptin: !!recipient.contactSheetOptin,
-      contactSheetUrl: ctx.settings.contactSheetUrl,
-    });
-    default: return null;
-  }
+): Promise<{ subject: string; body: string } | null> {
+  const texts = await getBtlTemplateTexts(key);
+  if (!texts) return null;
+  return renderBtlFromTexts(texts, recipient, ctx);
 }
 
 async function resolveAudience(audience: BtlAudience): Promise<Array<{ name: string; email: string; rsvpId?: number; inviteeId?: number; contactSheetOptin?: boolean }>> {
@@ -166,11 +201,12 @@ export async function sendBtlTemplate(key: string): Promise<{ key: string; sent:
   if (missing.length > 0) {
     return { key, sent: 0, skipped: 0, failed: 0, blocked: `fill in ${missing.join(", ")} in Build to Last settings first` };
   }
+  const texts = await getBtlTemplateTexts(key);
+  if (!texts) return { key, sent: 0, skipped: 0, failed: 0, blocked: "unknown template" };
   const audience = await resolveAudience(entry.audience);
   let sent = 0, skipped = 0, failed = 0;
   for (const person of audience) {
-    const tpl = renderBtlTemplate(key, person, ctx);
-    if (!tpl) continue;
+    const tpl = renderBtlFromTexts(texts, person, ctx);
     const outcome = await deliverBtlEmail(person, key, tpl);
     if (outcome === "sent") { sent++; await btlSendPause(); }
     else if (outcome === "skipped") skipped++;
