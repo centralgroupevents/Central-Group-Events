@@ -724,9 +724,12 @@ ${blogList || "_No recent posts yet._"}
 
       // Confirmation email (Touch 2A) — non-blocking for the response.
       try {
-        const { tplConfirmation } = await import("./btl-emails");
+        const { renderBtlTemplate, buildBtlRenderCtx } = await import("./btl-cadence");
         const { deliverBtlEmail } = await import("./btl-mailer");
-        const outcome = await deliverBtlEmail({ email, rsvpId: rsvp.id }, "confirmation", tplConfirmation({ name: input.name }));
+        const ctx = await buildBtlRenderCtx();
+        const tpl = await renderBtlTemplate("confirmation", { name: input.name, contactSheetOptin: input.contactSheetOptin }, ctx);
+        if (!tpl) throw new Error("confirmation template missing");
+        const outcome = await deliverBtlEmail({ email, rsvpId: rsvp.id }, "confirmation", tpl);
         if (outcome === "sent") {
           await storage.updateBtlRsvp(rsvp.id, { confirmationSentAt: new Date() });
         }
@@ -888,21 +891,17 @@ ${blogList || "_No recent posts yet._"}
   // per-row *SentAt so re-clicks never re-send (plus the send-log dedup).
   app.post("/api/admin/btl/invites/send-initial", requireAuth(), async (_req: Request, res: Response) => {
     try {
-      const { BTL_SLUG: slug, tplInitialInvite } = await import("./btl-emails");
-      const { deliverBtlEmail, btlSendPause, getBtlSettings, btlRsvpUrl } = await import("./btl-mailer");
-      const settings = await getBtlSettings();
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const { getBtlTemplateTexts, renderBtlFromTexts, buildBtlRenderCtx } = await import("./btl-cadence");
+      const { deliverBtlEmail, btlSendPause } = await import("./btl-mailer");
+      const texts = await getBtlTemplateTexts("initial_invite");
+      if (!texts) return res.status(500).json({ message: "initial_invite template missing" });
+      const ctx = await buildBtlRenderCtx();
       const invitees = await storage.listBtlInvitees(slug);
       const targets = invitees.filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined");
       let sent = 0, skipped = 0, failed = 0;
       for (const i of targets) {
-        const tpl = tplInitialInvite({
-          name: i.name,
-          venueName: settings.venueName,
-          venueAddress: settings.venueAddress,
-          doorsTime: settings.doorsTime,
-          programStartTime: settings.programStartTime,
-          rsvpUrl: btlRsvpUrl("invite"),
-        });
+        const tpl = renderBtlFromTexts(texts, { name: i.name }, ctx);
         const outcome = await deliverBtlEmail({ email: i.email, inviteeId: i.id }, "initial_invite", tpl);
         if (outcome === "sent") {
           sent++;
@@ -992,7 +991,7 @@ ${blogList || "_No recent posts yet._"}
       const { btlShell } = await import("./btl-emails");
       const { btlUnsubscribeUrl } = await import("./btl-mailer");
       const ctx = await buildBtlRenderCtx();
-      const tpl = renderBtlTemplate(String(req.params.key), { name: "Jordan", contactSheetOptin: true }, ctx);
+      const tpl = await renderBtlTemplate(String(req.params.key), { name: "Jordan", contactSheetOptin: true }, ctx);
       if (!tpl) return res.status(404).json({ message: "Unknown template" });
       res.json({ subject: tpl.subject, html: btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com")) });
     } catch (err) {
@@ -1054,6 +1053,71 @@ ${blogList || "_No recent posts yet._"}
       res.json({ saved: true });
     } catch (err) {
       console.error("[btl/settings] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: editable email templates (Resend-style). Edits are stored as
+  // overrides in app_settings; the code defaults stay as the fallback, so
+  // "Reset to default" just clears the override. {{placeholders}} are
+  // substituted per recipient at send time.
+  app.get("/api/admin/btl/templates", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_TEMPLATE_DEFS } = await import("./btl-emails");
+      const { getBtlTemplateTexts } = await import("./btl-cadence");
+      const out = [];
+      for (const def of BTL_TEMPLATE_DEFS) {
+        const texts = await getBtlTemplateTexts(def.key);
+        out.push({
+          key: def.key,
+          label: def.label,
+          placeholders: def.placeholders,
+          subject: texts!.subject,
+          body: texts!.body,
+          customized: texts!.customized,
+          defaultSubject: def.subject,
+          defaultBody: def.body,
+        });
+      }
+      res.json(out);
+    } catch (err) {
+      console.error("[btl/templates] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/btl/templates/:key", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { btlTemplateDef } = await import("./btl-emails");
+      const key = String(req.params.key);
+      const def = btlTemplateDef(key);
+      if (!def) return res.status(404).json({ message: "Unknown template" });
+      const { subject, body } = (req.body ?? {}) as { subject?: string; body?: string };
+      if (typeof subject !== "string" || typeof body !== "string" || !subject.trim() || !body.trim()) {
+        return res.status(400).json({ message: "subject and body are both required" });
+      }
+      // Saving text identical to the default clears the override instead,
+      // so future default improvements flow through automatically.
+      const sameAsDefault = subject.trim() === def.subject.trim() && body.trim() === def.body.trim();
+      await storage.setSetting(`btl.tpl.${key}.subject`, sameAsDefault ? "" : subject.trim().slice(0, 500));
+      await storage.setSetting(`btl.tpl.${key}.body`, sameAsDefault ? "" : body.trim().slice(0, 20000));
+      res.json({ saved: true, customized: !sameAsDefault });
+    } catch (err) {
+      console.error("[btl/templates put] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/btl/templates/:key", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { btlTemplateDef } = await import("./btl-emails");
+      const key = String(req.params.key);
+      if (!btlTemplateDef(key)) return res.status(404).json({ message: "Unknown template" });
+      await storage.setSetting(`btl.tpl.${key}.subject`, "");
+      await storage.setSetting(`btl.tpl.${key}.body`, "");
+      res.json({ reset: true });
+    } catch (err) {
+      console.error("[btl/templates reset] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });

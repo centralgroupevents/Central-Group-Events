@@ -93,7 +93,7 @@ function topicsOf(r: BtlRsvp): string[] {
   }
 }
 
-const VIEWS = ["RSVPs", "Invites", "Cadence", "Questions", "Guest Book", "Check-in", "Settings"] as const;
+const VIEWS = ["RSVPs", "Invites", "Cadence", "Templates", "Questions", "Guest Book", "Check-in", "Settings"] as const;
 type View = (typeof VIEWS)[number];
 
 export function BuildToLastTab() {
@@ -139,6 +139,7 @@ export function BuildToLastTab() {
       {view === "RSVPs" && <RsvpsView rsvps={rsvps} isLoading={isLoading} />}
       {view === "Invites" && <InvitesView />}
       {view === "Cadence" && <CadenceView />}
+      {view === "Templates" && <TemplatesView />}
       {view === "Questions" && <QuestionsView rsvps={rsvps} />}
       {view === "Guest Book" && <GuestBookView rsvps={rsvps} />}
       {view === "Check-in" && <CheckinView rsvps={rsvps} />}
@@ -554,6 +555,200 @@ function CadenceView() {
           ))}
         </div>
       )}
+
+      <Dialog open={preview !== null} onOpenChange={() => setPreview(null)}>
+        <DialogContent className="max-w-2xl bg-secondary border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-white">Preview — {preview?.subject}</DialogTitle>
+          </DialogHeader>
+          {preview && (
+            <iframe title="email preview" srcDoc={preview.html} className="w-full bg-white rounded-lg" style={{ height: "60vh", border: 0 }} />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/* ── Templates (editable, Resend-style) ────────────────────────────────── */
+
+type BtlTemplate = {
+  key: string;
+  label: string;
+  placeholders: string[];
+  subject: string;
+  body: string;
+  customized: boolean;
+  defaultSubject: string;
+  defaultBody: string;
+};
+
+function TemplatesView() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: templates = [], isLoading } = useQuery<BtlTemplate[]>({ queryKey: ["/api/admin/btl/templates"] });
+  const [selectedKey, setSelectedKey] = useState<string>("initial_invite");
+  const [draft, setDraft] = useState<{ key: string; subject: string; body: string } | null>(null);
+  const [busy, setBusy] = useState<"" | "save" | "reset">("");
+  const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  const selected = templates.find((t) => t.key === selectedKey) ?? templates[0];
+  const subject = draft && draft.key === selected?.key ? draft.subject : selected?.subject ?? "";
+  const body = draft && draft.key === selected?.key ? draft.body : selected?.body ?? "";
+  const dirty = !!selected && (subject !== selected.subject || body !== selected.body);
+
+  function pick(key: string) {
+    if (dirty && !window.confirm("Discard unsaved changes to this template?")) return;
+    setSelectedKey(key);
+    setDraft(null);
+  }
+
+  function insertPlaceholder(ph: string) {
+    const token = `{{${ph}}}`;
+    const el = bodyRef.current;
+    if (el && document.activeElement === el) {
+      const start = el.selectionStart ?? body.length;
+      const next = body.slice(0, start) + token + body.slice(el.selectionEnd ?? start);
+      setDraft({ key: selected!.key, subject, body: next });
+      requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + token.length, start + token.length); });
+    } else {
+      navigator.clipboard?.writeText(token).catch(() => {});
+      toast({ title: `${token} copied — paste it where you want it` });
+    }
+  }
+
+  async function save() {
+    if (!selected) return;
+    setBusy("save");
+    try {
+      await apiRequest("PUT", `/api/admin/btl/templates/${selected.key}`, { subject, body });
+      toast({ title: "Template saved — every future send uses this version." });
+      setDraft(null);
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/templates"] });
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function resetToDefault() {
+    if (!selected) return;
+    if (!window.confirm(`Reset "${selected.label}" to the original template? Your edits to it are discarded.`)) return;
+    setBusy("reset");
+    try {
+      await apiRequest("DELETE", `/api/admin/btl/templates/${selected.key}`);
+      toast({ title: "Back to the original template." });
+      setDraft(null);
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/templates"] });
+    } catch (err) {
+      toast({ title: "Reset failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function openPreview() {
+    if (!selected) return;
+    try {
+      // Preview renders the saved template, so unsaved edits save first.
+      if (dirty) {
+        if (!window.confirm("Preview shows the saved template — save your edits now and preview?")) return;
+        await apiRequest("PUT", `/api/admin/btl/templates/${selected.key}`, { subject, body });
+        setDraft(null);
+        qc.invalidateQueries({ queryKey: ["/api/admin/btl/templates"] });
+      }
+      const res = await fetch(`/api/admin/btl/cadence/${selected.key}/preview`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const data = await res.json();
+      setPreview({ subject: data.subject, html: data.html });
+    } catch (err) {
+      toast({ title: "Preview failed", description: String((err as Error).message), variant: "destructive" });
+    }
+  }
+
+  if (isLoading || !selected) {
+    return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Edit any email in the sequence — subject and body — without touching code. Pieces in {"{{double_braces}}"} are
+        filled in per person at send time (name, venue, times, links). Already-sent emails never change.
+      </p>
+
+      <div className="flex gap-2 flex-wrap">
+        {templates.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => pick(t.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition border ${selected.key === t.key ? "bg-primary text-white border-primary" : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10"}`}
+            data-testid={`button-btl-template-${t.key}`}
+          >
+            {t.label}
+            {t.customized && <span className="ml-1.5 text-amber-300">●</span>}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="font-bold text-white">
+            {selected.label}
+            {selected.customized && <span className="ml-2 text-xs font-normal text-amber-300">edited — original saved underneath</span>}
+          </h3>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={openPreview} className="border-white/20 text-white/70" data-testid="button-btl-template-preview">
+              <Eye className="w-3.5 h-3.5 mr-1" /> Preview
+            </Button>
+            {selected.customized && (
+              <Button size="sm" variant="outline" onClick={resetToDefault} disabled={busy !== ""} className="border-white/20 text-white/70" data-testid="button-btl-template-reset">
+                {busy === "reset" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Reset to original"}
+              </Button>
+            )}
+            <Button size="sm" onClick={save} disabled={busy !== "" || !dirty} className="bg-primary hover:bg-primary/90" data-testid="button-btl-template-save">
+              {busy === "save" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save template"}
+            </Button>
+          </div>
+        </div>
+
+        <div>
+          <Label className="text-white/70 text-xs">Subject</Label>
+          <Input
+            value={subject}
+            onChange={(e) => setDraft({ key: selected.key, subject: e.target.value, body })}
+            className="bg-black/30 border-white/10 h-10"
+            data-testid="input-btl-template-subject"
+          />
+        </div>
+
+        <div>
+          <Label className="text-white/70 text-xs">Body (plain text — blank line = new paragraph, a “✦ TITLE” line becomes a gold section header)</Label>
+          <Textarea
+            ref={bodyRef}
+            value={body}
+            onChange={(e) => setDraft({ key: selected.key, subject, body: e.target.value })}
+            className="bg-black/30 border-white/10 min-h-[380px] font-mono text-[13px] leading-relaxed"
+            data-testid="input-btl-template-body"
+          />
+        </div>
+
+        <div className="flex gap-1.5 flex-wrap items-center">
+          <span className="text-xs text-muted-foreground mr-1">Fill-ins:</span>
+          {selected.placeholders.map((ph) => (
+            <button
+              key={ph}
+              onClick={() => insertPlaceholder(ph)}
+              className="px-2 py-0.5 rounded bg-primary/15 text-primary text-[11px] hover:bg-primary/25 transition"
+              title="Click to insert at the cursor (or copy)"
+            >
+              {"{{"}{ph}{"}}"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <Dialog open={preview !== null} onOpenChange={() => setPreview(null)}>
         <DialogContent className="max-w-2xl bg-secondary border-white/10">
