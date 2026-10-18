@@ -681,6 +681,137 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // ── Build to Last Vol. 1 — RSVP + cadence ────────────────────────────
+
+  // Public RSVP submit. Validates per the brief (140-char guest-book line,
+  // at least one topic), blocks duplicate emails per event, fires the
+  // confirmation email immediately.
+  app.post("/api/build-to-last/rsvp", formLimiter, async (req: Request, res: Response) => {
+    try {
+      const { btlRsvpInputSchema } = await import("@shared/schema");
+      const input = btlRsvpInputSchema.parse(req.body);
+      const email = input.email.toLowerCase().trim();
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+
+      const existing = await storage.getBtlRsvpByEmail(slug, email);
+      if (existing) {
+        return res.status(409).json({ message: "You're already on the list for Build to Last — check your inbox for the confirmation." });
+      }
+
+      const rsvp = await storage.createBtlRsvp({
+        eventSlug: slug,
+        name: input.name,
+        email,
+        role: input.role,
+        companyOrHandle: input.companyOrHandle || null,
+        workingOnNow: input.workingOnNow,
+        keyQuestion: input.keyQuestion,
+        topicInterests: JSON.stringify(input.topicInterests),
+        contactSheetOptin: input.contactSheetOptin,
+        attendeeSource: input.attendeeSource || null,
+      });
+
+      res.status(201).json({ message: "You're in. Check your email for confirmation." });
+
+      // Mark a matching invite-list row confirmed so the second wave skips them.
+      try {
+        const invitees = await storage.listBtlInvitees(slug);
+        const match = invitees.find((i) => i.email === email);
+        if (match) await storage.updateBtlInvitee(match.id, { rsvpStatus: "confirmed" });
+      } catch (err) {
+        console.warn("[btl] invite-status sync failed:", err);
+      }
+
+      // Confirmation email (Touch 2A) — non-blocking for the response.
+      try {
+        const { tplConfirmation } = await import("./btl-emails");
+        const { deliverBtlEmail } = await import("./btl-mailer");
+        const outcome = await deliverBtlEmail({ email, rsvpId: rsvp.id }, "confirmation", tplConfirmation({ name: input.name }));
+        if (outcome === "sent") {
+          await storage.updateBtlRsvp(rsvp.id, { confirmationSentAt: new Date() });
+        }
+      } catch (err) {
+        console.error("[btl] confirmation email failed:", err);
+      }
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      // Unique-index race: two submits of the same email at once.
+      if ((err as { code?: string }).code === "23505") {
+        return res.status(409).json({ message: "You're already on the list for Build to Last — check your inbox for the confirmation." });
+      }
+      console.error("[btl/rsvp] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Unsubscribe from the Build to Last cadence. GET shows a tiny confirm
+  // page (so inbox link-scanners can't opt people out); the POST does it.
+  app.get("/api/build-to-last/unsubscribe", (req: Request, res: Response) => {
+    const e = String(req.query.e || "");
+    const t = String(req.query.t || "");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribe — Build to Last</title></head>
+      <body style="margin:0;background:#faf8f4;font-family:Georgia,serif;color:#262118">
+        <div style="max-width:480px;margin:80px auto;padding:0 20px;text-align:center">
+          <h1 style="font-size:22px">Build to Last emails</h1>
+          <p style="line-height:1.7">Click below to stop receiving emails about Build to Last Vol. 1.</p>
+          <form method="POST" action="/api/build-to-last/unsubscribe?e=${encodeURIComponent(e)}&t=${encodeURIComponent(t)}">
+            <button type="submit" style="background:#262118;color:#faf8f4;border:0;padding:12px 28px;font-size:15px;font-family:Georgia,serif;cursor:pointer">Unsubscribe</button>
+          </form>
+        </div>
+      </body></html>`);
+  });
+
+  app.post("/api/build-to-last/unsubscribe", async (req: Request, res: Response) => {
+    try {
+      const e = String(req.query.e || (req.body as { e?: string } | undefined)?.e || "");
+      const t = String(req.query.t || (req.body as { t?: string } | undefined)?.t || "");
+      const email = decodeEmail(e);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      if (!email || !verifySignedToken(email, t)) {
+        return res.status(400).send("<p style=\"font-family:Georgia,serif;text-align:center;margin-top:80px\">This unsubscribe link is invalid. Reply to any Build to Last email and we'll remove you by hand.</p>");
+      }
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      await storage.unsubscribeBtlEmail(slug, email);
+      res.send("<p style=\"font-family:Georgia,serif;text-align:center;margin-top:80px\">Done — no more Build to Last emails. If this was a mistake, just reply to any earlier email.</p>");
+    } catch (err) {
+      console.error("[btl/unsubscribe] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: RSVP list + category assignment (category powers Touch-6 counts).
+  app.get("/api/admin/btl/rsvps", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const rows = await storage.listBtlRsvps(slug);
+      res.json(rows);
+    } catch (err) {
+      console.error("[btl/admin rsvps] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/btl/rsvps/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const { adminCategory } = req.body as { adminCategory?: string | null };
+      const allowed = ["venue_owner", "planner", "dj", "influencer", "institutional", "other", null];
+      if (adminCategory !== undefined && !allowed.includes(adminCategory as string | null)) {
+        return res.status(400).json({ message: "Invalid category" });
+      }
+      const updated = await storage.updateBtlRsvp(id, { adminCategory: adminCategory ?? null });
+      if (!updated) return res.status(404).json({ message: "RSVP not found" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[btl/admin rsvp patch] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── Unsubscribe (CAN-SPAM / RFC 8058 one-click) ──────────────────────
   // Every marketing email carries a signed link: ?e=<base64url email>&t=<hmac>.
   // The same URL is used in the List-Unsubscribe header, which mailbox

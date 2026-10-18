@@ -53,6 +53,7 @@ import {
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 import { SEO } from "@/components/SEO";
 import { InvoicesTab } from "@/components/InvoicesTab";
+import { BuildToLastTab } from "@/components/BuildToLastTab";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 
 type AdminUser = { email: string; role: string };
@@ -273,6 +274,7 @@ const TABS = [
   { id: "seo", label: "SEO", icon: BarChart2 },
   { id: "email-schedule", label: "Email Schedule", icon: Send },
   { id: "invoices", label: "Invoices", icon: FileText },
+  { id: "build-to-last", label: "Build to Last", icon: Star },
   { id: "reminders", label: "Reminders", icon: Mail },
   { id: "world-cup", label: "World Cup", icon: Star },
   { id: "nba-finals", label: "NBA Finals", icon: Star },
@@ -8120,6 +8122,7 @@ export default function Admin() {
         {activeTab === "seo" && <SeoHealthTab />}
         {activeTab === "email-schedule" && <EmailScheduleTab />}
         {activeTab === "invoices" && <InvoicesTab />}
+        {activeTab === "build-to-last" && <BuildToLastTab />}
         {activeTab === "reminders" && <RemindersTab />}
         {activeTab === "world-cup" && <WorldCupTab />}
         {activeTab === "nba-finals" && <NbaFinalsTab />}

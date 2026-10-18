@@ -1,0 +1,246 @@
+// Build to Last Vol. 1 — email templates.
+//
+// These are deliberately personal notes, not marketing emails: serif body,
+// generous line-height, no header bars or logos, a plain unsubscribe line.
+// Every template is a function of its variables so nothing renders with a
+// leftover {{placeholder}}. Paragraph text is plain strings run through
+// escapeHtml; line breaks become <br>.
+
+export const BTL_SLUG = "build-to-last-vol-1";
+export const BTL_FROM_NAME = "Anthony from Central Group Events";
+
+export interface BtlEventVars {
+  venueName: string;
+  venueAddress: string;
+  doorsTime: string;
+  programStartTime: string;
+  rsvpUrl: string;
+}
+
+function esc(s: string): string {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+
+// Plain multi-line text → escaped HTML paragraphs; bare URLs become links
+// (HTML email clients don't auto-link the way plain-text ones do).
+function paras(text: string): string {
+  return text
+    .trim()
+    .split(/\n{2,}/)
+    .map((p) => {
+      const escaped = esc(p)
+        .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#8a6d3b">$1</a>')
+        .replace(/\n/g, "<br>");
+      return `<p style="margin:0 0 18px">${escaped}</p>`;
+    })
+    .join("\n");
+}
+
+// The shared shell: quiet, serif, personal. unsubscribeUrl renders as one
+// plain line at the bottom — no marketing footer bars.
+export function btlShell(bodyHtml: string, unsubscribeUrl: string): string {
+  return `
+  <div style="background:#faf8f4;padding:28px 16px">
+    <div style="max-width:560px;margin:0 auto;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.75;color:#262118">
+      ${bodyHtml}
+      <p style="margin:34px 0 0;color:#9a917f;font-size:12px;font-family:Georgia,serif">
+        You're getting this because of Build to Last Vol. 1.
+        <a href="${unsubscribeUrl}" style="color:#9a917f">Unsubscribe from these emails</a>.
+      </p>
+    </div>
+  </div>`;
+}
+
+type Tpl = { subject: string; body: string };
+
+export function tplConfirmation(v: { name: string }): Tpl {
+  return {
+    subject: "You're in — Build to Last Nov 12",
+    body: paras(`Hey ${v.name},
+
+You're confirmed for Build to Last Vol. 1 on Thursday, November 12th in Newark.
+
+Your question is noted and going into the briefing I'm sending each speaker once they're locked. If your question comes up that night, you'll know I heard you.
+
+I'll be in touch over the next couple weeks with speaker announcements, venue details, and run of show.
+
+— Anthony`),
+  };
+}
+
+export function tplInitialInvite(v: { name: string } & BtlEventVars): Tpl {
+  return {
+    subject: `Hey ${v.name} — hosting something I want you in the room for.`,
+    body: paras(`I'm putting together the first Build to Last on Thursday, November 12th in Newark. It's an intimate convening for the people in this city who are serious about turning what they do into something that lasts: planners, DJs, influencers, venue owners, and the quiet operators building the next decade of Newark's creative economy.
+
+The premise is simple. Newark has the talent. What it doesn't have — reliably — is the business architecture around that talent. The contracts that protect you, the funding you don't know how to access, the venue economics nobody explains, the real read on where this city is actually heading.
+
+So I'm bringing in four voices across those four questions, in conversation with each other and the room. Not a panel. Not a lecture. A format designed so every person who shows up walks out with something concrete — a contact, an answer, a lead, or a decision they've been circling.
+
+The room is small on purpose. I'd rather have 30 of the right people than 100 of everyone.
+
+Thursday, November 12
+${v.venueName}, Newark
+Open bar · small bites · programming + networking
+Free · RSVP required
+
+RSVP here: ${v.rsvpUrl}
+
+One ask when you register: there's a question asking what you most want answered that night. Please take it seriously — your answers are literally shaping what the speakers cover.
+
+Speakers announced in the next couple weeks. I'll be in touch.
+
+— Anthony`),
+  };
+}
+
+export function tplTouch4(v: { name: string; questionThemes: string }): Tpl {
+  return {
+    subject: "What this room wants to know",
+    body: paras(`Hey ${v.name} —
+
+Quick update on Build to Last as we get closer.
+
+The questions coming in from the RSVPs so far have been honestly incredible. A few themes already emerging:
+
+${v.questionThemes}
+
+I'm using these to brief every speaker. Every station is going to be built around what people in the room actually want to know.
+
+Speaker announcements coming soon. See you Nov 12.
+
+— Anthony`),
+  };
+}
+
+export function tplTouch5SecondWave(v: { name: string; confirmedCount: number; rsvpUrl: string }): Tpl {
+  return {
+    subject: "Build to Last Nov 12 — closing invites soon",
+    body: paras(`Hey ${v.name} —
+
+Following up on the Build to Last invite from a couple weeks ago. The room is coming together — ${v.confirmedCount} confirmed so far — and I'm starting to close invites in the next week or so to keep it intentional in size.
+
+If Nov 12 works for you, I'd love to have you in the room. If it doesn't, totally understand — just let me know and I'll make sure you're first on the list for Vol. 2.
+
+RSVP: ${v.rsvpUrl}
+
+— Anthony`),
+  };
+}
+
+export function tplTouch6Room(v: { name: string; categoryBreakdown: string }): Tpl {
+  return {
+    subject: "Who's going to be in the room",
+    body: paras(`Hey ${v.name} —
+
+Build to Last is 12 days out. Without naming names yet, here's who's confirmed so far:
+
+${v.categoryBreakdown}
+
+Speaker lineup lands in your inbox later this week.
+
+If there's anyone specific you're hoping to meet in the room, hit reply and tell me — I'll make the introduction on the night.
+
+— Anthony`),
+  };
+}
+
+export interface BtlSpeaker {
+  name: string;
+  credential: string;
+  topic: string;
+}
+
+export function tplTouch7Speakers(v: { name: string; speakers: BtlSpeaker[] } & BtlEventVars): Tpl {
+  const lineup = v.speakers.map((s) => `- ${s.name}, ${s.credential} — on ${s.topic}`).join("\n");
+  return {
+    subject: "Your Nov 12 speakers",
+    body: paras(`Hey ${v.name} —
+
+The lineup for Build to Last Vol. 1:
+
+${lineup}
+
+Format: four small-group conversation stations. You'll rotate through all four over the course of the night. Intimate, direct, every voice heard.
+
+Logistics:
+- ${v.venueName}, ${v.venueAddress}
+- Doors at ${v.doorsTime}
+- Programming starts promptly at ${v.programStartTime}
+- Open bar and small bites throughout
+- Light dress code: come as yourself, elevated
+
+See you one week from Thursday.
+
+— Anthony`),
+  };
+}
+
+export function tplTouch8FourDays(v: { name: string }): Tpl {
+  return {
+    subject: "Four days",
+    body: paras(`Hey ${v.name} —
+
+Four days until Build to Last.
+
+A few last things:
+
+- Full guest list is set. The room is who it needs to be.
+- If you need to introduce yourself to someone specific that night, reply here. I'm making a short list of intros to make on the fly.
+- Content: there'll be a photographer and videographer in the room. Candid shots only. You'll get edited photos and a short recap video within 48 hours with permission to post. No video of conversations without consent.
+
+See you Thursday.
+
+— Anthony`),
+  };
+}
+
+export function tplTouch9Tomorrow(v: { name: string } & BtlEventVars): Tpl {
+  return {
+    subject: "Tomorrow",
+    body: paras(`Hey ${v.name},
+
+Tomorrow night. ${v.venueAddress}. Doors at ${v.doorsTime}.
+
+If anything comes up and you can't make it, reply and let me know — your seat goes to someone who can.
+
+See you then.
+
+— Anthony`),
+  };
+}
+
+export function tplFollowup48h(v: {
+  name: string;
+  photoGalleryUrl: string;
+  recapVideoUrl: string;
+  fieldNotesUrl: string;
+  contactSheetOptin: boolean;
+  contactSheetUrl: string;
+}): Tpl {
+  const contactSheetLine = v.contactSheetOptin
+    ? `\n\nAttendee contact sheet (those who opted in): ${v.contactSheetUrl}`
+    : "";
+  return {
+    subject: "Build to Last Vol. 1 — field notes, photos, and what's next",
+    body: paras(`Hey ${v.name} —
+
+Thursday night was something. Thank you for being in that room.
+
+Here's what you need:
+
+Photos from the night: ${v.photoGalleryUrl}
+
+Recap video (90 seconds): ${v.recapVideoUrl}${contactSheetLine}
+
+Field Notes: the top questions this room asked, with the speakers' answers written up — ${v.fieldNotesUrl}
+
+Vol. 2 is already in motion. Early 2027. Same format, different lineup, same intention. If there's someone you think should be in the next room — reply with their name.
+
+One more thing: everyone who attended Vol. 1 gets first access to Vol. 2 before invites go wide. Keep an eye out.
+
+See you around Newark.
+
+— Anthony`),
+  };
+}

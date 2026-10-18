@@ -18,6 +18,9 @@ import {
   worldCupSubmissions,
   nbaFinalsSubmissions,
   landingPageSubmissions,
+  eventRsvps,
+  eventEmailSends,
+  eventInviteList,
   pageRedirects,
   comments,
   pages,
@@ -42,6 +45,8 @@ import {
   type InsertNbaFinalsSubmission,
   type LandingPageSubmission,
   type InsertLandingPageSubmission,
+  type EventRsvp,
+  type EventInvitee,
   type Invoice,
 } from "@shared/schema";
 import { eq, desc, sql, count, and, isNull, gte, lt, inArray } from "drizzle-orm";
@@ -181,6 +186,19 @@ export interface IStorage {
   listReminders(limit?: number): Promise<Array<{ id: number; title: string; body: string | null; sendAt: Date; recipientEmails: string; tag: string | null; status: string; sentAt: Date | null; errorMessage: string | null; createdAt: Date | null }>>;
   getReminder(id: number): Promise<{ id: number; title: string; body: string | null; sendAt: Date; recipientEmails: string; status: string } | null>;
   listDueReminders(now: Date): Promise<Array<{ id: number; title: string; body: string | null; sendAt: Date; recipientEmails: string }>>;
+
+  // Build to Last (event RSVPs + cadence)
+  createBtlRsvp(data: Omit<EventRsvp, "id" | "createdAt" | "confirmationSentAt" | "checkedInAt" | "unsubscribed" | "adminCategory"> & { attendeeSource?: string | null }): Promise<EventRsvp>;
+  getBtlRsvpByEmail(eventSlug: string, email: string): Promise<EventRsvp | null>;
+  listBtlRsvps(eventSlug: string): Promise<EventRsvp[]>;
+  updateBtlRsvp(id: number, patch: Partial<EventRsvp>): Promise<EventRsvp | null>;
+  unsubscribeBtlEmail(eventSlug: string, email: string): Promise<void>;
+  recordBtlEmailSend(row: { eventSlug: string; rsvpId?: number | null; inviteeId?: number | null; recipientEmail: string; templateKey: string; status: string; errorMessage?: string | null }): Promise<void>;
+  hasBtlEmailSend(eventSlug: string, recipientEmail: string, templateKey: string): Promise<boolean>;
+  listBtlEmailSends(eventSlug: string): Promise<Array<{ templateKey: string; status: string; count: number }>>;
+  upsertBtlInvitees(eventSlug: string, rows: Array<{ name: string; email: string; instagramHandle?: string | null; category?: string | null; priorityTier?: number }>): Promise<{ imported: number; skipped: number }>;
+  listBtlInvitees(eventSlug: string): Promise<EventInvitee[]>;
+  updateBtlInvitee(id: number, patch: Partial<EventInvitee>): Promise<EventInvitee | null>;
   markReminderSent(id: number, status: "sent" | "failed" | "cancelled", opts?: { error?: string }): Promise<void>;
 
   // Invoices
@@ -1151,6 +1169,108 @@ export class DatabaseStorage implements IStorage {
   async deleteReminder(id: number): Promise<boolean> {
     const result = await db.delete(reminders).where(eq(reminders.id, id)).returning({ id: reminders.id });
     return result.length > 0;
+  }
+
+  // ── Build to Last ─────────────────────────────────────────────────────
+
+  async createBtlRsvp(data: Omit<EventRsvp, "id" | "createdAt" | "confirmationSentAt" | "checkedInAt" | "unsubscribed" | "adminCategory"> & { attendeeSource?: string | null }): Promise<EventRsvp> {
+    const [row] = await db.insert(eventRsvps).values(data).returning();
+    return row;
+  }
+
+  async getBtlRsvpByEmail(eventSlug: string, email: string): Promise<EventRsvp | null> {
+    const [row] = await db.select().from(eventRsvps)
+      .where(and(eq(eventRsvps.eventSlug, eventSlug), eq(eventRsvps.email, email.toLowerCase().trim())));
+    return row ?? null;
+  }
+
+  async listBtlRsvps(eventSlug: string): Promise<EventRsvp[]> {
+    return await db.select().from(eventRsvps)
+      .where(eq(eventRsvps.eventSlug, eventSlug))
+      .orderBy(desc(eventRsvps.createdAt));
+  }
+
+  async updateBtlRsvp(id: number, patch: Partial<EventRsvp>): Promise<EventRsvp | null> {
+    const [row] = await db.update(eventRsvps).set(patch).where(eq(eventRsvps.id, id)).returning();
+    return row ?? null;
+  }
+
+  // Unsubscribe applies to both the RSVP row and any invite-list row for the
+  // same address, so no arm of the cadence can reach them again.
+  async unsubscribeBtlEmail(eventSlug: string, email: string): Promise<void> {
+    const normalized = email.toLowerCase().trim();
+    await db.update(eventRsvps).set({ unsubscribed: true })
+      .where(and(eq(eventRsvps.eventSlug, eventSlug), eq(eventRsvps.email, normalized)));
+    await db.update(eventInviteList).set({ unsubscribed: true })
+      .where(and(eq(eventInviteList.eventSlug, eventSlug), eq(eventInviteList.email, normalized)));
+  }
+
+  async recordBtlEmailSend(row: { eventSlug: string; rsvpId?: number | null; inviteeId?: number | null; recipientEmail: string; templateKey: string; status: string; errorMessage?: string | null }): Promise<void> {
+    await db.insert(eventEmailSends).values({
+      eventSlug: row.eventSlug,
+      rsvpId: row.rsvpId ?? null,
+      inviteeId: row.inviteeId ?? null,
+      recipientEmail: row.recipientEmail.toLowerCase().trim(),
+      templateKey: row.templateKey,
+      status: row.status,
+      errorMessage: row.errorMessage ?? null,
+    });
+  }
+
+  // Dedup gate: has this template already been SENT (not failed) to this
+  // address for this event? Failed attempts don't block a retry.
+  async hasBtlEmailSend(eventSlug: string, recipientEmail: string, templateKey: string): Promise<boolean> {
+    const [row] = await db.select({ id: eventEmailSends.id }).from(eventEmailSends)
+      .where(and(
+        eq(eventEmailSends.eventSlug, eventSlug),
+        eq(eventEmailSends.recipientEmail, recipientEmail.toLowerCase().trim()),
+        eq(eventEmailSends.templateKey, templateKey),
+        eq(eventEmailSends.status, "sent"),
+      ))
+      .limit(1);
+    return !!row;
+  }
+
+  async listBtlEmailSends(eventSlug: string): Promise<Array<{ templateKey: string; status: string; count: number }>> {
+    const rows = await db.select({
+      templateKey: eventEmailSends.templateKey,
+      status: eventEmailSends.status,
+      count: count(),
+    }).from(eventEmailSends)
+      .where(eq(eventEmailSends.eventSlug, eventSlug))
+      .groupBy(eventEmailSends.templateKey, eventEmailSends.status);
+    return rows.map((r) => ({ templateKey: r.templateKey, status: r.status, count: Number(r.count) }));
+  }
+
+  async upsertBtlInvitees(eventSlug: string, rows: Array<{ name: string; email: string; instagramHandle?: string | null; category?: string | null; priorityTier?: number }>): Promise<{ imported: number; skipped: number }> {
+    let imported = 0;
+    let skipped = 0;
+    for (const r of rows) {
+      const email = r.email.toLowerCase().trim();
+      if (!email) { skipped++; continue; }
+      const result = await db.insert(eventInviteList).values({
+        eventSlug,
+        name: r.name?.trim() || email.split("@")[0],
+        email,
+        instagramHandle: r.instagramHandle?.trim() || null,
+        category: r.category?.trim() || null,
+        priorityTier: r.priorityTier ?? 2,
+      }).onConflictDoNothing().returning({ id: eventInviteList.id });
+      if (result.length > 0) imported++;
+      else skipped++;
+    }
+    return { imported, skipped };
+  }
+
+  async listBtlInvitees(eventSlug: string): Promise<EventInvitee[]> {
+    return await db.select().from(eventInviteList)
+      .where(eq(eventInviteList.eventSlug, eventSlug))
+      .orderBy(desc(eventInviteList.createdAt));
+  }
+
+  async updateBtlInvitee(id: number, patch: Partial<EventInvitee>): Promise<EventInvitee | null> {
+    const [row] = await db.update(eventInviteList).set(patch).where(eq(eventInviteList.id, id)).returning();
+    return row ?? null;
   }
 
   // ── Invoices ──────────────────────────────────────────────────────────
