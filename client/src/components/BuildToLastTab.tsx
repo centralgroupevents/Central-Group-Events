@@ -557,12 +557,13 @@ function CadenceView() {
       )}
 
       <Dialog open={preview !== null} onOpenChange={() => setPreview(null)}>
-        <DialogContent className="max-w-2xl bg-secondary border-white/10">
+        {/* Don't auto-focus the iframe: it swallows Escape and the dialog can't be closed from the keyboard. */}
+        <DialogContent className="max-w-2xl bg-secondary border-white/10" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-white">Preview — {preview?.subject}</DialogTitle>
           </DialogHeader>
           {preview && (
-            <iframe title="email preview" srcDoc={preview.html} className="w-full bg-white rounded-lg" style={{ height: "60vh", border: 0 }} />
+            <iframe title="email preview" tabIndex={-1} srcDoc={preview.html} className="w-full bg-white rounded-lg" style={{ height: "60vh", border: 0 }} />
           )}
         </DialogContent>
       </Dialog>
@@ -586,7 +587,7 @@ type BtlTemplate = {
 function TemplatesView() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { data: templates = [], isLoading } = useQuery<BtlTemplate[]>({ queryKey: ["/api/admin/btl/templates"] });
+  const { data: templates = [], isLoading, error } = useQuery<BtlTemplate[]>({ queryKey: ["/api/admin/btl/templates"] });
   const [selectedKey, setSelectedKey] = useState<string>("initial_invite");
   const [draft, setDraft] = useState<{ key: string; subject: string; body: string } | null>(null);
   const [busy, setBusy] = useState<"" | "save" | "reset">("");
@@ -668,8 +669,19 @@ function TemplatesView() {
     }
   }
 
-  if (isLoading || !selected) {
+  if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+  }
+  if (error || !selected) {
+    return (
+      <div className="bg-secondary/30 border border-amber-400/30 rounded-2xl p-6 text-center space-y-2">
+        <p className="text-amber-300 font-medium">Couldn't load the email templates{error ? ` (${String((error as Error).message)})` : ""}.</p>
+        <p className="text-sm text-muted-foreground">
+          This usually means the server is running older code — on Replit, stop and restart the app after pulling,
+          then reload this page. The live site needs a redeploy to pick up new code.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -751,12 +763,12 @@ function TemplatesView() {
       </div>
 
       <Dialog open={preview !== null} onOpenChange={() => setPreview(null)}>
-        <DialogContent className="max-w-2xl bg-secondary border-white/10">
+        <DialogContent className="max-w-2xl bg-secondary border-white/10" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-white">Preview — {preview?.subject}</DialogTitle>
           </DialogHeader>
           {preview && (
-            <iframe title="email preview" srcDoc={preview.html} className="w-full bg-white rounded-lg" style={{ height: "60vh", border: 0 }} />
+            <iframe title="email preview" tabIndex={-1} srcDoc={preview.html} className="w-full bg-white rounded-lg" style={{ height: "60vh", border: 0 }} />
           )}
         </DialogContent>
       </Dialog>
