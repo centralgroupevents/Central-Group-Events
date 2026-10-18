@@ -54,6 +54,9 @@ app.use(
 
 app.use(
   express.json({
+    // Guide publishes from the CGE tool carry full page HTML + listings;
+    // the express default (100kb) is too small for them.
+    limit: "2mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },

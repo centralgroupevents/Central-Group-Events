@@ -53,6 +53,7 @@ import {
 import cgeLogo from "@assets/CGE_logo_1772075137138.png";
 import { SEO } from "@/components/SEO";
 import { InvoicesTab } from "@/components/InvoicesTab";
+import { BuildToLastTab } from "@/components/BuildToLastTab";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 
 type AdminUser = { email: string; role: string };
@@ -273,6 +274,7 @@ const TABS = [
   { id: "seo", label: "SEO", icon: BarChart2 },
   { id: "email-schedule", label: "Email Schedule", icon: Send },
   { id: "invoices", label: "Invoices", icon: FileText },
+  { id: "build-to-last", label: "Build to Last", icon: Star },
   { id: "reminders", label: "Reminders", icon: Mail },
   { id: "world-cup", label: "World Cup", icon: Star },
   { id: "nba-finals", label: "NBA Finals", icon: Star },
@@ -6224,6 +6226,7 @@ export default function Admin() {
   const [weekAnchor, setWeekAnchor] = useState<string>(getCurrentMondayIso());
   const [genreIsOther, setGenreIsOther] = useState(false);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
+  const [clearLinksBusy, setClearLinksBusy] = useState(false);
   // Free-text search across event title, venue, and city. Empty = show all.
   const [eventSearch, setEventSearch] = useState("");
   const [lastClickedEventIndex, setLastClickedEventIndex] = useState<number | null>(null);
@@ -6287,6 +6290,26 @@ export default function Admin() {
       toast({ title: "Failed to update image", description: String((err as Error).message || err), variant: "destructive" });
     } finally {
       setImageBusy(false);
+    }
+  }
+
+  // Bulk-clear the ticket/learn-more link on the selected events. The public
+  // card then falls back to the CGE Instagram profile.
+  async function clearLinksOnSelected() {
+    const ids = Array.from(selectedEventIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Remove the link from ${ids.length} selected event${ids.length !== 1 ? "s" : ""}? Their "Learn more" buttons will point to the CGE Instagram instead.`)) return;
+    setClearLinksBusy(true);
+    try {
+      const res = await apiRequest("POST", "/api/events/bulk-clear-link", { ids });
+      const body = await res.json();
+      toast({ title: `Removed links from ${body.updated} event${body.updated !== 1 ? "s" : ""}` });
+      await qc.invalidateQueries({ queryKey: ["/api/events"] });
+      setSelectedEventIds(new Set());
+    } catch (err) {
+      toast({ title: "Failed to remove links", description: String((err as Error).message || err), variant: "destructive" });
+    } finally {
+      setClearLinksBusy(false);
     }
   }
 
@@ -6364,7 +6387,13 @@ export default function Admin() {
     const q = eventSearch.trim().toLowerCase();
     if (!q) return events;
     return events.filter((ev) => {
-      const hay = `${ev.title || ""} ${ev.venue || ""} ${ev.city || ""}`.toLowerCase();
+      // Match against every searchable field — including the link and
+      // Instagram handle — so pasting a URL or @handle finds its events.
+      const hay = [
+        ev.title, ev.venue, ev.city, ev.region, ev.date, ev.eventTime,
+        ev.organizer, ev.influencer, ev.genre, ev.description,
+        ev.instagramHandle, ev.ticketLink,
+      ].filter(Boolean).join(" ").toLowerCase();
       return q.split(/\s+/).every((term) => hay.includes(term));
     });
   }, [events, eventSearch]);
@@ -6914,7 +6943,7 @@ export default function Admin() {
               <Input
                 value={eventSearch}
                 onChange={(e) => setEventSearch(e.target.value)}
-                placeholder="Search events by name, venue, or city…"
+                placeholder="Search any field — name, venue, city, date, organizer, genre, @handle, or link…"
                 className="bg-secondary/30 border-white/10 h-10 pl-9 pr-9 text-sm"
                 data-testid="input-events-search"
               />
@@ -6945,6 +6974,15 @@ export default function Admin() {
                     data-testid="button-apply-image-selected-events"
                   >
                     <Upload className="w-3.5 h-3.5 mr-1.5" /> Apply Image
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={clearLinksBusy}
+                    onClick={clearLinksOnSelected}
+                    className="bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30"
+                    data-testid="button-clear-links-selected-events"
+                  >
+                    {clearLinksBusy ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <X className="w-3.5 h-3.5 mr-1.5" />} Remove Links
                   </Button>
                   <Button
                     size="sm"
@@ -8084,6 +8122,7 @@ export default function Admin() {
         {activeTab === "seo" && <SeoHealthTab />}
         {activeTab === "email-schedule" && <EmailScheduleTab />}
         {activeTab === "invoices" && <InvoicesTab />}
+        {activeTab === "build-to-last" && <BuildToLastTab />}
         {activeTab === "reminders" && <RemindersTab />}
         {activeTab === "world-cup" && <WorldCupTab />}
         {activeTab === "nba-finals" && <NbaFinalsTab />}

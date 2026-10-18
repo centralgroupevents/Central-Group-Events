@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, integer, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, integer, uniqueIndex, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -354,6 +354,69 @@ export const comments = pgTable("comments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// ─── Build to Last (event RSVP + email cadence) ────────────────────────────
+
+// One row per RSVP to a Build to Last event. workingOnNow feeds the printed
+// guest book (hard 140-char cap); keyQuestion feeds the speaker briefing.
+// adminCategory is assigned by the admin so Touch-6 "who's in the room"
+// counts are accurate. unsubscribed gates every cadence send.
+export const eventRsvps = pgTable("event_rsvps", {
+  id: serial("id").primaryKey(),
+  eventSlug: text("event_slug").notNull(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  role: text("role").notNull(),
+  companyOrHandle: text("company_or_handle"),
+  workingOnNow: text("working_on_now").notNull(),
+  keyQuestion: text("key_question").notNull(),
+  topicInterests: text("topic_interests").notNull().default("[]"), // JSON array of topic keys
+  contactSheetOptin: boolean("contact_sheet_optin").notNull().default(false),
+  attendeeSource: text("attendee_source"),
+  adminCategory: text("admin_category"), // venue_owner | planner | dj | influencer | institutional | other
+  confirmationSentAt: timestamp("confirmation_sent_at"),
+  checkedInAt: timestamp("checked_in_at"),
+  unsubscribed: boolean("unsubscribed").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  uq: uniqueIndex("event_rsvps_slug_email_uq").on(t.eventSlug, t.email),
+}));
+
+// Send log for every cadence email — one row per delivery attempt. The
+// (eventSlug, recipientEmail, templateKey) triple is the dedup key: a
+// template never goes to the same address twice, even across job retries.
+export const eventEmailSends = pgTable("event_email_sends", {
+  id: serial("id").primaryKey(),
+  eventSlug: text("event_slug").notNull(),
+  rsvpId: integer("rsvp_id").references(() => eventRsvps.id, { onDelete: "cascade" }),
+  inviteeId: integer("invitee_id").references(() => eventInviteList.id, { onDelete: "cascade" }),
+  recipientEmail: text("recipient_email").notNull(),
+  templateKey: text("template_key").notNull(),
+  status: text("status").notNull().default("sent"), // sent | failed
+  errorMessage: text("error_message"),
+  sentAt: timestamp("sent_at").defaultNow(),
+});
+
+// Curated invite targets who haven't RSVP'd (yet). Imported via CSV or
+// added by hand; the initial-invite and second-wave sends work off the
+// *SentAt stamps so a re-click never re-sends.
+export const eventInviteList = pgTable("event_invite_list", {
+  id: serial("id").primaryKey(),
+  eventSlug: text("event_slug").notNull(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  instagramHandle: text("instagram_handle"),
+  category: text("category"), // venue_owner | planner | dj | influencer | institutional
+  priorityTier: integer("priority_tier").notNull().default(2), // 1 = top personal-DM list
+  initialInviteSentAt: timestamp("initial_invite_sent_at"),
+  secondWaveSentAt: timestamp("second_wave_sent_at"),
+  rsvpStatus: text("rsvp_status").notNull().default("pending"), // pending | confirmed | declined
+  unsubscribed: boolean("unsubscribed").notNull().default(false),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  uq: uniqueIndex("event_invite_list_slug_email_uq").on(t.eventSlug, t.email),
+}));
+
 // ─── Insert schemas ────────────────────────────────────────────────────────
 
 // What the admin submits when creating/editing an invoice. Number, totals,
@@ -571,3 +634,24 @@ export type InsertNbaFinalsSubmission = z.infer<typeof insertNbaFinalsSubmission
 
 export type Comment = typeof comments.$inferSelect;
 export type InsertComment = z.infer<typeof insertCommentSchema>;
+
+// ─── Build to Last schemas & types ─────────────────────────────────────────
+
+export const BTL_TOPIC_KEYS = ["legal", "funding", "venue", "market"] as const;
+
+export const btlRsvpInputSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(200),
+  email: z.string().trim().email("Enter a valid email"),
+  role: z.string().trim().min(1, "Tell us what you do").max(200),
+  companyOrHandle: z.string().trim().max(200).optional().nullable(),
+  workingOnNow: z.string().trim().min(1, "This appears in the printed guest book").max(140, "Keep it under 140 characters"),
+  keyQuestion: z.string().trim().min(1, "Your question shapes what the speakers cover").max(2000),
+  topicInterests: z.array(z.enum(BTL_TOPIC_KEYS)).min(1, "Pick at least one topic"),
+  contactSheetOptin: z.boolean(),
+  attendeeSource: z.string().trim().max(100).optional().nullable(),
+});
+export type BtlRsvpInput = z.infer<typeof btlRsvpInputSchema>;
+
+export type EventRsvp = typeof eventRsvps.$inferSelect;
+export type EventEmailSend = typeof eventEmailSends.$inferSelect;
+export type EventInvitee = typeof eventInviteList.$inferSelect;

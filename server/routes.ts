@@ -681,6 +681,383 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // ── Build to Last Vol. 1 — RSVP + cadence ────────────────────────────
+
+  // Public RSVP submit. Validates per the brief (140-char guest-book line,
+  // at least one topic), blocks duplicate emails per event, fires the
+  // confirmation email immediately.
+  app.post("/api/build-to-last/rsvp", formLimiter, async (req: Request, res: Response) => {
+    try {
+      const { btlRsvpInputSchema } = await import("@shared/schema");
+      const input = btlRsvpInputSchema.parse(req.body);
+      const email = input.email.toLowerCase().trim();
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+
+      const existing = await storage.getBtlRsvpByEmail(slug, email);
+      if (existing) {
+        return res.status(409).json({ message: "You're already on the list for Build to Last — check your inbox for the confirmation." });
+      }
+
+      const rsvp = await storage.createBtlRsvp({
+        eventSlug: slug,
+        name: input.name,
+        email,
+        role: input.role,
+        companyOrHandle: input.companyOrHandle || null,
+        workingOnNow: input.workingOnNow,
+        keyQuestion: input.keyQuestion,
+        topicInterests: JSON.stringify(input.topicInterests),
+        contactSheetOptin: input.contactSheetOptin,
+        attendeeSource: input.attendeeSource || null,
+      });
+
+      res.status(201).json({ message: "You're in. Check your email for confirmation." });
+
+      // Mark a matching invite-list row confirmed so the second wave skips them.
+      try {
+        const invitees = await storage.listBtlInvitees(slug);
+        const match = invitees.find((i) => i.email === email);
+        if (match) await storage.updateBtlInvitee(match.id, { rsvpStatus: "confirmed" });
+      } catch (err) {
+        console.warn("[btl] invite-status sync failed:", err);
+      }
+
+      // Confirmation email (Touch 2A) — non-blocking for the response.
+      try {
+        const { tplConfirmation } = await import("./btl-emails");
+        const { deliverBtlEmail } = await import("./btl-mailer");
+        const outcome = await deliverBtlEmail({ email, rsvpId: rsvp.id }, "confirmation", tplConfirmation({ name: input.name }));
+        if (outcome === "sent") {
+          await storage.updateBtlRsvp(rsvp.id, { confirmationSentAt: new Date() });
+        }
+      } catch (err) {
+        console.error("[btl] confirmation email failed:", err);
+      }
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      // Unique-index race: two submits of the same email at once.
+      if ((err as { code?: string }).code === "23505") {
+        return res.status(409).json({ message: "You're already on the list for Build to Last — check your inbox for the confirmation." });
+      }
+      console.error("[btl/rsvp] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Unsubscribe from the Build to Last cadence. GET shows a tiny confirm
+  // page (so inbox link-scanners can't opt people out); the POST does it.
+  app.get("/api/build-to-last/unsubscribe", (req: Request, res: Response) => {
+    const e = String(req.query.e || "");
+    const t = String(req.query.t || "");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribe — Build to Last</title></head>
+      <body style="margin:0;background:#faf8f4;font-family:Georgia,serif;color:#262118">
+        <div style="max-width:480px;margin:80px auto;padding:0 20px;text-align:center">
+          <h1 style="font-size:22px">Build to Last emails</h1>
+          <p style="line-height:1.7">Click below to stop receiving emails about Build to Last Vol. 1.</p>
+          <form method="POST" action="/api/build-to-last/unsubscribe?e=${encodeURIComponent(e)}&t=${encodeURIComponent(t)}">
+            <button type="submit" style="background:#262118;color:#faf8f4;border:0;padding:12px 28px;font-size:15px;font-family:Georgia,serif;cursor:pointer">Unsubscribe</button>
+          </form>
+        </div>
+      </body></html>`);
+  });
+
+  app.post("/api/build-to-last/unsubscribe", async (req: Request, res: Response) => {
+    try {
+      const e = String(req.query.e || (req.body as { e?: string } | undefined)?.e || "");
+      const t = String(req.query.t || (req.body as { t?: string } | undefined)?.t || "");
+      const email = decodeEmail(e);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      if (!email || !verifySignedToken(email, t)) {
+        return res.status(400).send("<p style=\"font-family:Georgia,serif;text-align:center;margin-top:80px\">This unsubscribe link is invalid. Reply to any Build to Last email and we'll remove you by hand.</p>");
+      }
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      await storage.unsubscribeBtlEmail(slug, email);
+      res.send("<p style=\"font-family:Georgia,serif;text-align:center;margin-top:80px\">Done — no more Build to Last emails. If this was a mistake, just reply to any earlier email.</p>");
+    } catch (err) {
+      console.error("[btl/unsubscribe] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: RSVP list + category assignment (category powers Touch-6 counts).
+  app.get("/api/admin/btl/rsvps", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const rows = await storage.listBtlRsvps(slug);
+      res.json(rows);
+    } catch (err) {
+      console.error("[btl/admin rsvps] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/btl/rsvps/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const { adminCategory } = req.body as { adminCategory?: string | null };
+      const allowed = ["venue_owner", "planner", "dj", "influencer", "institutional", "other", null];
+      if (adminCategory !== undefined && !allowed.includes(adminCategory as string | null)) {
+        return res.status(400).json({ message: "Invalid category" });
+      }
+      const updated = await storage.updateBtlRsvp(id, { adminCategory: adminCategory ?? null });
+      if (!updated) return res.status(404).json({ message: "RSVP not found" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[btl/admin rsvp patch] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: check-in toggle (day-of). followup_48h only goes to checked-in.
+  app.patch("/api/admin/btl/rsvps/:id/checkin", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const { checkedIn } = req.body as { checkedIn?: boolean };
+      const updated = await storage.updateBtlRsvp(id, { checkedInAt: checkedIn === false ? null : new Date() });
+      if (!updated) return res.status(404).json({ message: "RSVP not found" });
+      res.json(updated);
+    } catch (err) {
+      console.error("[btl/checkin] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: invite list
+  app.get("/api/admin/btl/invitees", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      res.json(await storage.listBtlInvitees(slug));
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Import rows (from CSV parsed client-side, or a single manual add).
+  app.post("/api/admin/btl/invitees/import", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const rows = (req.body as { rows?: unknown[] })?.rows;
+      if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ message: "rows[] required" });
+      if (rows.length > 1000) return res.status(400).json({ message: "Max 1000 rows per import" });
+      const cleaned = rows
+        .map((r) => r as Record<string, unknown>)
+        .map((r) => ({
+          name: String(r.name ?? "").trim(),
+          email: String(r.email ?? "").trim().toLowerCase(),
+          instagramHandle: String(r.instagramHandle ?? r.instagram ?? "").trim() || null,
+          category: String(r.category ?? "").trim() || null,
+          priorityTier: Number(r.priorityTier ?? r.tier ?? 2) === 1 ? 1 : 2,
+        }))
+        .filter((r) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const result = await storage.upsertBtlInvitees(slug, cleaned);
+      res.json({ ...result, invalid: rows.length - cleaned.length });
+    } catch (err) {
+      console.error("[btl/invitees import] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/btl/invitees/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const { rsvpStatus, notes, priorityTier, category } = req.body as { rsvpStatus?: string; notes?: string; priorityTier?: number; category?: string };
+      const patch: Record<string, unknown> = {};
+      if (rsvpStatus !== undefined) {
+        if (!["pending", "confirmed", "declined"].includes(rsvpStatus)) return res.status(400).json({ message: "Invalid rsvpStatus" });
+        patch.rsvpStatus = rsvpStatus;
+      }
+      if (notes !== undefined) patch.notes = String(notes).slice(0, 2000) || null;
+      if (priorityTier !== undefined) patch.priorityTier = Number(priorityTier) === 1 ? 1 : 2;
+      if (category !== undefined) patch.category = String(category).trim() || null;
+      const updated = await storage.updateBtlInvitee(id, patch);
+      if (!updated) return res.status(404).json({ message: "Invitee not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: bulk sends. Initial invites → anyone not yet sent; second wave →
+  // pending invitees who got the first one and never RSVP'd. Both stamp the
+  // per-row *SentAt so re-clicks never re-send (plus the send-log dedup).
+  app.post("/api/admin/btl/invites/send-initial", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_SLUG: slug, tplInitialInvite } = await import("./btl-emails");
+      const { deliverBtlEmail, btlSendPause, getBtlSettings, btlRsvpUrl } = await import("./btl-mailer");
+      const settings = await getBtlSettings();
+      const invitees = await storage.listBtlInvitees(slug);
+      const targets = invitees.filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined");
+      let sent = 0, skipped = 0, failed = 0;
+      for (const i of targets) {
+        const tpl = tplInitialInvite({
+          name: i.name,
+          venueName: settings.venueName,
+          venueAddress: settings.venueAddress,
+          doorsTime: settings.doorsTime,
+          programStartTime: settings.programStartTime,
+          rsvpUrl: btlRsvpUrl("invite"),
+        });
+        const outcome = await deliverBtlEmail({ email: i.email, inviteeId: i.id }, "initial_invite", tpl);
+        if (outcome === "sent") {
+          sent++;
+          await storage.updateBtlInvitee(i.id, { initialInviteSentAt: new Date() });
+          await btlSendPause();
+        } else if (outcome === "skipped") {
+          skipped++;
+          await storage.updateBtlInvitee(i.id, { initialInviteSentAt: new Date() });
+        } else failed++;
+      }
+      res.json({ sent, skipped, failed, total: targets.length });
+    } catch (err) {
+      console.error("[btl/send-initial] error:", err);
+      const detail = err instanceof Error ? err.message.slice(0, 200) : "unknown";
+      res.status(500).json({ message: `Send failed: ${detail}` });
+    }
+  });
+
+  app.post("/api/admin/btl/invites/send-second-wave", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { sendBtlTemplate } = await import("./btl-cadence");
+      const result = await sendBtlTemplate("touch_5");
+      if (result.blocked) return res.status(400).json({ message: result.blocked });
+      // Stamp secondWaveSentAt on everyone the send reached.
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const invitees = await storage.listBtlInvitees(slug);
+      for (const i of invitees) {
+        if (!i.secondWaveSentAt && (await storage.hasBtlEmailSend(slug, i.email, "touch_5"))) {
+          await storage.updateBtlInvitee(i.id, { secondWaveSentAt: new Date() });
+        }
+      }
+      res.json(result);
+    } catch (err) {
+      console.error("[btl/send-second-wave] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: cadence status board — every template with audience size, sends
+  // so far, schedule, and any blocker.
+  app.get("/api/admin/btl/cadence", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_CADENCE, btlSendAtFor, buildBtlRenderCtx } = await import("./btl-cadence");
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const sends = await storage.listBtlEmailSends(slug);
+      const rsvps = await storage.listBtlRsvps(slug);
+      const invitees = await storage.listBtlInvitees(slug);
+      const ctx = await buildBtlRenderCtx();
+      const activeRsvps = rsvps.filter((r) => !r.unsubscribed).length;
+      const checkedIn = rsvps.filter((r) => !r.unsubscribed && r.checkedInAt).length;
+      const rsvpEmails = new Set(rsvps.map((r) => r.email));
+      const secondWave = invitees.filter((i) => !i.unsubscribed && i.rsvpStatus === "pending" && i.initialInviteSentAt && !rsvpEmails.has(i.email)).length;
+      const uninvited = invitees.filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined").length;
+      const out = [] as unknown[];
+      for (const entry of BTL_CADENCE) {
+        const sentCount = sends.filter((x) => x.templateKey === entry.key && x.status === "sent").reduce((a, x) => a + x.count, 0);
+        const failedCount = sends.filter((x) => x.templateKey === entry.key && x.status === "failed").reduce((a, x) => a + x.count, 0);
+        const audienceCount = entry.audience === "rsvps" ? activeRsvps
+          : entry.audience === "checked_in" ? checkedIn
+          : entry.audience === "invitees_second_wave" ? secondWave
+          : uninvited;
+        const missing = (entry.requiresSettings ?? []).filter((k) => {
+          const v = (ctx.settings as unknown as Record<string, unknown>)[k];
+          return Array.isArray(v) ? v.length === 0 : !String(v ?? "").trim();
+        });
+        out.push({
+          key: entry.key,
+          label: entry.label,
+          audience: entry.audience,
+          audienceCount,
+          sentCount,
+          failedCount,
+          sendAtEt: await btlSendAtFor(entry.key),
+          blocked: missing.length > 0 ? `needs ${missing.join(", ")}` : null,
+        });
+      }
+      res.json(out);
+    } catch (err) {
+      console.error("[btl/cadence] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/btl/cadence/:key/preview", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { renderBtlTemplate, buildBtlRenderCtx } = await import("./btl-cadence");
+      const { btlShell } = await import("./btl-emails");
+      const { btlUnsubscribeUrl } = await import("./btl-mailer");
+      const ctx = await buildBtlRenderCtx();
+      const tpl = renderBtlTemplate(String(req.params.key), { name: "Jordan", contactSheetOptin: true }, ctx);
+      if (!tpl) return res.status(404).json({ message: "Unknown template" });
+      res.json({ subject: tpl.subject, html: btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com")) });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/btl/cadence/:key/send-now", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { sendBtlTemplate } = await import("./btl-cadence");
+      const result = await sendBtlTemplate(String(req.params.key));
+      if (result.blocked) return res.status(400).json({ message: result.blocked });
+      res.json(result);
+    } catch (err) {
+      console.error("[btl/send-now] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: event settings (venue, times, themes, speakers, follow-up URLs,
+  // per-template send-date overrides "sendAt.<key>" as ET "YYYY-MM-DDTHH:mm").
+  app.get("/api/admin/btl/settings", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { getBtlSettings } = await import("./btl-mailer");
+      const { BTL_CADENCE, btlSendAtFor } = await import("./btl-cadence");
+      const settings = await getBtlSettings();
+      const sendAt: Record<string, string | null> = {};
+      for (const c of BTL_CADENCE) sendAt[c.key] = await btlSendAtFor(c.key);
+      res.json({ ...settings, sendAt });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/btl/settings", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const stringKeys = ["venueName", "venueAddress", "doorsTime", "programStartTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
+      for (const key of stringKeys) {
+        if (typeof body[key] === "string") await storage.setSetting(`btl.${key}`, String(body[key]).slice(0, 4000));
+      }
+      if (Array.isArray(body.speakers)) {
+        const speakers = (body.speakers as Record<string, unknown>[])
+          .map((sp) => ({
+            name: String(sp.name ?? "").trim(),
+            credential: String(sp.credential ?? "").trim(),
+            topic: String(sp.topic ?? "").trim(),
+          }))
+          .filter((sp) => sp.name);
+        await storage.setSetting("btl.speakers", JSON.stringify(speakers));
+      }
+      if (body.sendAt && typeof body.sendAt === "object") {
+        for (const [key, val] of Object.entries(body.sendAt as Record<string, unknown>)) {
+          if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val)) {
+            await storage.setSetting(`btl.sendAt.${key}`, val);
+          }
+        }
+      }
+      res.json({ saved: true });
+    } catch (err) {
+      console.error("[btl/settings] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── Unsubscribe (CAN-SPAM / RFC 8058 one-click) ──────────────────────
   // Every marketing email carries a signed link: ?e=<base64url email>&t=<hmac>.
   // The same URL is used in the List-Unsubscribe header, which mailbox
@@ -1436,6 +1813,22 @@ Return every field you can confidently determine. Set null for any field the ima
     }
   });
 
+  // Clear the ticket/learn-more link on selected events (bulk). The public
+  // event card then falls back to the CGE Instagram profile.
+  app.post("/api/events/bulk-clear-link", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body as { ids?: unknown[] };
+      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      const numIds = ids.map((id) => Number(id)).filter((id) => !isNaN(id) && Number.isInteger(id));
+      if (numIds.length === 0) return res.status(400).json({ message: "No valid event IDs" });
+      const updated = await storage.bulkClearEventLinks(numIds);
+      res.json({ updated });
+    } catch (err) {
+      console.error("[events-bulk-clear-link] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.delete("/api/events/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id as string, 10);
@@ -1553,6 +1946,97 @@ Return every field you can confidently determine. Set null for any field the ima
       }
     } catch (err) {
       res.status(400).json({ message: err instanceof Error ? err.message : "Invalid request" });
+    }
+  });
+
+  // ── CGE tool integration: "Publish to Guide" ─────────────────────────
+  // External publishes land here and write ONLY to pages +
+  // landing_page_submissions — never to blog posts. Uses the same
+  // CGE_INTEGRATION_TOKEN bearer auth as /api/integrations/bookings and
+  // /api/integrations/events/upsert.
+  // Re-publishing the same slug replaces the page fields and swaps out the
+  // previous integration-sourced listings (source-scoped delete), leaving
+  // public-form and admin-imported submissions untouched.
+  const INTEGRATION_LISTING_SOURCE = "cge-integration";
+  // Slugs owned by real app routes — a guide publish must never shadow them.
+  const INTEGRATION_RESERVED_SLUGS = new Set([
+    "admin", "blog", "book", "booking-confirmation", "faq", "guides",
+    "welcome", "unsubscribe", "invoice", "legal", "api", "build-to-last",
+    "submit-world-cup-watch-party", "world-cup-2026-nj-watch-parties",
+    "submit-nba-finals-watch-party", "nba-finals-2026-nj-watch-parties",
+  ]);
+  app.post("/api/integrations/pages/upsert", requireIntegrationToken, async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const slug = String(body.slug ?? "").trim().toLowerCase();
+      const title = String(body.title ?? "").trim();
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+        return res.status(400).json({ message: "slug is required and must be kebab-case (letters, numbers, hyphens)" });
+      }
+      if (INTEGRATION_RESERVED_SLUGS.has(slug)) {
+        return res.status(400).json({ message: `slug "${slug}" is reserved by an app route` });
+      }
+      if (!title) return res.status(400).json({ message: "title is required" });
+
+      // Accept both snake_case (documented) and camelCase field names.
+      const bodyContent = typeof body.body_content === "string" ? body.body_content
+        : typeof body.bodyContent === "string" ? body.bodyContent : undefined;
+      const heroImageUrl = typeof body.hero_image_url === "string" ? body.hero_image_url
+        : typeof body.heroImageUrl === "string" ? body.heroImageUrl : undefined;
+      const listings = Array.isArray(body.listings) ? (body.listings as Record<string, unknown>[]) : null;
+
+      const patch: Record<string, unknown> = { title };
+      if (bodyContent !== undefined) patch.editorContent = bodyContent;
+      if (heroImageUrl !== undefined) patch.heroImageUrl = heroImageUrl.trim() || null;
+      if (typeof body.published === "boolean") patch.published = body.published;
+      // A guide arriving with listings should render them on the page.
+      if (listings && listings.length > 0) patch.submissionsEnabled = true;
+
+      const page = await storage.upsertPage(slug, patch);
+
+      const errors: string[] = [];
+      let listingCount = 0;
+      if (listings) {
+        await storage.deleteLandingPageSubmissionsBySource(page.id, INTEGRATION_LISTING_SOURCE);
+        for (let i = 0; i < listings.length; i++) {
+          const l = listings[i] ?? {};
+          const eventDate = parseFlexibleWcDate(String(l.event_date ?? l.eventDate ?? l.date ?? "")) || "";
+          const venueName = String(l.venue_name ?? l.venueName ?? l.venue ?? "").trim();
+          const town = String(l.town ?? l.city ?? "").trim();
+          if (!eventDate || !venueName || !town) {
+            errors.push(`listing ${i + 1}: missing/invalid ${!eventDate ? "event_date" : !venueName ? "venue_name" : "town"}`);
+            continue;
+          }
+          try {
+            await storage.createLandingPageSubmissionRaw({
+              pageId: page.id,
+              submitterEmail: String(l.submitter_email ?? l.submitterEmail ?? "integration@centralgroupevents.com").trim().toLowerCase(),
+              submitterName: String(l.submitter_name ?? l.submitterName ?? "").trim() || null,
+              eventDate,
+              venueName,
+              town,
+              eventName: String(l.event_name ?? l.eventName ?? "").trim() || null,
+              instagramHandle: String(l.instagram_handle ?? l.instagramHandle ?? "").trim() || null,
+              learnMoreUrl: normalizeUrl(String(l.learn_more_url ?? l.learnMoreUrl ?? "")),
+              region: String(l.region ?? "").trim() || null,
+              status: "approved",
+              source: INTEGRATION_LISTING_SOURCE,
+              reviewedAt: new Date(),
+            });
+            listingCount++;
+          } catch (err) {
+            errors.push(`listing ${i + 1}: ${err instanceof Error ? err.message.slice(0, 150) : "insert failed"}`);
+          }
+        }
+      }
+
+      if (page.published) {
+        pingIndexNow([`https://centralgroupevents.com/${page.slug}`]).catch(() => {});
+      }
+      res.json({ slug: page.slug, listings: listingCount, errors });
+    } catch (err) {
+      console.error("[integrations/pages/upsert] error:", err);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -2812,7 +3296,16 @@ Return every field you can confidently determine. Set null for any field the ima
       }
       if (secret !== process.env.CRON_SECRET) return res.status(401).json({ message: "Unauthorized" });
       const result = await runScheduledEmailsTick();
-      res.json(result);
+      // Build to Last cadence rides the same tick — dedup makes it idempotent
+      // however often the external cron fires.
+      let btl: unknown[] = [];
+      try {
+        const { runBtlCadenceTick } = await import("./btl-cadence");
+        btl = await runBtlCadenceTick();
+      } catch (err) {
+        console.error("[cron] btl cadence tick failed:", err);
+      }
+      res.json({ ...result, btl });
     } catch (err) {
       console.error("[cron/scheduled-emails] error:", err);
       res.status(500).json({ message: "Internal server error" });

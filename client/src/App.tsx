@@ -22,6 +22,7 @@ import SubmitWatchParty from "@/pages/SubmitWatchParty";
 import WatchParties from "@/pages/WatchParties";
 import SubmitNbaFinalsWatchParty from "@/pages/SubmitNbaFinalsWatchParty";
 import NbaFinalsWatchParties from "@/pages/NbaFinalsWatchParties";
+import BuildToLast from "@/pages/BuildToLast";
 import Unsubscribe from "@/pages/Unsubscribe";
 import Invoice from "@/pages/Invoice";
 
@@ -40,6 +41,7 @@ function Router() {
       <Route path="/guides" component={Guides} />
       <Route path="/faq" component={FAQ} />
       <Route path="/welcome" component={Welcome} />
+      <Route path="/build-to-last" component={BuildToLast} />
       <Route path="/unsubscribe" component={Unsubscribe} />
       <Route path="/invoice/:number" component={Invoice} />
       <Route path="/admin/accept-invite" component={AcceptInvite} />
