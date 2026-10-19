@@ -18,8 +18,18 @@ function esc(s: string): string {
 }
 
 // Plain multi-line text → escaped HTML paragraphs; bare URLs become links
-// (HTML email clients don't auto-link the way plain-text ones do). A
-// single-line paragraph starting with "✦" becomes a small gold header.
+// (HTML email clients don't auto-link the way plain-text ones do).
+// Formatting rules, so edited templates keep looking right:
+// - a single-line paragraph starting with "✦" → small gold section header
+// - a paragraph whose lines all start with ✔ / • / - / "1." → a list with
+//   hanging indents, so wrapped lines align under the text, not the marker
+// - everything else → a normal paragraph; single line breaks become <br>
+const BULLET_RE = /^(✔|✓|•|\*|-|\d+[.)])\s/;
+
+function inline(line: string): string {
+  return esc(line).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#8a6d3b">$1</a>');
+}
+
 export function paras(text: string): string {
   return text
     .trim()
@@ -27,13 +37,17 @@ export function paras(text: string): string {
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
     .map((p) => {
-      const escaped = esc(p)
-        .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#8a6d3b">$1</a>')
-        .replace(/\n/g, "<br>");
       if (p.startsWith("✦") && !p.includes("\n")) {
-        return `<p style="margin:28px 0 10px;font-family:Arial,Helvetica,sans-serif;font-size:12.5px;font-weight:bold;letter-spacing:2.5px;color:#8a6d3b">${escaped}</p>`;
+        return `<p style="margin:28px 0 10px;font-family:Arial,Helvetica,sans-serif;font-size:12.5px;font-weight:bold;letter-spacing:2.5px;color:#8a6d3b">${inline(p)}</p>`;
       }
-      return `<p style="margin:0 0 18px">${escaped}</p>`;
+      const lines = p.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+      if (lines.length > 0 && lines.every((l) => BULLET_RE.test(l))) {
+        const items = lines
+          .map((l, i) => `<p style="margin:0 0 ${i === lines.length - 1 ? 0 : 8}px;padding-left:22px;text-indent:-22px">${inline(l)}</p>`)
+          .join("\n");
+        return `<div style="margin:0 0 18px">${items}</div>`;
+      }
+      return `<p style="margin:0 0 18px">${inline(p).replace(/\n/g, "<br>")}</p>`;
     })
     .join("\n");
 }
@@ -204,7 +218,8 @@ The lineup for Build to Last Vol. 1:
 Format: four small-group conversation stations. You'll rotate through all four over the course of the night. Intimate, direct, every voice heard.
 
 Logistics:
-- {{venue_name}}, {{venue_address}}
+
+- {{venue_address}}
 - Doors at {{doors_time}}
 - Programming starts promptly at {{program_start_time}}
 - Open bar and small bites throughout
