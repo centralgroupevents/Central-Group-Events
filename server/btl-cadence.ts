@@ -8,7 +8,7 @@
 // send until those inputs exist — reported as blockers, never half-sent.
 
 import { storage } from "./storage";
-import { BTL_SLUG, btlTemplateDef, renderBtlText } from "./btl-emails";
+import { BTL_SLUG, btlTemplateDef, renderBtlText, paras } from "./btl-emails";
 import { deliverBtlEmail, btlRsvpUrl, btlSendPause, getBtlSettings, type BtlSettings } from "./btl-mailer";
 import type { EventRsvp, EventInvitee } from "@shared/schema";
 
@@ -145,7 +145,9 @@ export function buildBtlVars(
   };
 }
 
-/** Substitute one recipient into resolved template texts. */
+/** Substitute one recipient into resolved template texts. The returned
+ *  body is rendered HTML (paragraphs, section headers, bullet lists via
+ *  paras) — ready for btlShell. */
 export function renderBtlFromTexts(
   texts: BtlTemplateTexts,
   recipient: { name: string; contactSheetOptin?: boolean },
@@ -154,7 +156,7 @@ export function renderBtlFromTexts(
   const vars = buildBtlVars(recipient, ctx);
   return {
     subject: renderBtlText(texts.subject, vars),
-    body: renderBtlText(texts.body, vars),
+    body: paras(renderBtlText(texts.body, vars)),
   };
 }
 
