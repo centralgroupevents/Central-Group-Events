@@ -109,8 +109,8 @@ I'll be in touch over the next couple weeks with speaker announcements, venue de
     key: "initial_invite",
     label: "Initial invites",
     placeholders: ["name", "first_name", "rsvp_url", "venue_name", "doors_time", "program_start_time"],
-    subject: "Hey {{first_name}} — hosting something I want you in the room for.",
-    body: `Hey {{first_name}} —
+    subject: "Hey {{name}} — hosting something I want you in the room for.",
+    body: `Hey {{name}} —
 
 I'm putting together the first Build to Last on Thursday, November 12th in Newark. It's an intimate convening for the people in this city who are serious about turning what they do into something that lasts: planners, DJs, influencers, venue owners, and the quiet operators building the next decade of Newark's creative economy.
 
