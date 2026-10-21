@@ -246,7 +246,6 @@ export interface IStorage {
   // Generic landing-page submissions (any admin-created page that has submissionsEnabled)
   createLandingPageSubmission(data: InsertLandingPageSubmission): Promise<LandingPageSubmission>;
   createLandingPageSubmissionRaw(row: any): Promise<void>;
-  deleteLandingPageSubmissionsBySource(pageId: number, source: string): Promise<void>;
   listLandingPageSubmissions(pageId: number, opts?: { status?: string }): Promise<LandingPageSubmission[]>;
   updateLandingPageSubmissionStatus(id: number, status: string, adminNotes?: string): Promise<LandingPageSubmission | undefined>;
   updateLandingPageSubmissionFields(id: number, fields: Partial<LandingPageSubmission>): Promise<LandingPageSubmission | undefined>;
@@ -1004,14 +1003,23 @@ export class DatabaseStorage implements IStorage {
 
   // ── Scheduled email sends ─────────────────────────────────────────────
   // Idempotent: dedupes on (bookingId, kind). Repeated cron ticks won't
-  // insert dup rows even if a backfill loop happens to run twice.
+  // insert dup rows even if a backfill loop happens to run twice. A row
+  // that is still pending RESYNCS its scheduledFor/recipient with the
+  // booking on every tick — if the booking's event date is corrected,
+  // the send date follows it instead of firing on the stale date.
   async ensureScheduledEmailRows(bookingId: number, kind: string, scheduledFor: string, recipientEmail: string): Promise<void> {
     const existing = await db
-      .select({ id: scheduledEmailSends.id })
+      .select({ id: scheduledEmailSends.id, status: scheduledEmailSends.status, scheduledFor: scheduledEmailSends.scheduledFor, recipientEmail: scheduledEmailSends.recipientEmail })
       .from(scheduledEmailSends)
       .where(and(eq(scheduledEmailSends.bookingId, bookingId), eq(scheduledEmailSends.kind, kind)))
       .limit(1);
-    if (existing.length > 0) return;
+    if (existing.length > 0) {
+      const row = existing[0];
+      if (row.status === "pending" && (row.scheduledFor !== scheduledFor || row.recipientEmail !== recipientEmail)) {
+        await db.update(scheduledEmailSends).set({ scheduledFor, recipientEmail }).where(eq(scheduledEmailSends.id, row.id));
+      }
+      return;
+    }
     await db.insert(scheduledEmailSends).values({ bookingId, kind, scheduledFor, recipientEmail });
   }
 
@@ -1485,14 +1493,6 @@ export class DatabaseStorage implements IStorage {
 
   async createLandingPageSubmissionRaw(row: any): Promise<void> {
     await db.insert(landingPageSubmissions).values(row);
-  }
-
-  // Delete only the rows a given integration created (scoped by source), so a
-  // re-publish from CGE Tools replaces its own listings without touching
-  // public-form or admin-imported submissions.
-  async deleteLandingPageSubmissionsBySource(pageId: number, source: string): Promise<void> {
-    await db.delete(landingPageSubmissions)
-      .where(and(eq(landingPageSubmissions.pageId, pageId), eq(landingPageSubmissions.source, source)));
   }
 
   async listLandingPageSubmissions(pageId: number, opts?: { status?: string }): Promise<LandingPageSubmission[]> {

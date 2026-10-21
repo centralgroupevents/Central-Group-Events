@@ -14,13 +14,6 @@ const CREAM_DIM = "rgba(243,236,221,0.72)";
 const GOLD = "#c9a35c";
 const LINE = "rgba(243,236,221,0.16)";
 
-const TOPICS: Array<{ key: "legal" | "funding" | "venue" | "market"; label: string }> = [
-  { key: "legal", label: "Legal protection for creators" },
-  { key: "funding", label: "Grants and non-dilutive funding" },
-  { key: "venue", label: "Venue economics and running a space" },
-  { key: "market", label: "Where Newark is actually heading in the next 3 years" },
-];
-
 const inputStyle: React.CSSProperties = {
   width: "100%",
   background: "rgba(243,236,221,0.06)",
@@ -56,32 +49,18 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 export default function BuildToLast() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("");
-  const [companyOrHandle, setCompanyOrHandle] = useState("");
   const [workingOnNow, setWorkingOnNow] = useState("");
   const [keyQuestion, setKeyQuestion] = useState("");
-  const [topics, setTopics] = useState<Set<string>>(new Set());
   const [contactOptin, setContactOptin] = useState<"" | "yes" | "no">("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
 
-  function toggleTopic(key: string) {
-    const next = new Set(topics);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    setTopics(next);
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!name.trim() || !email.trim() || !role.trim() || !workingOnNow.trim() || !keyQuestion.trim()) {
+    if (!name.trim() || !email.trim() || !workingOnNow.trim() || !keyQuestion.trim()) {
       setError("Please fill in every required field.");
-      return;
-    }
-    if (topics.size === 0) {
-      setError("Pick at least one topic you're curious about.");
       return;
     }
     if (!contactOptin) {
@@ -99,11 +78,11 @@ export default function BuildToLast() {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim().toLowerCase(),
-          role: role.trim(),
-          companyOrHandle: companyOrHandle.trim() || null,
+          role: "",
+          companyOrHandle: null,
           workingOnNow: workingOnNow.trim(),
           keyQuestion: keyQuestion.trim(),
-          topicInterests: Array.from(topics),
+          topicInterests: [],
           contactSheetOptin: contactOptin === "yes",
           attendeeSource: src || "direct",
         }),
@@ -236,14 +215,8 @@ export default function BuildToLast() {
               <Field label="Email *">
                 <input style={inputStyle} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required data-testid="input-btl-email" />
               </Field>
-              <Field label="Role / what you do *">
-                <input style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g., Event planner, DJ, Venue owner, Content creator" required data-testid="input-btl-role" />
-              </Field>
-              <Field label="Company or platform">
-                <input style={inputStyle} value={companyOrHandle} onChange={(e) => setCompanyOrHandle(e.target.value)} placeholder="Business name or @instagram_handle" data-testid="input-btl-company" />
-              </Field>
               <Field
-                label="One line on what you're working on right now *"
+                label="One line on who you are and what you're working on right now *"
                 helper={`This appears in the printed guest book handed to every attendee. Write it as you'd want others to read it. ${workingOnNow.length}/140`}
               >
                 <textarea
@@ -266,22 +239,6 @@ export default function BuildToLast() {
                   required
                   data-testid="input-btl-question"
                 />
-              </Field>
-              <Field label="Which topics are you most curious about? *">
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {TOPICS.map((t) => (
-                    <label key={t.key} style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer", fontSize: 16, color: topics.has(t.key) ? CREAM : CREAM_DIM }}>
-                      <input
-                        type="checkbox"
-                        checked={topics.has(t.key)}
-                        onChange={() => toggleTopic(t.key)}
-                        style={{ marginTop: 4, accentColor: GOLD, width: 16, height: 16 }}
-                        data-testid={`checkbox-btl-topic-${t.key}`}
-                      />
-                      {t.label}
-                    </label>
-                  ))}
-                </div>
               </Field>
               <Field label="Opt in to the attendee contact sheet shared 48 hours after the event? *">
                 <div style={{ display: "flex", gap: 26 }}>
