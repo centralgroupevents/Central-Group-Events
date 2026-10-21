@@ -46,9 +46,27 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+// A personalized link from the thank-you email carries ?e=<base64url email>
+// &t=<signature>&n=<name> — then the form skips name/email entirely.
+function readIdentityFromUrl(): { e: string; t: string; name: string; email: string } | null {
+  if (typeof window === "undefined") return null;
+  const p = new URLSearchParams(window.location.search);
+  const e = p.get("e") || "";
+  const t = p.get("t") || "";
+  if (!e || !t) return null;
+  try {
+    const email = atob(e.replace(/-/g, "+").replace(/_/g, "/"));
+    if (!email.includes("@")) return null;
+    return { e, t, name: p.get("n") || "", email };
+  } catch {
+    return null;
+  }
+}
+
 export default function BuildToLast() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [identity] = useState(readIdentityFromUrl);
+  const [name, setName] = useState(identity?.name ?? "");
+  const [email, setEmail] = useState(identity?.email ?? "");
   const [workingOnNow, setWorkingOnNow] = useState("");
   const [keyQuestion, setKeyQuestion] = useState("");
   const [contactOptin, setContactOptin] = useState<"" | "yes" | "no">("");
@@ -59,7 +77,8 @@ export default function BuildToLast() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!name.trim() || !email.trim() || !workingOnNow.trim() || !keyQuestion.trim()) {
+    const effectiveName = name.trim() || (identity ? identity.email.split("@")[0] : "");
+    if (!effectiveName || !email.trim() || !workingOnNow.trim() || !keyQuestion.trim()) {
       setError("Please fill in every required field.");
       return;
     }
@@ -76,7 +95,7 @@ export default function BuildToLast() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
+          name: effectiveName,
           email: email.trim().toLowerCase(),
           role: "",
           companyOrHandle: null,
@@ -85,6 +104,7 @@ export default function BuildToLast() {
           topicInterests: [],
           contactSheetOptin: contactOptin === "yes",
           attendeeSource: src || "direct",
+          ...(identity ? { e: identity.e, t: identity.t } : {}),
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -209,12 +229,20 @@ export default function BuildToLast() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} noValidate>
-              <Field label="Name *">
-                <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} required data-testid="input-btl-name" />
-              </Field>
-              <Field label="Email *">
-                <input style={inputStyle} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required data-testid="input-btl-email" />
-              </Field>
+              {identity ? (
+                <p style={{ fontSize: 14, color: GOLD, margin: "0 0 22px", letterSpacing: 0.5 }} data-testid="text-btl-identity">
+                  Answering as {identity.name || identity.email} — just the two questions below.
+                </p>
+              ) : (
+                <>
+                  <Field label="Name *">
+                    <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} required data-testid="input-btl-name" />
+                  </Field>
+                  <Field label="Email *">
+                    <input style={inputStyle} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required data-testid="input-btl-email" />
+                  </Field>
+                </>
+              )}
               <Field
                 label="One line on who you are and what you're working on right now *"
                 helper={`This appears in the printed guest book handed to every attendee. Write it as you'd want others to read it. ${workingOnNow.length}/140`}

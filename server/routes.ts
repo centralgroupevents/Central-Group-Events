@@ -690,11 +690,33 @@ ${blogList || "_No recent posts yet._"}
     try {
       const { btlRsvpInputSchema } = await import("@shared/schema");
       const input = btlRsvpInputSchema.parse(req.body);
-      const email = input.email.toLowerCase().trim();
+      // Personalized links (from the thank-you email) carry a signed
+      // identity: e = base64url email, t = HMAC. A valid pair overrides the
+      // typed email and allows re-submitting to update earlier answers.
+      const tokenE = String((req.body as { e?: string })?.e || "");
+      const tokenT = String((req.body as { t?: string })?.t || "");
+      let verifiedEmail: string | null = null;
+      if (tokenE || tokenT) {
+        const dec = decodeEmail(tokenE);
+        if (!dec || !verifySignedToken(dec, tokenT)) {
+          return res.status(400).json({ message: "This personalized link is invalid — open the link from your email again." });
+        }
+        verifiedEmail = dec;
+      }
+      const email = (verifiedEmail || input.email).toLowerCase().trim();
       const { BTL_SLUG: slug } = await import("./btl-emails");
 
       const existing = await storage.getBtlRsvpByEmail(slug, email);
       if (existing) {
+        if (verifiedEmail) {
+          await storage.updateBtlRsvp(existing.id, {
+            name: input.name,
+            workingOnNow: input.workingOnNow,
+            keyQuestion: input.keyQuestion,
+            contactSheetOptin: input.contactSheetOptin,
+          });
+          return res.json({ message: "Your answers are in — see you November 12th." });
+        }
         return res.status(409).json({ message: "You're already on the list for Build to Last — check your inbox for the confirmation." });
       }
 
@@ -727,7 +749,7 @@ ${blogList || "_No recent posts yet._"}
         const { renderBtlTemplate, buildBtlRenderCtx } = await import("./btl-cadence");
         const { deliverBtlEmail } = await import("./btl-mailer");
         const ctx = await buildBtlRenderCtx();
-        const tpl = await renderBtlTemplate("confirmation", { name: input.name, contactSheetOptin: input.contactSheetOptin }, ctx);
+        const tpl = await renderBtlTemplate("confirmation", { name: input.name, email, contactSheetOptin: input.contactSheetOptin }, ctx);
         if (!tpl) throw new Error("confirmation template missing");
         const outcome = await deliverBtlEmail({ email, rsvpId: rsvp.id }, "confirmation", tpl);
         if (outcome === "sent") {
@@ -901,7 +923,7 @@ ${blogList || "_No recent posts yet._"}
       const targets = invitees.filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined");
       let sent = 0, skipped = 0, failed = 0;
       for (const i of targets) {
-        const tpl = renderBtlFromTexts(texts, { name: i.name }, ctx);
+        const tpl = renderBtlFromTexts(texts, { name: i.name, email: i.email }, ctx);
         const outcome = await deliverBtlEmail({ email: i.email, inviteeId: i.id }, "initial_invite", tpl);
         if (outcome === "sent") {
           sent++;
