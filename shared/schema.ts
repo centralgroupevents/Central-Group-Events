@@ -642,11 +642,11 @@ export const BTL_TOPIC_KEYS = ["legal", "funding", "venue", "market"] as const;
 export const btlRsvpInputSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   email: z.string().trim().email("Enter a valid email"),
-  role: z.string().trim().min(1, "Tell us what you do").max(200),
+  role: z.string().trim().max(200).optional().default(""),
   companyOrHandle: z.string().trim().max(200).optional().nullable(),
   workingOnNow: z.string().trim().min(1, "This appears in the printed guest book").max(140, "Keep it under 140 characters"),
   keyQuestion: z.string().trim().min(1, "Your question shapes what the speakers cover").max(2000),
-  topicInterests: z.array(z.enum(BTL_TOPIC_KEYS)).min(1, "Pick at least one topic"),
+  topicInterests: z.array(z.enum(BTL_TOPIC_KEYS)).optional().default([]),
   contactSheetOptin: z.boolean(),
   attendeeSource: z.string().trim().max(100).optional().nullable(),
 });

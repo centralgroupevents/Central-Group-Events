@@ -33,7 +33,7 @@ export function etToUtc(local: string): Date {
   return guess;
 }
 
-export type BtlAudience = "rsvps" | "invitees_second_wave" | "checked_in";
+export type BtlAudience = "rsvps" | "invitees_second_wave" | "invitees_all" | "checked_in";
 
 export interface BtlCadenceEntry {
   key: string;
@@ -47,6 +47,7 @@ export interface BtlCadenceEntry {
 
 export const BTL_CADENCE: BtlCadenceEntry[] = [
   { key: "initial_invite", label: "Initial invites", audience: "manual", defaultSendAtEt: null },
+  { key: "guest_info", label: "Thank you + your two questions", audience: "invitees_all", defaultSendAtEt: null },
   { key: "touch_4", label: "What this room wants to know", audience: "rsvps", defaultSendAtEt: "2026-10-29T10:00", requiresSettings: ["questionThemes"] },
   { key: "touch_5", label: "Second wave (non-responders)", audience: "invitees_second_wave", defaultSendAtEt: "2026-10-31T10:00" },
   { key: "touch_6", label: "Who's going to be in the room", audience: "rsvps", defaultSendAtEt: "2026-11-02T10:00" },
@@ -129,7 +130,8 @@ export function buildBtlVars(
   return {
     name: recipient.name,
     first_name: recipient.name.trim().split(/\s+/)[0] || recipient.name,
-    rsvp_url: btlRsvpUrl("invite"),
+    rsvp_url: s.rsvpUrl.trim() || btlRsvpUrl("invite"),
+    questions_url: btlRsvpUrl("q"),
     venue_name: s.venueName,
     venue_address: s.venueAddress,
     doors_time: s.doorsTime,
@@ -178,6 +180,12 @@ async function resolveAudience(audience: BtlAudience): Promise<Array<{ name: str
   if (audience === "checked_in") {
     const rows = await storage.listBtlRsvps(BTL_SLUG);
     return rows.filter((r) => !r.unsubscribed && r.checkedInAt).map((r) => ({ name: r.name, email: r.email, rsvpId: r.id, contactSheetOptin: r.contactSheetOptin }));
+  }
+  if (audience === "invitees_all") {
+    const invitees = await storage.listBtlInvitees(BTL_SLUG);
+    return invitees
+      .filter((i: EventInvitee) => !i.unsubscribed && i.rsvpStatus !== "declined")
+      .map((i) => ({ name: i.name, email: i.email, inviteeId: i.id }));
   }
   // invitees_second_wave: got the initial invite, never RSVP'd, not declined.
   const invitees = await storage.listBtlInvitees(BTL_SLUG);

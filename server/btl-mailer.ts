@@ -94,6 +94,9 @@ export function btlSendPause(): Promise<void> {
 // Event settings with sane defaults; every value overridable from admin via
 // app_settings keys ("btl.<field>").
 export interface BtlSettings {
+  /** Sponsor sign-up link (e.g. the AisleGo listing). When set, every
+   *  {{rsvp_url}} in the emails points here instead of /build-to-last. */
+  rsvpUrl: string;
   venueName: string;
   venueAddress: string;
   doorsTime: string;
@@ -107,6 +110,7 @@ export interface BtlSettings {
 }
 
 const BTL_DEFAULTS: BtlSettings = {
+  rsvpUrl: "",
   venueName: "Equal Space",
   venueAddress: "Equal Space, Newark, NJ",
   doorsTime: "6:00 PM",
@@ -122,7 +126,7 @@ const BTL_DEFAULTS: BtlSettings = {
 export async function getBtlSettings(): Promise<BtlSettings> {
   const out: BtlSettings = { ...BTL_DEFAULTS };
   const stringKeys: Array<keyof BtlSettings> = [
-    "venueName", "venueAddress", "doorsTime", "programStartTime",
+    "rsvpUrl", "venueName", "venueAddress", "doorsTime", "programStartTime",
     "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl",
   ];
   for (const key of stringKeys) {

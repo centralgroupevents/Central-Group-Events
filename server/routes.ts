@@ -962,6 +962,7 @@ ${blogList || "_No recent posts yet._"}
         const audienceCount = entry.audience === "rsvps" ? activeRsvps
           : entry.audience === "checked_in" ? checkedIn
           : entry.audience === "invitees_second_wave" ? secondWave
+          : entry.audience === "invitees_all" ? invitees.filter((i) => !i.unsubscribed && i.rsvpStatus !== "declined").length
           : uninvited;
         const missing = (entry.requiresSettings ?? []).filter((k) => {
           const v = (ctx.settings as unknown as Record<string, unknown>)[k];
@@ -1029,7 +1030,7 @@ ${blogList || "_No recent posts yet._"}
   app.put("/api/admin/btl/settings", requireAuth(), async (req: Request, res: Response) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const stringKeys = ["venueName", "venueAddress", "doorsTime", "programStartTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
+      const stringKeys = ["rsvpUrl", "venueName", "venueAddress", "doorsTime", "programStartTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
       for (const key of stringKeys) {
         if (typeof body[key] === "string") await storage.setSetting(`btl.${key}`, String(body[key]).slice(0, 4000));
       }
@@ -3285,6 +3286,25 @@ Return every field you can confidently determine. Set null for any field the ima
         await storage.markScheduledEmailSent(row.id, "skipped", { error: "booking cancelled", dryRun });
         skipped++;
         continue;
+      }
+      // Hard guard: re-derive the due date from the booking's CURRENT event
+      // date before sending. The feedback email must never go out before
+      // the event has happened (and the T-4 heads-up never before T-4),
+      // even if this row was created from an older/garbled event date.
+      {
+        const isoNow = parseFlexibleWcDate(booking.eventDate);
+        if (!isoNow) {
+          await storage.markScheduledEmailSent(row.id, "skipped", { error: `event date unparseable: "${String(booking.eventDate).slice(0, 40)}"`, dryRun });
+          skipped++;
+          continue;
+        }
+        const dueFor = shiftIsoDate(isoNow, row.kind === "reminder_t4" ? -4 : 1);
+        if (dueFor > today) {
+          // Not due yet — leave the row pending (backfill has already
+          // resynced its date); it fires on the right day.
+          skipped++;
+          continue;
+        }
       }
       const { subject, html, to } = renderScheduledEmail(row, booking, dryRun);
       try {

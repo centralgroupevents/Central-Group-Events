@@ -119,7 +119,7 @@ The premise is simple. Newark has the talent. What it doesn't have — reliably 
 ✦ WHAT TO EXPECT
 
 ✔ Four conversation stations — legal protection, funding, venue economics, and where Newark's market is heading. You rotate through all four.
-✔ Speakers briefed on YOUR questions before the night — you'll submit one when you RSVP
+✔ Speakers briefed on YOUR questions before the night — I'll ask for yours right after you sign up
 ✔ Open bar + small bites throughout
 ✔ A printed guest book of everyone in the room: who they are and what they're building
 ✔ Intentional networking — not business-card roulette
@@ -150,6 +150,26 @@ RSVP here: {{rsvp_url}}
 One ask when you register: there's a question asking what you most want answered that night. Please take it seriously — your answers are literally shaping what the speakers cover.
 
 Build to Last is a series — this is Vol. 1, and the people in this room get first access to every room after it. Speakers announced in the next couple weeks.
+
+— Anthony`,
+  },
+  {
+    key: "guest_info",
+    label: "Thank you + your two questions",
+    placeholders: ["name", "first_name", "questions_url", "rsvp_url"],
+    subject: "Thank you — and two quick questions",
+    body: `Hey {{name}},
+
+Thank you — whether you've locked in your spot for Build to Last on Thursday, November 12th or you're still figuring out if you can make it, I appreciate you even considering the room. It's free, and it's small on purpose.
+
+Either way, I have one ask that takes two minutes. Two questions:
+
+✔ One line on who you are and what you're working on — it goes into the printed guest book handed to every attendee
+✔ The one question you most want answered that night — I'm briefing every speaker on the room's actual questions
+
+Answer both here: {{questions_url}}
+
+If it turns out you can't make it this time, your answers still shape the night — and you're first in line for Vol. 2.
 
 — Anthony`,
   },

@@ -55,6 +55,7 @@ type CadenceRow = {
 };
 
 type BtlSettings = {
+  rsvpUrl: string;
   venueName: string;
   venueAddress: string;
   doorsTime: string;
@@ -82,6 +83,7 @@ const TOPIC_LABELS: Record<string, string> = {
   funding: "Grants & funding",
   venue: "Venue economics",
   market: "Newark next 3 years",
+  general: "General",
 };
 
 function topicsOf(r: BtlRsvp): string[] {
@@ -788,7 +790,9 @@ function QuestionsView({ rsvps }: { rsvps: BtlRsvp[] }) {
   const grouped = useMemo(() => {
     const byTopic: Record<string, BtlRsvp[]> = {};
     for (const r of rsvps) {
-      for (const t of topicsOf(r)) {
+      const topics = topicsOf(r);
+      // The slim form skips topic checkboxes — those questions land in "General".
+      for (const t of topics.length > 0 ? topics : ["general"]) {
         (byTopic[t] ??= []).push(r);
       }
     }
@@ -1034,6 +1038,10 @@ function SettingsView() {
     <div className="space-y-5 max-w-3xl">
       <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-4">
         <h3 className="font-bold text-white">Venue & times (fill into every email)</h3>
+        <div>
+          <Label className="text-white/70 text-xs">Sign-up link (sponsor/AisleGo) — every RSVP button in the emails points here; leave blank to use /build-to-last</Label>
+          <Input value={s.rsvpUrl ?? ""} onChange={(e) => set("rsvpUrl", e.target.value)} placeholder="https://www.aislego.com/…" className={inputCls} data-testid="input-btl-rsvp-url" />
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><Label className="text-white/70 text-xs">Venue name</Label><Input value={s.venueName} onChange={(e) => set("venueName", e.target.value)} className={inputCls} data-testid="input-btl-venue-name" /></div>
           <div><Label className="text-white/70 text-xs">Venue address (shown in logistics + "Tomorrow" email)</Label><Input value={s.venueAddress} onChange={(e) => set("venueAddress", e.target.value)} className={inputCls} data-testid="input-btl-venue-address" /></div>
