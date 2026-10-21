@@ -10,6 +10,7 @@
 import { storage } from "./storage";
 import { BTL_SLUG, btlTemplateDef, renderBtlText, paras } from "./btl-emails";
 import { deliverBtlEmail, btlRsvpUrl, btlSendPause, getBtlSettings, type BtlSettings } from "./btl-mailer";
+import { signToken, encodeEmail } from "./email-compliance";
 import type { EventRsvp, EventInvitee } from "@shared/schema";
 
 // "YYYY-MM-DDTHH:mm" meant as America/New_York wall time → UTC Date.
@@ -117,7 +118,7 @@ export async function getBtlTemplateTexts(key: string): Promise<BtlTemplateTexts
  *  renderBtlText. Unknown placeholders typed into an edited template stay
  *  visible in the preview instead of silently disappearing. */
 export function buildBtlVars(
-  recipient: { name: string; contactSheetOptin?: boolean },
+  recipient: { name: string; email?: string; contactSheetOptin?: boolean },
   ctx: BtlRenderCtx,
 ): Record<string, string> {
   const s = ctx.settings;
@@ -131,7 +132,11 @@ export function buildBtlVars(
     name: recipient.name,
     first_name: recipient.name.trim().split(/\s+/)[0] || recipient.name,
     rsvp_url: s.rsvpUrl.trim() || btlRsvpUrl("invite"),
-    questions_url: btlRsvpUrl("q"),
+    // Personalized: carries a signed identity so the questions form skips
+    // name/email for people we already know (AisleGo sign-ups, invitees).
+    questions_url: recipient.email
+      ? `${btlRsvpUrl("q")}&e=${encodeEmail(recipient.email)}&t=${signToken(recipient.email)}&n=${encodeURIComponent(recipient.name)}`
+      : btlRsvpUrl("q"),
     venue_name: s.venueName,
     venue_address: s.venueAddress,
     doors_time: s.doorsTime,
@@ -152,7 +157,7 @@ export function buildBtlVars(
  *  paras) — ready for btlShell. */
 export function renderBtlFromTexts(
   texts: BtlTemplateTexts,
-  recipient: { name: string; contactSheetOptin?: boolean },
+  recipient: { name: string; email?: string; contactSheetOptin?: boolean },
   ctx: BtlRenderCtx,
 ): { subject: string; body: string } {
   const vars = buildBtlVars(recipient, ctx);
@@ -164,7 +169,7 @@ export function renderBtlFromTexts(
 
 export async function renderBtlTemplate(
   key: string,
-  recipient: { name: string; contactSheetOptin?: boolean },
+  recipient: { name: string; email?: string; contactSheetOptin?: boolean },
   ctx: BtlRenderCtx,
 ): Promise<{ subject: string; body: string } | null> {
   const texts = await getBtlTemplateTexts(key);
