@@ -1994,6 +1994,126 @@ function RemindersTab() {
   );
 }
 
+// ── Weekly events digest controls ─────────────────────────────────────────
+// Fridays 1 PM ET, auto via the same cron; this card shows status, lets the
+// admin enable it, preview the exact email, test-send to the CGE inbox, and
+// force a run.
+type DigestStatus = {
+  enabled: boolean;
+  sponsorSlots: number;
+  week: string;
+  doneWeek: string | null;
+  cursor: string | null;
+  subscribers: number;
+  upcomingEvents: number;
+  sponsors: Array<{ id: number; name: string; eventDate: string }>;
+};
+
+function WeeklyDigestCard() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [busy, setBusy] = useState<"" | "toggle" | "test" | "run">("");
+  const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
+  const { data: st } = useQuery<DigestStatus>({ queryKey: ["/api/admin/digest/status"] });
+
+  async function save(patch: { enabled?: boolean; sponsorSlots?: number }) {
+    setBusy("toggle");
+    try {
+      await apiRequest("PUT", "/api/admin/digest/settings", patch);
+      qc.invalidateQueries({ queryKey: ["/api/admin/digest/status"] });
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function openPreview() {
+    try {
+      const res = await fetch("/api/admin/digest/preview", { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}`);
+      setPreview(await res.json());
+    } catch (err) {
+      toast({ title: "Preview failed", description: String((err as Error).message), variant: "destructive" });
+    }
+  }
+
+  async function testSend() {
+    setBusy("test");
+    try {
+      const res = await apiRequest("POST", "/api/admin/digest/test", {});
+      const json = await res.json();
+      toast({ title: `Test digest sent to ${json.to}` });
+    } catch (err) {
+      toast({ title: "Test failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function runNow() {
+    if (!window.confirm(`Send this week's digest to ${st?.subscribers ?? "all"} subscribers now? Large lists send in batches — run again (or let the hourly cron continue) until remaining hits 0.`)) return;
+    setBusy("run");
+    try {
+      const res = await apiRequest("POST", "/api/admin/digest/run-now", {});
+      const json = await res.json();
+      const d = json.digest;
+      toast({ title: typeof d === "string" ? `Digest: ${d}` : `Digest: ${d.sent} sent, ${d.failed} failed, ${d.remaining} remaining` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/digest/status"] });
+    } catch (err) {
+      toast({ title: "Run failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <div className="bg-secondary/30 border border-primary/30 rounded-2xl p-6 space-y-3">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-[280px]">
+          <h2 className="text-xl font-black">Weekly events digest — Fridays 1 PM ET</h2>
+          <p className="text-sm text-muted-foreground mt-2">
+            Every active subscriber gets the next 7 days of events (their region first) with rotating sponsored
+            slots from paid bookings. Rides the hourly cron; big lists send in batches of 350 across ticks.
+          </p>
+          {st && (
+            <p className="text-xs text-muted-foreground mt-2">
+              {st.subscribers} subscribers · {st.upcomingEvents} events in the next 7 days ·
+              {st.sponsors.length > 0 ? ` sponsors this week: ${st.sponsors.map((s) => s.name).join(", ")}` : " no eligible sponsors this week"}
+              {st.doneWeek === st.week && <span className="text-green-400"> · sent this week ✓</span>}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <label className="flex items-center gap-2 text-sm">
+            <Switch checked={st?.enabled ?? false} disabled={busy !== ""} onCheckedChange={(v) => save({ enabled: v })} data-testid="switch-digest-enabled" />
+            {st?.enabled ? <span className="text-green-400 font-bold">ON</span> : <span className="text-white/50">OFF</span>}
+          </label>
+          <Select value={String(st?.sponsorSlots ?? 2)} onValueChange={(v) => save({ sponsorSlots: Number(v) })}>
+            <SelectTrigger className="h-9 w-40 bg-black/30 border-white/10 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent className="bg-secondary border-white/10 text-white">
+              {[0, 1, 2, 3].map((n) => <SelectItem key={n} value={String(n)}>{n} sponsor slot{n === 1 ? "" : "s"}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" onClick={openPreview} className="border-white/20 text-white/80" data-testid="button-digest-preview">Preview</Button>
+          <Button size="sm" variant="outline" onClick={testSend} disabled={busy !== ""} className="border-white/20 text-white/80" data-testid="button-digest-test">
+            {busy === "test" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Test send"}
+          </Button>
+          <Button size="sm" onClick={runNow} disabled={busy !== "" || !st?.enabled} className="bg-primary hover:bg-primary/90" data-testid="button-digest-run">
+            {busy === "run" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Send now"}
+          </Button>
+        </div>
+      </div>
+      <Dialog open={preview !== null} onOpenChange={() => setPreview(null)}>
+        <DialogContent className="max-w-2xl bg-secondary border-white/10" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader><DialogTitle className="text-white">Preview — {preview?.subject}</DialogTitle></DialogHeader>
+          {preview && <iframe title="digest preview" tabIndex={-1} srcDoc={preview.html} className="w-full bg-white rounded-lg" style={{ height: "62vh", border: 0 }} />}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function EmailScheduleTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -2121,6 +2241,7 @@ function EmailScheduleTab() {
 
   return (
     <div className="space-y-6">
+      <WeeklyDigestCard />
       <div className="bg-secondary/30 border border-white/10 rounded-2xl p-6 space-y-3">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex-1 min-w-[280px]">

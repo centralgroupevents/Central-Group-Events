@@ -3394,6 +3394,252 @@ Return every field you can confidently determine. Set null for any field the ima
   }
 
   // Public, secret-protected. Pinged daily at 9am ET by cron-job.org.
+  // ── Weekly events digest (Fridays 1 PM ET) ───────────────────────────
+  // One email per subscriber per week: the next 7 days of events grouped by
+  // region (the subscriber's own region first), with rotating sponsored
+  // slots filled from paid bookings whose event is coming up. Rides the
+  // existing blast machinery (open/click tracking, compliance footer,
+  // one-click unsubscribe). Gmail-friendly: at most DIGEST_MAX_PER_TICK
+  // sends per cron tick; a cursor continues on later ticks until the list
+  // is covered, so any list size works without tripping daily caps.
+  const DIGEST_MAX_PER_TICK = 350;
+
+  function digestRegionOf(raw: string | null | undefined): string {
+    const r = (raw || "").toLowerCase();
+    if (r.includes("north")) return "North NJ";
+    if (r.includes("central")) return "Central NJ";
+    if (r.includes("south")) return "South NJ";
+    return "Across NJ";
+  }
+
+  /** Most recent Friday in ET — the digest's week key (YYYY-MM-DD). */
+  function currentDigestWeek(): string {
+    const today = todayInET();
+    const [y, m, d] = today.split("-").map(Number);
+    const dow = new Date(Date.UTC(y, m - 1, d, 12)).getUTCDay(); // 0=Sun…5=Fri
+    return shiftIsoDate(today, -((dow - 5 + 7) % 7));
+  }
+
+  function hourInET(): number {
+    return Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hour12: false }).format(new Date())) % 24;
+  }
+
+  function digestDateLabel(iso: string): string {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  }
+
+  async function buildDigestData() {
+    const today = todayInET();
+    const until = shiftIsoDate(today, 7);
+    const all = await storage.getEvents();
+    const upcoming = all
+      .map((e) => ({ e, iso: parseFlexibleWcDate(e.date) as string | null }))
+      .filter((x): x is { e: (typeof all)[number]; iso: string } => !!x.iso && x.iso! >= today && x.iso! <= until)
+      .sort((a, b) => a.iso.localeCompare(b.iso));
+
+    // Sponsors: paid, not cancelled, event within 10 days; least recently
+    // featured first (rotation log in app_settings), stable for the week.
+    const slots = Math.max(0, parseInt((await storage.getSetting("digest.sponsorSlots")) || "2", 10) || 0);
+    let weekSponsorIds: number[] = [];
+    try { weekSponsorIds = JSON.parse((await storage.getSetting("digest.weekSponsors")) || "[]"); } catch { /* fresh */ }
+    const bookings = await storage.getBookings();
+    const eligible = bookings.filter((b) => {
+      if (!b.paidAt || (b.status && b.status.toLowerCase() === "cancelled")) return false;
+      const iso = parseFlexibleWcDate(b.eventDate);
+      return !!iso && iso >= today && iso <= shiftIsoDate(today, 10);
+    });
+    let sponsors = eligible.filter((b) => weekSponsorIds.includes(b.id));
+    if (sponsors.length === 0 && eligible.length > 0 && slots > 0) {
+      let log: Record<string, string> = {};
+      try { log = JSON.parse((await storage.getSetting("digest.sponsorLog")) || "{}"); } catch { /* fresh */ }
+      eligible.sort((a, b) => (log[String(a.id)] || "").localeCompare(log[String(b.id)] || ""));
+      sponsors = eligible.slice(0, slots);
+      for (const s of sponsors) log[String(s.id)] = new Date().toISOString();
+      await storage.setSetting("digest.sponsorLog", JSON.stringify(log));
+      await storage.setSetting("digest.weekSponsors", JSON.stringify(sponsors.map((s) => s.id)));
+    }
+    return { upcoming, sponsors };
+  }
+
+  function buildDigestHtml(
+    data: Awaited<ReturnType<typeof buildDigestData>>,
+    firstRegion?: string | null,
+  ): { subject: string; html: string } {
+    const { upcoming, sponsors } = data;
+    const byRegion: Record<string, typeof upcoming> = {};
+    for (const x of upcoming) (byRegion[digestRegionOf(x.e.region)] ??= []).push(x);
+    const regionOrder = ["North NJ", "Central NJ", "South NJ", "Across NJ"];
+    const preferred = digestRegionOf(firstRegion);
+    regionOrder.sort((a, b) => (a === preferred ? -1 : 0) - (b === preferred ? 1 : 0));
+
+    const go = (url: string, eventId?: number) =>
+      `https://centralgroupevents.com/go?url=${encodeURIComponent(url)}${eventId ? `&eventId=${eventId}` : ""}`;
+
+    const sponsorHtml = sponsors.map((b) => `
+      <div style="border:1px solid #e8ddf5;background:#faf7ff;border-radius:12px;padding:16px 18px;margin:0 0 14px">
+        <p style="margin:0 0 6px;font-size:10px;letter-spacing:2px;color:#8B2FC9;font-weight:bold">SPONSORED</p>
+        <p style="margin:0 0 4px;font-size:17px;font-weight:bold;color:#1a1a1a">${escapeHtml(b.eventName || b.venueName)}</p>
+        <p style="margin:0;font-size:13.5px;color:#555">${escapeHtml([b.venueName, b.city, b.eventDate, b.eventTime].filter(Boolean).join(" · "))}</p>
+        ${b.instagramHandle ? `<p style="margin:8px 0 0"><a href="${go(`https://instagram.com/${b.instagramHandle.replace(/^@/, "")}`)}" style="color:#8B2FC9;font-size:13.5px;font-weight:bold">See the event →</a></p>` : ""}
+      </div>`).join("");
+
+    const sections = regionOrder
+      .filter((r) => (byRegion[r] || []).length > 0)
+      .map((r) => `
+        <h2 style="margin:28px 0 10px;font-size:14px;letter-spacing:2px;color:#8B2FC9;text-transform:uppercase">${r}</h2>
+        ${(byRegion[r] || []).map(({ e, iso }) => `
+          <div style="padding:10px 0;border-bottom:1px solid #f0ecf5">
+            <p style="margin:0 0 2px;font-size:15.5px;font-weight:bold;color:#1a1a1a">
+              ${e.ticketLink ? `<a href="${go(e.ticketLink, e.id)}" style="color:#1a1a1a;text-decoration:none">${escapeHtml(e.title)}</a>` : escapeHtml(e.title)}
+            </p>
+            <p style="margin:0;font-size:13px;color:#666">${escapeHtml([digestDateLabel(iso), e.eventTime, e.venue, e.city].filter(Boolean).join(" · "))}</p>
+          </div>`).join("")}`).join("");
+
+    const weekLabel = digestDateLabel(todayInET());
+    const subject = `This Weekend in NJ — ${upcoming.length} events (${weekLabel})`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 28px 22px; background:#ffffff; color:#1a1a1a;">
+        <p style="margin:0 0 4px;font-size:11px;letter-spacing:2px;color:#8B2FC9;font-weight:bold">CENTRAL GROUP EVENTS</p>
+        <h1 style="margin:0 0 6px;font-size:26px">This Weekend in NJ</h1>
+        <p style="margin:0 0 22px;color:#666;font-size:14px">${upcoming.length} events across New Jersey over the next 7 days.</p>
+        ${sponsorHtml}
+        ${sections || '<p style="color:#666">The new list is loading — check <a href="https://centralgroupevents.com/things-to-do-in-nj" style="color:#8B2FC9">the live calendar</a>.</p>'}
+        <p style="text-align:center;margin:30px 0 6px">
+          <a href="https://centralgroupevents.com/things-to-do-in-nj" style="display:inline-block;padding:13px 30px;background:#8B2FC9;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14.5px">See the full list →</a>
+        </p>
+      </div>`;
+    return { subject, html };
+  }
+
+  /** Cron hook: start Fridays at/after 1 PM ET; continue on later ticks
+   *  until every active subscriber is covered for the week. */
+  async function runWeeklyDigestTick(force = false): Promise<Record<string, unknown>> {
+    if ((await storage.getSetting("digest.enabled")) !== "true") return { digest: "disabled" };
+    const week = currentDigestWeek();
+    if ((await storage.getSetting("digest.doneWeek")) === week) return { digest: "done for the week" };
+    const started = (await storage.getSetting("digest.week")) === week;
+    if (!started) {
+      const isFriday = todayInET() === week;
+      if (!force && !(isFriday && hourInET() >= 13)) return { digest: "waiting for Friday 1 PM ET" };
+      await storage.setSetting("digest.week", week);
+      await storage.setSetting("digest.cursor", "0");
+      await storage.setSetting("digest.weekSponsors", "[]");
+      await storage.setSetting("digest.blastId", "");
+    }
+    const data = await buildDigestData();
+    const subs = (await storage.listActiveSubscribers()).sort((a, b) => a.id - b.id);
+    let blastId = parseInt((await storage.getSetting("digest.blastId")) || "0", 10);
+    if (!blastId) {
+      blastId = await storage.createEmailBlast("weekly-digest", `This Weekend in NJ (${week})`, subs.length, null);
+      await storage.setSetting("digest.blastId", String(blastId));
+    }
+    const cursor = parseInt((await storage.getSetting("digest.cursor")) || "0", 10);
+    const batch = subs.filter((s) => s.id > cursor).slice(0, DIGEST_MAX_PER_TICK);
+    let lastId = cursor;
+    const reason = "You're receiving this because you subscribed to the weekly newsletter at centralgroupevents.com.";
+    let sent = 0, failed = 0;
+    for (const sub of batch) {
+      const to = sub.email.toLowerCase().trim();
+      try {
+        const { subject, html } = buildDigestHtml(data, sub.region);
+        const wrapped = wrapEmailLinks(`${html}${complianceFooter(to, reason, { dark: false })}`, blastId, to);
+        await transporter.sendMail({
+          from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+          to,
+          subject,
+          html: appendTrackingPixel(wrapped, blastId, to),
+          headers: listUnsubscribeHeaders(to),
+        });
+        sent++;
+      } catch (err) {
+        failed++;
+        console.error(`[digest] send to ${to} failed:`, err instanceof Error ? err.message.slice(0, 200) : err);
+      }
+      lastId = sub.id;
+      await storage.setSetting("digest.cursor", String(sub.id));
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    const remaining = subs.filter((s) => s.id > lastId).length;
+    if (remaining === 0) await storage.setSetting("digest.doneWeek", week);
+    return { digest: { week, sent, failed, remaining } };
+  }
+
+  app.get("/api/admin/digest/status", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const subs = await storage.listActiveSubscribers();
+      const data = await buildDigestData();
+      res.json({
+        enabled: (await storage.getSetting("digest.enabled")) === "true",
+        sponsorSlots: parseInt((await storage.getSetting("digest.sponsorSlots")) || "2", 10),
+        week: currentDigestWeek(),
+        doneWeek: await storage.getSetting("digest.doneWeek"),
+        cursor: await storage.getSetting("digest.cursor"),
+        subscribers: subs.length,
+        upcomingEvents: data.upcoming.length,
+        sponsors: data.sponsors.map((b) => ({ id: b.id, name: b.eventName || b.venueName, eventDate: b.eventDate })),
+      });
+    } catch (err) {
+      console.error("[digest/status]", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/digest/settings", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { enabled, sponsorSlots } = (req.body ?? {}) as { enabled?: boolean; sponsorSlots?: number };
+      if (typeof enabled === "boolean") await storage.setSetting("digest.enabled", enabled ? "true" : "false");
+      if (typeof sponsorSlots === "number" && sponsorSlots >= 0 && sponsorSlots <= 5) {
+        await storage.setSetting("digest.sponsorSlots", String(Math.floor(sponsorSlots)));
+      }
+      res.json({ saved: true });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/digest/preview", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const data = await buildDigestData();
+      const { subject, html } = buildDigestHtml(data, String(req.query.region || "") || null);
+      res.json({ subject, html: `${html}${complianceFooter("preview@example.com", "You're receiving this because you subscribed to the weekly newsletter at centralgroupevents.com.", { dark: false })}` });
+    } catch (err) {
+      console.error("[digest/preview]", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Force a tick now (skips the Friday-1PM gate, keeps the once-per-week
+  // dedupe and the per-tick send cap — click again to continue a big list).
+  app.post("/api/admin/digest/run-now", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      res.json(await runWeeklyDigestTick(true));
+    } catch (err) {
+      console.error("[digest/run-now]", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // One test email to the CGE inbox — the exact Friday product.
+  app.post("/api/admin/digest/test", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const data = await buildDigestData();
+      const { subject, html } = buildDigestHtml(data, null);
+      const to = "centralgroupevents@gmail.com";
+      await transporter.sendMail({
+        from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
+        to,
+        subject: `[TEST] ${subject}`,
+        html: `${html}${complianceFooter(to, "Test send of the weekly digest.", { dark: false })}`,
+      });
+      res.json({ sent: true, to });
+    } catch (err) {
+      console.error("[digest/test]", err);
+      const detail = err instanceof Error ? err.message.slice(0, 200) : "unknown";
+      res.status(500).json({ message: `Test send failed: ${detail}` });
+    }
+  });
+
   app.get("/api/cron/scheduled-emails", async (req: Request, res: Response) => {
     try {
       const secret = (req.query.secret as string) || "";
@@ -3411,7 +3657,15 @@ Return every field you can confidently determine. Set null for any field the ima
       } catch (err) {
         console.error("[cron] btl cadence tick failed:", err);
       }
-      res.json({ ...result, btl });
+      // Weekly digest rides the hourly tick too — it gates itself to
+      // Friday 1 PM ET and continues chunked sends on later ticks.
+      let digest: unknown = null;
+      try {
+        digest = await runWeeklyDigestTick();
+      } catch (err) {
+        console.error("[cron] weekly digest tick failed:", err);
+      }
+      res.json({ ...result, btl, digest });
     } catch (err) {
       console.error("[cron/scheduled-emails] error:", err);
       res.status(500).json({ message: "Internal server error" });
