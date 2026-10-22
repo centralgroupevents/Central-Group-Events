@@ -357,6 +357,26 @@ export async function registerRoutes(
     <priority>0.95</priority>
   </url>
   <url>
+    <loc>https://centralgroupevents.com/events/this-weekend-in-nj</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
+  </url>
+  <url>
+    <loc>https://centralgroupevents.com/events/north-nj</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://centralgroupevents.com/events/central-nj</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://centralgroupevents.com/events/south-nj</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://centralgroupevents.com/faq</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
@@ -1991,6 +2011,17 @@ Return every field you can confidently determine. Set null for any field the ima
         duplicates: result.duplicates,
         invalid,
       });
+      // The weekly import turns the list over — tell search engines to
+      // recrawl the event pages right away so churn reads as freshness.
+      if (result.imported > 0) {
+        pingIndexNow([
+          "https://centralgroupevents.com/things-to-do-in-nj",
+          "https://centralgroupevents.com/events/this-weekend-in-nj",
+          "https://centralgroupevents.com/events/north-nj",
+          "https://centralgroupevents.com/events/central-nj",
+          "https://centralgroupevents.com/events/south-nj",
+        ]).catch(() => {});
+      }
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }

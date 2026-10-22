@@ -87,6 +87,11 @@ export const pages = pgTable("pages", {
   adSlotMid: text("ad_slot_mid"),
   adSlotBottom: text("ad_slot_bottom"),
   adSlotSidebar: text("ad_slot_sidebar"),
+  // Second sticky sidebar slot — two sponsors can hold the rail at once.
+  adSlotSidebar2: text("ad_slot_sidebar2"),
+  // Rotating photo slot: JSON { images: string[], linkUrl, alt, caption } —
+  // unlimited images, cycled client-side so several clients can share it.
+  adSlotCarousel: text("ad_slot_carousel"),
   // Landing-page CMS fields (used for admin-created pages with their own /:slug URL).
   // The legacy /things-to-do-in-nj row ignores these and keeps using its hardcoded
   // route + component; new admin-created pages render dynamically via these fields.
@@ -582,6 +587,8 @@ export const insertPageSchema = createInsertSchema(pages).omit({ id: true, updat
   adSlotMid: z.string().optional().nullable(),
   adSlotBottom: z.string().optional().nullable(),
   adSlotSidebar: z.string().optional().nullable(),
+  adSlotSidebar2: z.string().optional().nullable(),
+  adSlotCarousel: z.string().optional().nullable(),
 });
 
 // ─── Types ────────────────────────────────────────────────────────────────

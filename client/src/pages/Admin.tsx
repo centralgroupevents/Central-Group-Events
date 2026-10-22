@@ -8429,6 +8429,12 @@ function ThisWeekTab() {
   const [adMid, setAdMid] = useState<AdSlotData>(emptyAdSlot());
   const [adBottom, setAdBottom] = useState<AdSlotData>(emptyAdSlot());
   const [adSidebar, setAdSidebar] = useState<AdSlotData>(emptyAdSlot());
+  const [adSidebar2, setAdSidebar2] = useState<AdSlotData>(emptyAdSlot());
+  // Carousel slot: unlimited rotating photos (one URL per line) + one link.
+  const [carouselImages, setCarouselImages] = useState("");
+  const [carouselLink, setCarouselLink] = useState("");
+  const [carouselAlt, setCarouselAlt] = useState("");
+  const [carouselCaption, setCarouselCaption] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [saveError, setSaveError] = useState<{ status: number | null; reason: string; raw: string } | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -8442,6 +8448,16 @@ function ThisWeekTab() {
       setAdMid(parseAdSlot(page.adSlotMid));
       setAdBottom(parseAdSlot(page.adSlotBottom));
       setAdSidebar(parseAdSlot(page.adSlotSidebar));
+      setAdSidebar2(parseAdSlot(page.adSlotSidebar2));
+      try {
+        const c = JSON.parse(page.adSlotCarousel || "null");
+        if (c && Array.isArray(c.images)) {
+          setCarouselImages(c.images.join("\n"));
+          setCarouselLink(c.linkUrl || "");
+          setCarouselAlt(c.alt || "");
+          setCarouselCaption(c.caption || "");
+        }
+      } catch { /* leave empty */ }
       setHydrated(true);
     }
   }, [page, hydrated]);
@@ -8456,6 +8472,12 @@ function ThisWeekTab() {
         adSlotMid: serializeAdSlot(adMid),
         adSlotBottom: serializeAdSlot(adBottom),
         adSlotSidebar: serializeAdSlot(adSidebar),
+        adSlotSidebar2: serializeAdSlot(adSidebar2),
+        adSlotCarousel: (() => {
+          const images = carouselImages.split("\n").map((s) => s.trim()).filter(Boolean);
+          if (images.length === 0) return null;
+          return JSON.stringify({ images, linkUrl: carouselLink.trim(), alt: carouselAlt.trim(), caption: carouselCaption.trim() });
+        })(),
       };
       const res = await apiRequest("PUT", `/api/pages/${PAGE_SLUG}`, body);
       return res.json();
@@ -8569,7 +8591,23 @@ function ThisWeekTab() {
           </div>
           <AdSlotEditor label="Top banner" value={adTop} onChange={setAdTop} hint="Wide banner above the page. Recommended 1600×400 (4:1) JPG/PNG." />
           <AdSlotEditor label="Mid-list (in-feed)" value={adMid} onChange={setAdMid} hint="Appears as a row inside the events list. Recommended 1200×400 (3:1) JPG/PNG." />
-          <AdSlotEditor label="Sidebar (sticky on desktop)" value={adSidebar} onChange={setAdSidebar} hint="Horizontal rectangle, sticks alongside the events list. Recommended 600×300 (2:1) JPG/PNG." />
+          <AdSlotEditor label="Sidebar slot #1 (sticky on desktop)" value={adSidebar} onChange={setAdSidebar} hint="Horizontal rectangle, sticks alongside the events list. Recommended 600×300 (2:1) JPG/PNG." />
+          <AdSlotEditor label="Sidebar slot #2 (sticky on desktop)" value={adSidebar2} onChange={setAdSidebar2} hint="Second sticky sponsor card, renders under slot #1. Same 600×300 (2:1) format." />
+          <div className="bg-black/20 border border-white/10 rounded-2xl p-5 space-y-3">
+            <div>
+              <h4 className="font-bold text-white">Rotating photo slot (unlimited photos)</h4>
+              <p className="text-xs text-muted-foreground mt-1">For multiple clients sharing one slot: paste one image URL per line — no limit. Photos fade through every few seconds, starting from a random one each page load so every client gets first position. Renders under the sticky slots.</p>
+            </div>
+            <div>
+              <Label className="text-white/70 text-xs">Image URLs (one per line)</Label>
+              <Textarea value={carouselImages} onChange={(e) => setCarouselImages(e.target.value)} placeholder={"https://res.cloudinary.com/…/client1.jpg\nhttps://res.cloudinary.com/…/client2.jpg"} className="bg-black/30 border-white/10 min-h-[110px] font-mono text-xs" data-testid="input-carousel-images" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div><Label className="text-white/70 text-xs">Link URL (where a click goes)</Label><Input value={carouselLink} onChange={(e) => setCarouselLink(e.target.value)} className="bg-black/30 border-white/10 h-9" /></div>
+              <div><Label className="text-white/70 text-xs">Alt text</Label><Input value={carouselAlt} onChange={(e) => setCarouselAlt(e.target.value)} className="bg-black/30 border-white/10 h-9" /></div>
+              <div><Label className="text-white/70 text-xs">Caption (optional)</Label><Input value={carouselCaption} onChange={(e) => setCarouselCaption(e.target.value)} className="bg-black/30 border-white/10 h-9" /></div>
+            </div>
+          </div>
           <AdSlotEditor label="Bottom" value={adBottom} onChange={setAdBottom} hint="Wide banner below the page. Recommended 1600×400 (4:1) JPG/PNG." />
         </div>
       </div>
