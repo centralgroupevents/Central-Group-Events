@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
@@ -32,6 +32,69 @@ function parseAdSlot(raw: string | null | undefined): AdSlot | null {
   } catch {
     return null;
   }
+}
+
+interface AdCarousel {
+  images?: string[];
+  linkUrl?: string;
+  alt?: string;
+  caption?: string;
+}
+
+function parseAdCarousel(raw: string | null | undefined): AdCarousel | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.images) && parsed.images.filter(Boolean).length > 0) {
+      return { ...parsed, images: parsed.images.filter(Boolean) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Rotating sponsored photo slot — any number of images, cycled with a fade.
+// Starts at a random image per page load so every client gets fair
+// first-position time.
+function AdPhotoCarousel({ slot }: { slot: AdCarousel | null }) {
+  const images = slot?.images ?? [];
+  const [idx, setIdx] = useState(() => (images.length > 0 ? Math.floor(Math.random() * images.length) : 0));
+  useEffect(() => {
+    if (images.length < 2) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % images.length), 3500);
+    return () => clearInterval(t);
+  }, [images.length]);
+  if (!slot || images.length === 0) return null;
+  const frame = (
+    <div className="relative aspect-[2/1] overflow-hidden rounded-2xl border border-white/10" data-testid="ad-slot-carousel">
+      {images.map((src, i) => (
+        <img
+          key={`${i}-${src.slice(-24)}`}
+          src={src}
+          alt={slot.alt || "Sponsored"}
+          loading={i === idx ? "eager" : "lazy"}
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700"
+          style={{ opacity: i === idx ? 1 : 0 }}
+        />
+      ))}
+      {images.length > 1 && (
+        <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
+          {images.map((_, i) => (
+            <span key={i} className={`w-1.5 h-1.5 rounded-full ${i === idx ? "bg-white" : "bg-white/35"}`} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+  return (
+    <div>
+      {slot.linkUrl ? (
+        <a href={slot.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={slot.alt || "Sponsored"}>{frame}</a>
+      ) : frame}
+      <AdCaption caption={slot.caption} />
+    </div>
+  );
 }
 
 function AdCaption({ caption }: { caption: string | undefined }) {
@@ -196,6 +259,8 @@ export default function ThingsToDo() {
   const adMid = parseAdSlot(page?.adSlotMid);
   const adBottom = parseAdSlot(page?.adSlotBottom);
   const adSidebar = parseAdSlot((page as any)?.adSlotSidebar);
+  const adSidebar2 = parseAdSlot((page as any)?.adSlotSidebar2);
+  const adCarousel = parseAdCarousel((page as any)?.adSlotCarousel);
 
   const heroTitle = page?.title?.trim() || "Things to Do in NJ This Week";
   const description = "Fun and creative events across North, Central, and South New Jersey — curated weekly. Brunches, concerts, day parties, dance nights, and more.";
@@ -301,20 +366,30 @@ export default function ThingsToDo() {
               />
             </div>
 
-            {adSidebar && adSidebar.imageUrl && (
+            {((adSidebar && adSidebar.imageUrl) || (adSidebar2 && adSidebar2.imageUrl) || adCarousel) && (
               <aside className="lg:w-72 lg:flex-shrink-0" data-testid="ad-slot-sidebar">
-                <div className="lg:sticky lg:top-24">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/40 mb-2 px-1">Sponsored</p>
-                  {adSidebar.linkUrl ? (
-                    <a href={adSidebar.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={adSidebar.alt || "Sponsored"} className="block aspect-[2/1] overflow-hidden rounded-2xl border border-white/10">
-                      <img src={adSidebar.imageUrl} alt={adSidebar.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
-                    </a>
-                  ) : (
-                    <div className="aspect-[2/1] overflow-hidden rounded-2xl border border-white/10">
-                      <img src={adSidebar.imageUrl} alt={adSidebar.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
-                    </div>
+                {/* Two sticky sponsor cards + the rotating photo slot travel
+                    together as the list scrolls. On mobile the rail stacks
+                    under the list so events stay first. */}
+                <div className="lg:sticky lg:top-24 space-y-6">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/40 px-1">Sponsored</p>
+                  {[adSidebar, adSidebar2].map((slot, i) =>
+                    slot && slot.imageUrl ? (
+                      <div key={i} data-testid={`ad-slot-sidebar-${i + 1}`}>
+                        {slot.linkUrl ? (
+                          <a href={slot.linkUrl} target="_blank" rel="noopener noreferrer sponsored" aria-label={slot.alt || "Sponsored"} className="block aspect-[2/1] overflow-hidden rounded-2xl border border-white/10">
+                            <img src={slot.imageUrl} alt={slot.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
+                          </a>
+                        ) : (
+                          <div className="aspect-[2/1] overflow-hidden rounded-2xl border border-white/10">
+                            <img src={slot.imageUrl} alt={slot.alt || "Sponsored"} className="w-full h-full object-cover" loading="lazy" />
+                          </div>
+                        )}
+                        <AdCaption caption={slot.caption} />
+                      </div>
+                    ) : null,
                   )}
-                  <AdCaption caption={adSidebar.caption} />
+                  <AdPhotoCarousel slot={adCarousel} />
                 </div>
               </aside>
             )}
@@ -337,6 +412,22 @@ export default function ThingsToDo() {
         {/* Browse-by sections — internal links to all topic landing pages.
             Topical-authority signal for Google, navigation aid for users. */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pt-12 space-y-12 border-t border-white/5 mt-12">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Browse by region</h2>
+            <p className="text-muted-foreground text-sm mb-6">Weekly-updated landing pages for each part of the state.</p>
+            <div className="flex flex-wrap gap-3 mb-10">
+              {[
+                ["this-weekend-in-nj", "This Weekend in NJ"],
+                ["north-nj", "Events in North Jersey"],
+                ["central-nj", "Events in Central Jersey"],
+                ["south-nj", "Events in South Jersey"],
+              ].map(([slug, label]) => (
+                <a key={slug} href={`/events/${slug}`} className="text-sm px-4 py-2 rounded-full border border-white/15 text-white/80 hover:border-primary hover:text-primary transition-colors" data-testid={`browse-region-${slug}`}>
+                  {label} →
+                </a>
+              ))}
+            </div>
+          </div>
           <div>
             <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Browse by city</h2>
             <p className="text-muted-foreground text-sm mb-6">Jump straight to the events happening in any New Jersey city.</p>

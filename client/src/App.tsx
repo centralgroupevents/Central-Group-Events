@@ -16,6 +16,7 @@ import Welcome from "@/pages/Welcome";
 import AcceptInvite from "@/pages/AcceptInvite";
 import Book from "@/pages/Book";
 import ThingsToDo from "@/pages/ThingsToDo";
+import RegionEvents from "@/pages/RegionEvents";
 import TopicLanding from "@/pages/TopicLanding";
 import Guides from "@/pages/Guides";
 import SubmitWatchParty from "@/pages/SubmitWatchParty";
@@ -38,6 +39,7 @@ function Router() {
       <Route path="/blog" component={Blog} />
       <Route path="/blog/:slug" component={BlogPost} />
       <Route path="/things-to-do-in-nj" component={ThingsToDo} />
+      <Route path="/events/:slug" component={RegionEvents} />
       <Route path="/guides" component={Guides} />
       <Route path="/faq" component={FAQ} />
       <Route path="/welcome" component={Welcome} />
