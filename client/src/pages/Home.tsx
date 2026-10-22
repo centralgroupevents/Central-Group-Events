@@ -297,110 +297,50 @@ export default function Home() {
             transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
             className="mt-12 flex flex-col sm:flex-row gap-4 justify-center items-center"
           >
-            <Button 
-              size="lg" 
+            {/* Two audiences, two doors: event-goers go straight to the list
+                (the list is also what sells the newsletter, one section down);
+                business owners land on the packages. */}
+            <Button
+              size="lg"
               className="w-full sm:w-auto h-14 px-8 text-lg rounded-2xl bg-white text-black hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105 transition-all duration-300 font-semibold"
-              asChild
+              data-testid="button-hero-events"
+              onClick={() => document.getElementById("events")?.scrollIntoView({ behavior: "smooth" })}
             >
-              <a href="/book">
-                Promote Your Event <ArrowRight className="ml-2 w-5 h-5" />
+              See This Weekend's Events <ArrowRight className="ml-2 w-5 h-5" />
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="w-full sm:w-auto h-14 px-8 text-lg rounded-2xl border-white/20 bg-white/5 backdrop-blur-md hover:bg-white/10 hover:border-white/30 transition-all duration-300"
+              data-testid="button-hero-pricing"
+              onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
+            >
+              Promote Your Event
+            </Button>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* EVENT CALENDAR SECTION */}
+      <section id="events" className="py-24">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Centered header */}
+          <motion.div {...fadeIn} className="text-center mb-10">
+            <h2 className="text-sm font-bold text-accent tracking-widest uppercase mb-3">Event Calendar</h2>
+            <h3 className="text-3xl md:text-5xl font-black mb-4">What's Happening in NJ</h3>
+            <p className="text-muted-foreground mb-6">Discover the hottest events across North, Central, and South NJ.</p>
+            <Button
+              className="rounded-full bg-accent hover:bg-accent/90 text-black font-semibold px-6 gap-2"
+              asChild
+              data-testid="button-submit-event"
+            >
+              <a href="#book">
+                <Plus className="w-4 h-4" /> Submit Your Event
               </a>
             </Button>
-            {heroSubscribed ? (
-              <span
-                className="w-full sm:w-auto h-14 px-8 text-base rounded-2xl border border-green-500/40 bg-green-500/10 text-green-400 font-semibold flex items-center justify-center"
-                data-testid="text-hero-subscribe-success"
-              >
-                You're in! Check your inbox.
-              </span>
-            ) : (
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className="w-full sm:w-auto h-14 px-8 text-lg rounded-2xl border-white/20 bg-white/5 backdrop-blur-md hover:bg-white/10 hover:border-white/30 transition-all duration-300"
-                data-testid="button-hero-newsletter"
-                onClick={() => {
-                  if (heroSubscribed) {
-                    navigate("/things-to-do-in-nj");
-                    return;
-                  }
-                  document.getElementById("newsletter")?.scrollIntoView({ behavior: "smooth" });
-                  setSubscribeModalOpen(true);
-                }}
-              >
-                Join the Weekly Newsletter
-              </Button>
-            )}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* STATS SECTION */}
-      <section className="py-12 border-y border-white/5 bg-white/[0.02]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div 
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-white/10"
-          >
-            {[
-              { num: "100+", label: "Events Promoted Weekly" },
-              { num: "15+", label: "Events Curated In-House" },
-              { num: "3x", label: "Average Attendance Increase" }
-            ].map((stat, i) => (
-              <motion.div key={i} variants={staggerItem} className="py-4 md:py-0 flex flex-col items-center justify-center">
-                <h3 className="text-4xl md:text-5xl font-black text-accent mb-2 font-display">{stat.num}</h3>
-                <p className="text-muted-foreground font-medium uppercase tracking-wider text-sm">{stat.label}</p>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* WHAT WE DO SECTION */}
-      <section id="services" className="py-24 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div {...fadeIn} className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-sm font-bold text-primary tracking-widest uppercase mb-3">What We Do</h2>
-            <h3 className="text-3xl md:text-5xl font-black mb-6">We're Not Just a Promo Agency. <br/><span className="text-muted-foreground">We're a Cultural Event Platform.</span></h3>
-            <p className="text-lg text-muted-foreground">
-              CGE is both a promotion agency and a media brand. We don't just post flyers — we distribute your event to an active, engaged NJ audience.
-            </p>
           </motion.div>
 
-          <motion.div 
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: "-100px" }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-          >
-            {[
-              { icon: MessageSquare, title: "Weekly Newsletter", desc: "Hundreds of active NJ subscribers get the weekend event lineup every Thursday. Your event lands directly in their inbox — not lost in a feed algorithm." },
-              { icon: Calendar, title: "Curated Event Calendar", desc: "Your event featured on our high-traffic NJ event hub visited by thousands." },
-              { icon: Megaphone, title: "Paid Ads + Organic", desc: "We combine highly targeted Meta ads with grassroots community distribution." },
-              { icon: Video, title: "Reel Production", desc: "Scroll-stopping, high-energy Instagram reels that drive real ticket sales." },
-              { icon: Ticket, title: "SMS Blast Network", desc: "Direct SMS campaigns to opted-in NJ nightlife fans. Texts get opened. Posts get scrolled past." },
-              { icon: Users, title: "Influencer Collabs", desc: "We tap in with local NJ influencers and tastemakers with real audiences — people who actually move crowds, not just collect followers." }
-            ].map((service, i) => (
-              <motion.div key={i} variants={staggerItem}>
-                <Card className="bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-primary/50 transition-all duration-300 h-full group overflow-hidden relative">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-[50px] group-hover:bg-primary/20 transition-all duration-500" />
-                  <CardHeader>
-                    <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                      <service.icon className="w-6 h-6 text-primary" />
-                    </div>
-                    <CardTitle className="text-xl">{service.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground leading-relaxed">{service.desc}</p>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </motion.div>
+          <EventBrowser maxItems={10} showSeeMoreButton />
         </div>
       </section>
 
@@ -408,9 +348,9 @@ export default function Home() {
       <section id="newsletter" className="py-24 bg-gradient-to-b from-transparent to-primary/5 relative border-y border-white/5">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <motion.div {...fadeIn} className="glass-panel p-8 md:p-12 rounded-3xl box-glow text-center">
-            <h2 className="text-3xl md:text-4xl font-black mb-4">The NJ Weekend Plug.</h2>
+            <h2 className="text-3xl md:text-4xl font-black mb-4">That list, in your inbox every Friday.</h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Get the hottest events across North, Central, and South NJ delivered to your inbox every week. No spam. Just the best events.
+              The events you just scrolled — delivered every Friday at 1 PM, before you make weekend plans. North, Central, and South NJ. One email a week, no spam, one-click unsubscribe.
             </p>
 
             {newsletterSubscribed ? (
@@ -499,67 +439,6 @@ export default function Home() {
           </motion.div>
         </div>
       </section>
-
-      {/* JUNETEENTH FEATURED BANNER — auto-hides after June 22 each year so
-          the homepage doesn't carry a stale promo. Footer link stays year-round. */}
-      {(() => {
-        const today = new Date();
-        const cutoff = new Date(today.getFullYear(), 5, 22); // June 22
-        if (today > cutoff) return null;
-        return (
-          <section className="py-10">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-              <a
-                href="/juneteenth-in-nj"
-                className="block group rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-r from-red-700/30 via-black to-emerald-700/30 hover:border-white/30 transition-colors"
-                data-testid="link-juneteenth-feature"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] items-center gap-6 p-6 md:p-8">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-widest font-bold text-amber-300 mb-2">This Week · June 19</p>
-                    <h3 className="text-2xl md:text-3xl font-black text-white mb-2">Juneteenth in NJ</h3>
-                    <p className="text-sm md:text-base text-white/70 max-w-xl">
-                      Cookouts, block parties, parades, and celebrations across New Jersey. The full curated list of where to celebrate Juneteenth in NJ.
-                    </p>
-                  </div>
-                  <div className="inline-flex items-center gap-2 text-amber-300 font-semibold text-sm md:text-base group-hover:gap-3 transition-all">
-                    See the list <ArrowRight className="w-4 h-4" />
-                  </div>
-                </div>
-              </a>
-            </div>
-          </section>
-        );
-      })()}
-
-      {/* EVENT CALENDAR SECTION */}
-      <section id="events" className="py-24">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Centered header */}
-          <motion.div {...fadeIn} className="text-center mb-10">
-            <h2 className="text-sm font-bold text-accent tracking-widest uppercase mb-3">Event Calendar</h2>
-            <h3 className="text-3xl md:text-5xl font-black mb-4">What's Happening in NJ</h3>
-            <p className="text-muted-foreground mb-6">Discover the hottest events across North, Central, and South NJ.</p>
-            <Button
-              className="rounded-full bg-accent hover:bg-accent/90 text-black font-semibold px-6 gap-2"
-              asChild
-              data-testid="button-submit-event"
-            >
-              <a href="#book">
-                <Plus className="w-4 h-4" /> Submit Your Event
-              </a>
-            </Button>
-          </motion.div>
-
-          <EventBrowser maxItems={10} showSeeMoreButton />
-        </div>
-      </section>
-
-      {/* EXPLORE NJ SECTION — homepage discovery for landing pages + blog posts.
-          Pulls from /api/landing-pages and /api/posts. Both strips are hidden
-          when their source list is empty so a fresh install doesn't show
-          empty sections. */}
-      <ExploreNjSection />
 
       {/* PRICING SECTION */}
       <section id="pricing" className="py-24 bg-black/50 border-t border-white/5 relative overflow-hidden">
@@ -753,6 +632,113 @@ export default function Home() {
                 <p className="text-xs text-muted-foreground">💳 Stripe payments coming soon</p>
               </div>
             </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* EXPLORE NJ SECTION — homepage discovery for landing pages + blog posts.
+          Pulls from /api/landing-pages and /api/posts. Both strips are hidden
+          when their source list is empty so a fresh install doesn't show
+          empty sections. */}
+      <ExploreNjSection />
+
+      {/* WHAT WE DO SECTION */}
+      <section id="services" className="py-24 relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div {...fadeIn} className="text-center max-w-3xl mx-auto mb-16">
+            <h2 className="text-sm font-bold text-primary tracking-widest uppercase mb-3">What We Do</h2>
+            <h3 className="text-3xl md:text-5xl font-black mb-6">We're Not Just a Promo Agency. <br/><span className="text-muted-foreground">We're a Cultural Event Platform.</span></h3>
+            <p className="text-lg text-muted-foreground">
+              CGE is both a promotion agency and a media brand. We don't just post flyers — we distribute your event to an active, engaged NJ audience.
+            </p>
+          </motion.div>
+
+          <motion.div 
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, margin: "-100px" }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          >
+            {[
+              { icon: MessageSquare, title: "Weekly Newsletter", desc: "Hundreds of active NJ subscribers get the weekend event lineup every Thursday. Your event lands directly in their inbox — not lost in a feed algorithm." },
+              { icon: Calendar, title: "Curated Event Calendar", desc: "Your event featured on our high-traffic NJ event hub visited by thousands." },
+              { icon: Megaphone, title: "Paid Ads + Organic", desc: "We combine highly targeted Meta ads with grassroots community distribution." },
+              { icon: Video, title: "Reel Production", desc: "Scroll-stopping, high-energy Instagram reels that drive real ticket sales." },
+              { icon: Ticket, title: "SMS Blast Network", desc: "Direct SMS campaigns to opted-in NJ nightlife fans. Texts get opened. Posts get scrolled past." },
+              { icon: Users, title: "Influencer Collabs", desc: "We tap in with local NJ influencers and tastemakers with real audiences — people who actually move crowds, not just collect followers." }
+            ].map((service, i) => (
+              <motion.div key={i} variants={staggerItem}>
+                <Card className="bg-white/[0.03] border-white/10 hover:bg-white/[0.06] hover:border-primary/50 transition-all duration-300 h-full group overflow-hidden relative">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-[50px] group-hover:bg-primary/20 transition-all duration-500" />
+                  <CardHeader>
+                    <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                      <service.icon className="w-6 h-6 text-primary" />
+                    </div>
+                    <CardTitle className="text-xl">{service.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground leading-relaxed">{service.desc}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* JUNETEENTH FEATURED BANNER — auto-hides after June 22 each year so
+          the homepage doesn't carry a stale promo. Footer link stays year-round. */}
+      {(() => {
+        const today = new Date();
+        const cutoff = new Date(today.getFullYear(), 5, 22); // June 22
+        if (today > cutoff) return null;
+        return (
+          <section className="py-10">
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+              <a
+                href="/juneteenth-in-nj"
+                className="block group rounded-3xl overflow-hidden border border-white/10 bg-gradient-to-r from-red-700/30 via-black to-emerald-700/30 hover:border-white/30 transition-colors"
+                data-testid="link-juneteenth-feature"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] items-center gap-6 p-6 md:p-8">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-widest font-bold text-amber-300 mb-2">This Week · June 19</p>
+                    <h3 className="text-2xl md:text-3xl font-black text-white mb-2">Juneteenth in NJ</h3>
+                    <p className="text-sm md:text-base text-white/70 max-w-xl">
+                      Cookouts, block parties, parades, and celebrations across New Jersey. The full curated list of where to celebrate Juneteenth in NJ.
+                    </p>
+                  </div>
+                  <div className="inline-flex items-center gap-2 text-amber-300 font-semibold text-sm md:text-base group-hover:gap-3 transition-all">
+                    See the list <ArrowRight className="w-4 h-4" />
+                  </div>
+                </div>
+              </a>
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* STATS SECTION */}
+      <section className="py-12 border-y border-white/5 bg-white/[0.02]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div 
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-white/10"
+          >
+            {[
+              { num: "100+", label: "Events Promoted Weekly" },
+              { num: "15+", label: "Events Curated In-House" },
+              { num: "3x", label: "Average Attendance Increase" }
+            ].map((stat, i) => (
+              <motion.div key={i} variants={staggerItem} className="py-4 md:py-0 flex flex-col items-center justify-center">
+                <h3 className="text-4xl md:text-5xl font-black text-accent mb-2 font-display">{stat.num}</h3>
+                <p className="text-muted-foreground font-medium uppercase tracking-wider text-sm">{stat.label}</p>
+              </motion.div>
+            ))}
           </motion.div>
         </div>
       </section>
