@@ -1176,7 +1176,11 @@ ${blogList || "_No recent posts yet._"}
       const ctx = await buildBtlRenderCtx();
       const tpl = await renderBtlTemplate(String(req.params.key), { name: "Jordan", contactSheetOptin: true }, ctx);
       if (!tpl) return res.status(404).json({ message: "Unknown template" });
-      res.json({ subject: tpl.subject, html: btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com")) });
+      // Real sends embed the logo as a CID attachment; the browser preview
+      // can't resolve cid:, so point it at the served file instead.
+      const html = btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com"))
+        .replace("cid:cge-logo", `${req.protocol}://${req.get("host")}/cge-logo.png`);
+      res.json({ subject: tpl.subject, html });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }
@@ -3759,7 +3763,7 @@ Return every field you can confidently determine. Set null for any field the ima
     const subject = `This Weekend in NJ — ${upcoming.length} events (${weekLabel})`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 28px 22px; background:#ffffff; color:#1a1a1a;">
-        <img src="https://centralgroupevents.com/cge-logo.png" alt="Central Group Events" width="120" style="display:block;width:120px;height:auto;margin:0 0 14px" />
+        <img src="cid:cge-logo" alt="Central Group Events" width="120" style="display:block;width:120px;height:auto;margin:0 0 14px;border:0" />
         <h1 style="margin:0 0 6px;font-size:26px">This Weekend in NJ</h1>
         <p style="margin:0 0 22px;color:#666;font-size:14px">${upcoming.length} events across New Jersey over the next 7 days.</p>
         ${adTopHtml}
@@ -3804,14 +3808,17 @@ Return every field you can confidently determine. Set null for any field the ima
     for (const sub of batch) {
       const to = sub.email.toLowerCase().trim();
       try {
+        const { cgeLogoAttachment, stripLogoImg } = await import("./btl-mailer");
+        const logo = cgeLogoAttachment();
         const { subject, html } = buildDigestHtml(data, sub.region, sub.id);
-        const wrapped = wrapEmailLinks(`${html}${complianceFooter(to, reason, { dark: false })}`, blastId, to);
+        const wrapped = wrapEmailLinks(`${logo ? html : stripLogoImg(html)}${complianceFooter(to, reason, { dark: false })}`, blastId, to);
         await transporter.sendMail({
           from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
           to,
           subject,
           html: appendTrackingPixel(wrapped, blastId, to),
           headers: listUnsubscribeHeaders(to),
+          attachments: logo ? [logo] : undefined,
         });
         sent++;
       } catch (err) {
@@ -3897,7 +3904,9 @@ Return every field you can confidently determine. Set null for any field the ima
       const data = await buildDigestData();
       // seed rotates the carousel photo — preview with ?seed=1,2,… to see the cycle.
       const { subject, html } = buildDigestHtml(data, String(req.query.region || "") || null, Number(req.query.seed) || 0);
-      res.json({ subject, html: `${html}${complianceFooter("preview@example.com", "You're receiving this because you subscribed to the weekly newsletter at centralgroupevents.com.", { dark: false })}` });
+      // cid: images only resolve inside a sent email — swap for the served file.
+      const previewHtml = html.replace("cid:cge-logo", `${req.protocol}://${req.get("host")}/cge-logo.png`);
+      res.json({ subject, html: `${previewHtml}${complianceFooter("preview@example.com", "You're receiving this because you subscribed to the weekly newsletter at centralgroupevents.com.", { dark: false })}` });
     } catch (err) {
       console.error("[digest/preview]", err);
       res.status(500).json({ message: "Internal server error" });
@@ -3921,12 +3930,15 @@ Return every field you can confidently determine. Set null for any field the ima
       const data = await buildDigestData();
       // Random seed so repeated test sends walk through the carousel photos.
       const { subject, html } = buildDigestHtml(data, null, Math.floor(Math.random() * 1000));
+      const { cgeLogoAttachment, stripLogoImg } = await import("./btl-mailer");
+      const logo = cgeLogoAttachment();
       const to = "centralgroupevents@gmail.com";
       await transporter.sendMail({
         from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
         to,
         subject: `[TEST] ${subject}`,
-        html: `${html}${complianceFooter(to, "Test send of the weekly digest.", { dark: false })}`,
+        html: `${logo ? html : stripLogoImg(html)}${complianceFooter(to, "Test send of the weekly digest.", { dark: false })}`,
+        attachments: logo ? [logo] : undefined,
       });
       res.json({ sent: true, to });
     } catch (err) {

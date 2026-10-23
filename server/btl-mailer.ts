@@ -8,9 +8,29 @@
 // Resend cannot send as an @gmail.com address (needs a verified domain).
 
 import nodemailer from "nodemailer";
+import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
 import { signToken } from "./email-compliance";
-import { btlShell, BTL_FROM_NAME, BTL_SLUG } from "./btl-emails";
+import { btlShell, BTL_FROM_NAME, BTL_SLUG, CGE_LOGO_CID } from "./btl-emails";
+
+// The wordmark ships INSIDE each email as an inline (CID) attachment, so it
+// renders in Gmail & co. without depending on the live site hosting the
+// file. Falls back to stripping the <img> if the file isn't on disk.
+export function cgeLogoAttachment(): { filename: string; path: string; cid: string; contentDisposition: "inline" } | null {
+  for (const p of [
+    path.resolve(process.cwd(), "dist/public/cge-logo.png"),
+    path.resolve(process.cwd(), "client/public/cge-logo.png"),
+  ]) {
+    if (fs.existsSync(p)) return { filename: "cge-logo.png", path: p, cid: CGE_LOGO_CID, contentDisposition: "inline" };
+  }
+  return null;
+}
+
+/** Drop the logo <img> when there's no attachment to back it. */
+export function stripLogoImg(html: string): string {
+  return html.replace(new RegExp(`<img[^>]*cid:${CGE_LOGO_CID}[^>]*>`, "g"), "");
+}
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -55,7 +75,9 @@ export async function deliverBtlEmail(
   if (!opts?.force && (await storage.hasBtlEmailSend(BTL_SLUG, email, templateKey))) {
     return "skipped";
   }
-  const html = btlShell(tpl.body, btlUnsubscribeUrl(email));
+  const logo = cgeLogoAttachment();
+  const html0 = btlShell(tpl.body, btlUnsubscribeUrl(email));
+  const html = logo ? html0 : stripLogoImg(html0);
   try {
     await transporter.sendMail({
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
@@ -63,6 +85,7 @@ export async function deliverBtlEmail(
       replyTo: "centralgroupevents@gmail.com",
       subject: tpl.subject,
       html,
+      attachments: logo ? [logo] : undefined,
     });
     await storage.recordBtlEmailSend({
       eventSlug: BTL_SLUG,
@@ -104,12 +127,15 @@ export async function sendBtlTestEmail(
     return { ok: false, error: "GMAIL_USER / GMAIL_APP_PASSWORD are not set in the server's secrets — emails can't send until both are configured." };
   }
   try {
+    const logo = cgeLogoAttachment();
+    const html0 = btlShell(tpl.body, btlUnsubscribeUrl(email));
     await transporter.sendMail({
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
       to: email,
       replyTo: "centralgroupevents@gmail.com",
       subject: `[TEST] ${tpl.subject}`,
-      html: btlShell(tpl.body, btlUnsubscribeUrl(email)),
+      html: logo ? html0 : stripLogoImg(html0),
+      attachments: logo ? [logo] : undefined,
     });
     return { ok: true };
   } catch (err) {

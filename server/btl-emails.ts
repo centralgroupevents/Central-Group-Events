@@ -84,13 +84,16 @@ export function renderBtlText(text: string, vars: Record<string, string>): strin
 
 // The shared shell: quiet, serif, personal. A small CGE wordmark up top,
 // then the note; unsubscribeUrl renders as one plain line at the bottom —
-// no marketing footer bars.
+// no marketing footer bars. The logo references a CID inline attachment
+// (see cgeLogoAttachment in btl-mailer) so it displays without depending
+// on the website hosting the image; previews swap the cid: for a URL.
+export const CGE_LOGO_CID = "cge-logo";
+
 export function btlShell(bodyHtml: string, unsubscribeUrl: string): string {
-  const logoUrl = `${process.env.PUBLIC_SITE_URL || "https://centralgroupevents.com"}/cge-logo.png`;
   return `
   <div style="background:#faf8f4;padding:28px 16px">
     <div style="max-width:560px;margin:0 auto;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.75;color:#262118">
-      <img src="${logoUrl}" alt="Central Group Events" width="96" style="display:block;width:96px;height:auto;margin:0 0 26px" />
+      <img src="cid:${CGE_LOGO_CID}" alt="Central Group Events" width="96" height="22" style="display:block;width:96px;height:auto;margin:0 0 26px;border:0" />
       ${bodyHtml}
       <p style="margin:34px 0 0;color:#9a917f;font-size:12px;font-family:Georgia,serif">
         You're getting this because of Build to Last Vol. 1.
