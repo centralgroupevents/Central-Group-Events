@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { RichTextEditor, RichTextViewer } from "@/components/RichTextEditor";
+import { EVENT_TYPES } from "@shared/event-types";
 import { useToast } from "@/hooks/use-toast";
 import {
   Calendar,
@@ -2007,14 +2008,61 @@ type DigestStatus = {
   subscribers: number;
   upcomingEvents: number;
   sponsors: Array<{ id: number; name: string; eventDate: string }>;
+  adSlotTop: { imageUrl?: string; linkUrl?: string; alt?: string; caption?: string } | null;
+  adSlotBottom: { imageUrl?: string; linkUrl?: string; alt?: string; caption?: string } | null;
+  adCarousel: { images?: string[]; linkUrl?: string; alt?: string; caption?: string } | null;
 };
 
 function WeeklyDigestCard() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [busy, setBusy] = useState<"" | "toggle" | "test" | "run">("");
+  const [busy, setBusy] = useState<"" | "toggle" | "test" | "run" | "ads">("");
   const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
   const { data: st } = useQuery<DigestStatus>({ queryKey: ["/api/admin/digest/status"] });
+
+  // Sponsored image slots inside the email — same setup as the events page
+  // (two fixed slots + one multi-photo slot that rotates across sends).
+  const [showAds, setShowAds] = useState(false);
+  const [adTop, setAdTop] = useState<AdSlotData>(emptyAdSlot());
+  const [adBottom, setAdBottom] = useState<AdSlotData>(emptyAdSlot());
+  const [carouselImages, setCarouselImages] = useState("");
+  const [carouselLink, setCarouselLink] = useState("");
+  const [carouselAlt, setCarouselAlt] = useState("");
+  const [carouselCaption, setCarouselCaption] = useState("");
+  const [adsHydrated, setAdsHydrated] = useState(false);
+
+  useEffect(() => {
+    if (!st || adsHydrated) return;
+    setAdTop({ imageUrl: st.adSlotTop?.imageUrl ?? "", linkUrl: st.adSlotTop?.linkUrl ?? "", alt: st.adSlotTop?.alt ?? "", caption: st.adSlotTop?.caption ?? "" });
+    setAdBottom({ imageUrl: st.adSlotBottom?.imageUrl ?? "", linkUrl: st.adSlotBottom?.linkUrl ?? "", alt: st.adSlotBottom?.alt ?? "", caption: st.adSlotBottom?.caption ?? "" });
+    setCarouselImages((st.adCarousel?.images ?? []).join("\n"));
+    setCarouselLink(st.adCarousel?.linkUrl ?? "");
+    setCarouselAlt(st.adCarousel?.alt ?? "");
+    setCarouselCaption(st.adCarousel?.caption ?? "");
+    setAdsHydrated(true);
+  }, [st, adsHydrated]);
+
+  async function saveAds() {
+    setBusy("ads");
+    try {
+      await apiRequest("PUT", "/api/admin/digest/settings", {
+        adSlotTop: adTop.imageUrl.trim() ? adTop : null,
+        adSlotBottom: adBottom.imageUrl.trim() ? adBottom : null,
+        adCarousel: {
+          images: carouselImages.split("\n").map((s) => s.trim()).filter(Boolean),
+          linkUrl: carouselLink,
+          alt: carouselAlt,
+          caption: carouselCaption,
+        },
+      });
+      toast({ title: "Digest sponsored slots saved" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/digest/status"] });
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
 
   async function save(patch: { enabled?: boolean; sponsorSlots?: number }) {
     setBusy("toggle");
@@ -2104,6 +2152,66 @@ function WeeklyDigestCard() {
           </Button>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setShowAds((v) => !v)}
+        className="text-sm text-primary underline underline-offset-2"
+        data-testid="button-digest-ads-toggle"
+      >
+        {showAds ? "Hide sponsored image slots" : "Sponsored image slots…"}
+        {!showAds && (adTop.imageUrl || adBottom.imageUrl || carouselImages.trim()) ? " (in use)" : ""}
+      </button>
+
+      {showAds && (
+        <div className="space-y-4 pt-1">
+          <p className="text-xs text-muted-foreground">
+            These render inside the Friday email with a SPONSORED label — top slot under the intro, photo-rotation slot
+            mid-email, bottom slot above the button. The rotation slot takes any number of photos (one URL per line):
+            email can't slide, so each subscriber gets the next photo in the cycle and repeated sends rotate through all of them.
+          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <AdSlotEditor label="Email top slot" value={adTop} onChange={setAdTop} hint="Under the intro line. Recommended 1200×600 (2:1) JPG/PNG." />
+            <AdSlotEditor label="Email bottom slot" value={adBottom} onChange={setAdBottom} hint="Above the 'See the full list' button. Same 2:1 format." />
+          </div>
+          <div className="border border-white/10 rounded-2xl p-5 bg-white/[0.02] space-y-3">
+            <div>
+              <h4 className="font-semibold text-white">Photo rotation slot (multi-photo)</h4>
+              <p className="text-xs text-muted-foreground mt-0.5">One image URL per line — upload images via any slot above to get a URL, or paste direct links. Rotates per recipient and per send.</p>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-white/70 text-xs">Image URLs (one per line)</Label>
+              <Textarea
+                value={carouselImages}
+                onChange={(e) => setCarouselImages(e.target.value)}
+                rows={4}
+                placeholder={"https://…/photo1.jpg\nhttps://…/photo2.jpg"}
+                className="bg-black/40 border-white/10 font-mono text-xs"
+                data-testid="textarea-digest-carousel"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-white/70 text-xs">Click-through URL</Label>
+                <Input value={carouselLink} onChange={(e) => setCarouselLink(e.target.value)} placeholder="https://..." className="bg-black/40 border-white/10" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-white/70 text-xs">Alt text</Label>
+                <Input value={carouselAlt} onChange={(e) => setCarouselAlt(e.target.value)} placeholder="What it's about" className="bg-black/40 border-white/10" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-white/70 text-xs">Caption</Label>
+                <Input value={carouselCaption} onChange={(e) => setCarouselCaption(e.target.value)} placeholder="Short line under the photo" className="bg-black/40 border-white/10" />
+              </div>
+            </div>
+          </div>
+          <Button size="sm" onClick={saveAds} disabled={busy !== ""} className="bg-primary hover:bg-primary/90" data-testid="button-digest-ads-save">
+            {busy === "ads" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+            Save sponsored slots
+          </Button>
+        </div>
+      )}
+
       <Dialog open={preview !== null} onOpenChange={() => setPreview(null)}>
         <DialogContent className="max-w-2xl bg-secondary border-white/10" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle className="text-white">Preview — {preview?.subject}</DialogTitle></DialogHeader>
@@ -3603,10 +3711,10 @@ function TeamTab({ currentRole }: { currentRole: string }) {
 
 /* ─────────────────────────────────────────────────────────── */
 /*  MAIN ADMIN COMPONENT                                      */
-const GENRE_OPTIONS = [
-  "Brunch", "Concert", "DJ Set", "Happy Hour", "Live Music",
-  "Party", "Festival", "Dance Class", "Special Event", "Other",
-];
+// The 12 canonical buckets (shared with the public filter) + an "Other"
+// sentinel that opens a free-text input. Free-text genres still fold into a
+// bucket on the public site via normalizeEventType.
+const GENRE_OPTIONS = [...EVENT_TYPES, "Other"];
 
 function formatEventDate(dateStr: string | null): string {
   if (!dateStr) return "—";
