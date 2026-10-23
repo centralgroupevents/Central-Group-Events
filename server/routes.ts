@@ -1008,7 +1008,7 @@ ${blogList || "_No recent posts yet._"}
   // Admin: bulk sends. Initial invites → anyone not yet sent; second wave →
   // pending invitees who got the first one and never RSVP'd. Both stamp the
   // per-row *SentAt so re-clicks never re-send (plus the send-log dedup).
-  app.post("/api/admin/btl/invites/send-initial", requireAuth(), async (_req: Request, res: Response) => {
+  app.post("/api/admin/btl/invites/send-initial", requireAuth(), async (req: Request, res: Response) => {
     try {
       const { BTL_SLUG: slug } = await import("./btl-emails");
       const { getBtlTemplateTexts, renderBtlFromTexts, buildBtlRenderCtx } = await import("./btl-cadence");
@@ -1017,8 +1017,17 @@ ${blogList || "_No recent posts yet._"}
       if (!texts) return res.status(500).json({ message: "initial_invite template missing" });
       const ctx = await buildBtlRenderCtx();
       const invitees = await storage.listBtlInvitees(slug);
-      const targets = invitees.filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined");
-      let sent = 0, skipped = 0, failed = 0;
+      // Optional ids[] narrows the send to the admin's current selection;
+      // without it, everyone who hasn't gotten the invite yet is targeted.
+      const rawIds = (req.body as { ids?: unknown[] })?.ids;
+      const onlyIds = Array.isArray(rawIds) ? new Set(rawIds.map(Number).filter(Number.isFinite)) : null;
+      const targets = invitees.filter((i) =>
+        !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined" &&
+        (!onlyIds || onlyIds.has(i.id)));
+      // Selected rows that already got the invite are reported as skipped —
+      // the per-row Resend button is the deliberate way to send again.
+      let sent = 0, failed = 0;
+      let skipped = onlyIds ? invitees.filter((i) => onlyIds.has(i.id) && !!i.initialInviteSentAt).length : 0;
       for (const i of targets) {
         const tpl = renderBtlFromTexts(texts, { name: i.name, email: i.email }, ctx);
         const outcome = await deliverBtlEmail({ email: i.email, inviteeId: i.id }, "initial_invite", tpl);
@@ -1055,6 +1064,56 @@ ${blogList || "_No recent posts yet._"}
       res.json(result);
     } catch (err) {
       console.error("[btl/send-second-wave] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Build to Last page copy ──────────────────────────────────────────
+  // Every prose block on /build-to-last is editable from the admin's Page
+  // view. Overrides live in app_settings as btl.page.<key>; a blank
+  // override falls back to the default copy in shared/btl-page.ts.
+
+  async function loadBtlPageContent(): Promise<Record<string, string>> {
+    const { BTL_PAGE_FIELDS, BTL_PAGE_DEFAULTS } = await import("@shared/btl-page");
+    const out: Record<string, string> = {};
+    for (const f of BTL_PAGE_FIELDS) {
+      const override = await storage.getSetting(`btl.page.${f.key}`);
+      out[f.key] = override && override.trim() ? override : BTL_PAGE_DEFAULTS[f.key];
+    }
+    return out;
+  }
+
+  app.get("/api/build-to-last/content", async (_req: Request, res: Response) => {
+    try {
+      res.json(await loadBtlPageContent());
+    } catch (err) {
+      console.error("[btl/page content] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/btl/page", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      res.json(await loadBtlPageContent());
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/btl/page", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { BTL_PAGE_FIELDS, BTL_PAGE_DEFAULTS } = await import("@shared/btl-page");
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      for (const f of BTL_PAGE_FIELDS) {
+        if (body[f.key] === undefined) continue;
+        const value = String(body[f.key]).slice(0, 5000);
+        // Saving text identical to the default clears the override, so
+        // future default-copy updates flow through automatically.
+        await storage.setSetting(`btl.page.${f.key}`, value.trim() === BTL_PAGE_DEFAULTS[f.key].trim() ? "" : value);
+      }
+      res.json(await loadBtlPageContent());
+    } catch (err) {
+      console.error("[btl/page save] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });

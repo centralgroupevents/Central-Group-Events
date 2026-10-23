@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
+import { BTL_PAGE_FIELDS, BTL_PAGE_DEFAULTS } from "@shared/btl-page";
 import { Download, Loader2, Plus, Send, Upload, Eye, Check, Printer, Pencil, Trash2, X } from "lucide-react";
 
 type BtlRsvp = {
@@ -107,7 +108,7 @@ function topicsOf(r: BtlRsvp): string[] {
   }
 }
 
-const VIEWS = ["RSVPs", "Invites", "Cadence", "Templates", "Questions", "Guest Book", "Check-in", "Settings"] as const;
+const VIEWS = ["RSVPs", "Invites", "Cadence", "Templates", "Page", "Questions", "Guest Book", "Check-in", "Settings"] as const;
 type View = (typeof VIEWS)[number];
 
 export function BuildToLastTab() {
@@ -152,6 +153,7 @@ export function BuildToLastTab() {
 
       {view === "RSVPs" && <RsvpsView rsvps={rsvps} isLoading={isLoading} />}
       {view === "Invites" && <InvitesView />}
+      {view === "Page" && <PageView />}
       {view === "Cadence" && <CadenceView />}
       {view === "Templates" && <TemplatesView />}
       {view === "Questions" && <QuestionsView rsvps={rsvps} />}
@@ -397,13 +399,21 @@ function InvitesView() {
     setManual({ name: "", email: "", instagram: "", category: "", tier: "2" });
   }
 
+  // With rows selected, the invite goes only to the selection; otherwise to
+  // everyone who hasn't received it yet. Already-invited selections are
+  // skipped (the per-row Resend button is the way to send again).
   async function sendInitial() {
-    if (!window.confirm(`Send the initial invite email to ${pendingInitial} ${pendingInitial === 1 ? "person" : "people"} who haven't received it yet? It comes from centralgroupevents@gmail.com as Anthony.`)) return;
+    const useSelection = selected.size > 0;
+    const who = useSelection
+      ? `the ${selected.size} selected ${selected.size === 1 ? "person" : "people"} (anyone already invited is skipped)`
+      : `all ${pendingInitial} ${pendingInitial === 1 ? "person" : "people"} who haven't received it yet`;
+    if (!window.confirm(`Send the initial invite email to ${who}? It comes from centralgroupevents@gmail.com as Anthony.`)) return;
     setBusy("initial");
     try {
-      const res = await apiRequest("POST", "/api/admin/btl/invites/send-initial", {});
+      const res = await apiRequest("POST", "/api/admin/btl/invites/send-initial", useSelection ? { ids: Array.from(selected) } : {});
       const body = await res.json();
       toast({ title: `Initial invites: ${body.sent} sent${body.failed ? `, ${body.failed} failed` : ""}${body.skipped ? `, ${body.skipped} already had it` : ""}` });
+      if (useSelection) setSelected(new Set());
       qc.invalidateQueries({ queryKey: ["/api/admin/btl/invitees"] });
     } catch (err) {
       toast({ title: "Send failed", description: String((err as Error).message), variant: "destructive" });
@@ -439,9 +449,9 @@ function InvitesView() {
             <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={busy !== ""} className="border-white/20 text-white/80">
               <Upload className="w-4 h-4 mr-1.5" /> Import CSV
             </Button>
-            <Button onClick={sendInitial} disabled={busy !== "" || pendingInitial === 0} className="bg-primary hover:bg-primary/90" data-testid="button-btl-send-initial">
+            <Button onClick={sendInitial} disabled={busy !== "" || (selected.size === 0 && pendingInitial === 0)} className="bg-primary hover:bg-primary/90" data-testid="button-btl-send-initial">
               {busy === "initial" ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
-              Send Initial Invites ({pendingInitial})
+              {selected.size > 0 ? `Send Invite to Selected (${selected.size})` : `Send Initial Invites (${pendingInitial})`}
             </Button>
             <Button onClick={sendSecondWave} disabled={busy !== ""} variant="outline" className="border-primary/40 text-primary hover:bg-primary/10" data-testid="button-btl-send-second">
               {busy === "second" ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
@@ -683,6 +693,99 @@ function StatusSelect({ invitee }: { invitee: BtlInvitee }) {
         <SelectItem value="declined">declined</SelectItem>
       </SelectContent>
     </Select>
+  );
+}
+
+/* ── Page copy editor ──────────────────────────────────────────────────── */
+
+// Every prose block on /build-to-last, editable in place. Saving text that
+// matches the default clears the override, so emptying a field (or putting
+// the original back) returns that section to the built-in copy.
+function PageView() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: content, isLoading } = useQuery<Record<string, string>>({ queryKey: ["/api/admin/btl/page"] });
+  const [draft, setDraft] = useState<Record<string, string> | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const values = draft ?? content ?? BTL_PAGE_DEFAULTS;
+  const dirty = draft !== null && content !== undefined && BTL_PAGE_FIELDS.some((f) => (draft[f.key] ?? "") !== (content[f.key] ?? ""));
+
+  function setField(key: string, value: string) {
+    setDraft({ ...(draft ?? content ?? BTL_PAGE_DEFAULTS), [key]: value });
+  }
+
+  async function save() {
+    if (!draft) return;
+    setSaving(true);
+    try {
+      const res = await apiRequest("PUT", "/api/admin/btl/page", draft);
+      const fresh = await res.json();
+      qc.setQueryData(["/api/admin/btl/page"], fresh);
+      qc.invalidateQueries({ queryKey: ["/api/build-to-last/content"] });
+      setDraft(null);
+      toast({ title: "Page saved — it's live on /build-to-last" });
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm text-muted-foreground">
+          Edit the public page copy below — changes go live the moment you save.{" "}
+          <a href="/build-to-last" target="_blank" rel="noopener noreferrer" className="text-primary underline">Open the page</a> to see it.
+          To restore a section's original copy, clear the field and save.
+        </p>
+        <Button onClick={save} disabled={!dirty || saving} className="bg-primary hover:bg-primary/90" data-testid="button-btl-page-save">
+          {saving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Check className="w-4 h-4 mr-1.5" />}
+          Save Page
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {BTL_PAGE_FIELDS.map((f) => {
+          const isDefault = (values[f.key] ?? "").trim() === BTL_PAGE_DEFAULTS[f.key].trim();
+          return (
+            <div key={f.key} className={`bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-2 ${f.multiline ? "" : "lg:col-span-1"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm font-semibold text-white">{f.label}</Label>
+                {!isDefault && <span className="text-[10px] bg-amber-400/15 text-amber-300 border border-amber-400/25 rounded-full px-2 py-0.5">edited</span>}
+              </div>
+              {f.multiline ? (
+                <Textarea
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setField(f.key, e.target.value)}
+                  rows={Math.max(3, (values[f.key] ?? "").split("\n").length + 1)}
+                  className="bg-black/30 border-white/10 text-sm leading-relaxed"
+                  placeholder={BTL_PAGE_DEFAULTS[f.key]}
+                  data-testid={`textarea-btl-page-${f.key}`}
+                />
+              ) : (
+                <Input
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setField(f.key, e.target.value)}
+                  className="bg-black/30 border-white/10"
+                  placeholder={BTL_PAGE_DEFAULTS[f.key]}
+                  data-testid={`input-btl-page-${f.key}`}
+                />
+              )}
+              <p className="text-xs text-muted-foreground">{f.help}</p>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-end">
+        <Button onClick={save} disabled={!dirty || saving} className="bg-primary hover:bg-primary/90">
+          {saving ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Check className="w-4 h-4 mr-1.5" />}
+          Save Page
+        </Button>
+      </div>
+    </div>
   );
 }
 

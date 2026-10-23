@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { Loader2 } from "lucide-react";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
+import { BTL_PAGE_DEFAULTS } from "@shared/btl-page";
 import { SEO } from "@/components/SEO";
 
 // Build to Last Vol. 1 — standalone RSVP page. Deliberately NOT in the CGE
@@ -47,6 +49,35 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Multiline fields render one item per non-empty line; text before the
+// first " — " renders bold (used by What to Expect and Event Flow).
+function lines(s: string): string[] {
+  return s.split("\n").map((l) => l.trim()).filter(Boolean);
+}
+
+function BoldDash({ text }: { text: string }) {
+  const i = text.indexOf(" — ");
+  if (i === -1) return <>{text}</>;
+  return (
+    <>
+      <strong style={{ color: CREAM }}>{text.slice(0, i)}</strong> — {text.slice(i + 3)}
+    </>
+  );
+}
+
+function CheckList({ text, bold }: { text: string; bold?: boolean }) {
+  return (
+    <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 16, lineHeight: 1.7, color: CREAM_DIM }}>
+      {lines(text).map((item, i) => (
+        <li key={i} style={{ margin: "0 0 14px", paddingLeft: 26, position: "relative" }}>
+          <span style={{ position: "absolute", left: 0, color: GOLD }}>✓</span>
+          {bold ? <BoldDash text={item} /> : item}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 // A personalized link from the thank-you email carries ?e=<base64url email>
 // &t=<signature>&n=<name> — then the form skips name/email entirely.
 function readIdentityFromUrl(): { e: string; t: string; name: string; email: string } | null {
@@ -65,6 +96,13 @@ function readIdentityFromUrl(): { e: string; t: string; name: string; email: str
 }
 
 export default function BuildToLast() {
+  // Page copy — admin-editable (Build to Last → Page). Defaults render
+  // immediately; any saved overrides swap in when the fetch lands.
+  const { data: copy = BTL_PAGE_DEFAULTS } = useQuery<Record<string, string>>({
+    queryKey: ["/api/build-to-last/content"],
+    placeholderData: BTL_PAGE_DEFAULTS,
+    staleTime: 60_000,
+  });
   const [identity] = useState(readIdentityFromUrl);
   const [name, setName] = useState(identity?.name ?? "");
   const [email, setEmail] = useState(identity?.email ?? "");
@@ -147,10 +185,10 @@ export default function BuildToLast() {
             Vol. 1
           </p>
           <p style={{ fontSize: 15, letterSpacing: 2.5, textTransform: "uppercase", margin: "0 0 10px" }}>
-            Thursday, November 12, 2026 · Newark
+            {copy.heroDate}
           </p>
           <p style={{ fontSize: 17, color: CREAM_DIM, maxWidth: 460, margin: "0 auto 36px", lineHeight: 1.65 }}>
-            An invite-only mixer for the planners, venue owners, and creators building across New Jersey.
+            {copy.heroSubtitle}
           </p>
           <a
             href="#rsvp"
@@ -164,80 +202,42 @@ export default function BuildToLast() {
         {/* Premise */}
         <section style={{ padding: "52px 0", borderBottom: `1px solid ${LINE}` }}>
           <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 23, lineHeight: 1.65, margin: 0 }}>
-            Promoting events across New Jersey, we've come across so many influential, hardworking
-            people who chose to curate spaces and places here — and who believe this state is only
-            going to present more opportunities for people like us.
+            {copy.premiseLead}
           </p>
           <p style={{ fontSize: 16, color: CREAM_DIM, lineHeight: 1.7, margin: "22px 0 0" }}>
-            The best habit any of us can keep is an informed, active network that learns from one
-            another. Build to Last is that habit, in person — one room, an intentionally set crowd.
+            {copy.premiseBody}
           </p>
         </section>
 
         {/* What to Expect */}
         <section style={{ padding: "52px 0", borderBottom: `1px solid ${LINE}` }}>
           <SectionTitle>What to Expect</SectionTitle>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 16, lineHeight: 1.7, color: CREAM_DIM }}>
-            {[
-              ["An intentionally set crowd", "planners, venue owners, and creators from across the state."],
-              ["Moderated conversations", "on event planning, spaces, and brand building in New Jersey."],
-              ["Organic networking", "with people building the same things you are."],
-              ["A professionally photographed night", "you'll get the photos after."],
-            ].map(([bold, rest], i) => (
-              <li key={i} style={{ margin: "0 0 14px", paddingLeft: 26, position: "relative" }}>
-                <span style={{ position: "absolute", left: 0, color: GOLD }}>✓</span>
-                <strong style={{ color: CREAM }}>{bold}</strong> — {rest}
-              </li>
-            ))}
-          </ul>
+          <CheckList text={copy.expect} bold />
         </section>
 
         {/* You'll Walk Away With */}
         <section style={{ padding: "52px 0", borderBottom: `1px solid ${LINE}` }}>
           <SectionTitle>You'll Walk Away With</SectionTitle>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 16, lineHeight: 1.7, color: CREAM_DIM }}>
-            {[
-              "Relationships worth keeping — people you'll actually hear from again",
-              "A sharper sense of where New Jersey is heading, from the people building it",
-              "Perspectives you didn't walk in with",
-            ].map((item, i) => (
-              <li key={i} style={{ margin: "0 0 14px", paddingLeft: 26, position: "relative" }}>
-                <span style={{ position: "absolute", left: 0, color: GOLD }}>✓</span>
-                {item}
-              </li>
-            ))}
-          </ul>
+          <CheckList text={copy.walkAway} />
         </section>
 
         {/* The Essentials */}
         <section style={{ padding: "52px 0", borderBottom: `1px solid ${LINE}` }}>
           <SectionTitle>The Essentials</SectionTitle>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 16, lineHeight: 1.7, color: CREAM_DIM }}>
-            {[
-              "Open bar",
-              "Small bites",
-              "Programming + networking",
-              "Free · RSVP required",
-            ].map((item, i) => (
-              <li key={i} style={{ margin: "0 0 14px", paddingLeft: 26, position: "relative" }}>
-                <span style={{ position: "absolute", left: 0, color: GOLD }}>✓</span>
-                {item}
-              </li>
-            ))}
-          </ul>
+          <CheckList text={copy.essentials} />
         </section>
 
         {/* Event Flow + Dress code */}
         <section style={{ padding: "52px 0", borderBottom: `1px solid ${LINE}` }}>
           <SectionTitle>Event Flow</SectionTitle>
           <div style={{ fontSize: 16, lineHeight: 2, color: CREAM_DIM }}>
-            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>6:00 PM</strong> — Doors open. Introductions and open bar.</p>
-            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>7:00 PM</strong> — Moderated conversations centered around event planning, spaces, and brand building in NJ</p>
-            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>8:30 PM</strong> — Night cap</p>
+            {lines(copy.flow).map((line, i) => (
+              <p key={i} style={{ margin: 0 }}><BoldDash text={line} /></p>
+            ))}
           </div>
           <p style={{ margin: "26px 0 0", fontSize: 15, color: CREAM_DIM }}>
             <span style={{ color: GOLD, letterSpacing: 1.5, textTransform: "uppercase", fontSize: 12 }}>Dress code</span>
-            <br />Come as yourself — we know plenty of you are coming straight from work. Business casual is perfect. · Equal Space, Newark
+            <br />{copy.dressCode}
           </p>
         </section>
 
@@ -296,7 +296,7 @@ export default function BuildToLast() {
                 {submitting ? <Loader2 style={{ width: 18, height: 18, display: "inline", verticalAlign: "-3px" }} className="animate-spin" /> : "RSVP"}
               </button>
               <p style={{ margin: "16px 0 0", fontSize: 12, color: "rgba(243,236,221,0.45)", textAlign: "center", lineHeight: 1.6 }}>
-                Free · RSVP required · You'll get event updates by email from Anthony; every email has a one-click unsubscribe.
+                {copy.rsvpFootnote}
               </p>
             </form>
           )}
