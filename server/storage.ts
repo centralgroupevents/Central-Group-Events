@@ -196,6 +196,7 @@ export interface IStorage {
   recordBtlEmailSend(row: { eventSlug: string; rsvpId?: number | null; inviteeId?: number | null; recipientEmail: string; templateKey: string; status: string; errorMessage?: string | null }): Promise<void>;
   hasBtlEmailSend(eventSlug: string, recipientEmail: string, templateKey: string): Promise<boolean>;
   listBtlEmailSends(eventSlug: string): Promise<Array<{ templateKey: string; status: string; count: number }>>;
+  listBtlEmailFailures(eventSlug: string, limit: number): Promise<Array<{ id: number; recipientEmail: string; templateKey: string; errorMessage: string | null; sentAt: Date | null }>>;
   upsertBtlInvitees(eventSlug: string, rows: Array<{ name: string; email: string; instagramHandle?: string | null; category?: string | null; priorityTier?: number }>): Promise<{ imported: number; skipped: number }>;
   listBtlInvitees(eventSlug: string): Promise<EventInvitee[]>;
   updateBtlInvitee(id: number, patch: Partial<EventInvitee>): Promise<EventInvitee | null>;
@@ -1250,6 +1251,21 @@ export class DatabaseStorage implements IStorage {
       .where(eq(eventEmailSends.eventSlug, eventSlug))
       .groupBy(eventEmailSends.templateKey, eventEmailSends.status);
     return rows.map((r) => ({ templateKey: r.templateKey, status: r.status, count: Number(r.count) }));
+  }
+
+  // Recent delivery failures with their SMTP errors — surfaced in the admin
+  // Cadence view so "emails aren't going through" is diagnosable in the UI.
+  async listBtlEmailFailures(eventSlug: string, limit: number): Promise<Array<{ id: number; recipientEmail: string; templateKey: string; errorMessage: string | null; sentAt: Date | null }>> {
+    return db.select({
+      id: eventEmailSends.id,
+      recipientEmail: eventEmailSends.recipientEmail,
+      templateKey: eventEmailSends.templateKey,
+      errorMessage: eventEmailSends.errorMessage,
+      sentAt: eventEmailSends.sentAt,
+    }).from(eventEmailSends)
+      .where(and(eq(eventEmailSends.eventSlug, eventSlug), eq(eventEmailSends.status, "failed")))
+      .orderBy(desc(eventEmailSends.id))
+      .limit(limit);
   }
 
   async upsertBtlInvitees(eventSlug: string, rows: Array<{ name: string; email: string; instagramHandle?: string | null; category?: string | null; priorityTier?: number }>): Promise<{ imported: number; skipped: number }> {

@@ -993,11 +993,12 @@ ${blogList || "_No recent posts yet._"}
       if (!texts) return res.status(500).json({ message: "initial_invite template missing" });
       const ctx = await buildBtlRenderCtx();
       const tpl = renderBtlFromTexts(texts, { name: invitee.name, email: invitee.email }, ctx);
-      const outcome = await deliverBtlEmail({ email: invitee.email, inviteeId: invitee.id }, "initial_invite", tpl, { force: true });
+      const errorOut: { message?: string } = {};
+      const outcome = await deliverBtlEmail({ email: invitee.email, inviteeId: invitee.id }, "initial_invite", tpl, { force: true, errorOut });
       if (outcome === "sent" && !invitee.initialInviteSentAt) {
         await storage.updateBtlInvitee(invitee.id, { initialInviteSentAt: new Date() });
       }
-      res.json({ outcome, to: invitee.email });
+      res.json({ outcome, to: invitee.email, ...(errorOut.message ? { error: errorOut.message } : {}) });
     } catch (err) {
       console.error("[btl/invitee resend] error:", err);
       const detail = err instanceof Error ? err.message.slice(0, 200) : "unknown";
@@ -1189,6 +1190,40 @@ ${blogList || "_No recent posts yet._"}
       res.json(result);
     } catch (err) {
       console.error("[btl/send-now] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: send a [TEST] copy of any cadence template to an inbox (default:
+  // the Gmail account itself). No dedup, no send-log row — and the raw SMTP
+  // error comes back so a broken email setup is visible in the UI.
+  app.post("/api/admin/btl/cadence/:key/test", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { getBtlTemplateTexts, renderBtlFromTexts, buildBtlRenderCtx } = await import("./btl-cadence");
+      const { sendBtlTestEmail } = await import("./btl-mailer");
+      const key = String(req.params.key);
+      const texts = await getBtlTemplateTexts(key);
+      if (!texts) return res.status(404).json({ message: `Unknown template "${key}"` });
+      const raw = String((req.body as { email?: string })?.email || "").trim().toLowerCase();
+      const to = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : "centralgroupevents@gmail.com";
+      const ctx = await buildBtlRenderCtx();
+      const tpl = renderBtlFromTexts(texts, { name: "Anthony", email: to }, ctx);
+      const result = await sendBtlTestEmail(to, tpl);
+      if (!result.ok) return res.status(502).json({ message: result.error, to });
+      res.json({ sent: true, to });
+    } catch (err) {
+      console.error("[btl/cadence test] error:", err);
+      const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
+      res.status(500).json({ message: `Test send failed: ${detail}` });
+    }
+  });
+
+  // Admin: recent delivery failures with their SMTP errors.
+  app.get("/api/admin/btl/email-failures", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      res.json(await storage.listBtlEmailFailures(slug, 15));
+    } catch (err) {
       res.status(500).json({ message: "Internal server error" });
     }
   });
