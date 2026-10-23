@@ -24,7 +24,7 @@ import { EventBrowser } from "@/components/EventBrowser";
 import { EventsJsonLd } from "@/components/EventsJsonLd";
 import { SubscribeModal } from "@/components/SubscribeModal";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import cgeLogo from "@assets/CGE_logo_1772075137138.png";
+import cgeLogo from "@assets/CGE_logo_2026.png";
 
 // FAQ items for the homepage. Doubles as data for the FAQPage JSON-LD (rich
 // snippets in Google) AND the visible accordion. Wording targets the most
@@ -247,9 +247,10 @@ export default function Home() {
       <EventsJsonLd maxItems={10} />
       <Navigation />
 
-      {/* HERO SECTION — compact on phones so the event calendar peeks above
-          the fold on load; full-height only from md up. */}
-      <section className="relative md:min-h-[90vh] flex items-center pt-24 pb-10 md:pt-20 md:pb-0 overflow-hidden">
+      {/* HERO SECTION — compact everywhere so the event calendar sits high:
+          event-goers should see the list is the product, not just the
+          promo pitch. No min-height; the content sets the height. */}
+      <section className="relative flex items-center pt-24 pb-10 md:pt-32 md:pb-16 overflow-hidden">
         {/* Abstract dark glowing orbs in background */}
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[120px] mix-blend-screen" />
         <div className="absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] bg-accent/20 rounded-full blur-[150px] mix-blend-screen" />
@@ -257,7 +258,7 @@ export default function Home() {
         {/* nightlife concert crowd abstract */}
         <div className="absolute inset-0 bg-[url('https://pixabay.com/get/gd42b3a651fcd574e9734b3832e94b40d6f5a62c307da9126b767530ce7e17bbda530b6eed2703ebda06fd2e3f309efbf07d3080cfbf7a0e20e56506f8c8208f8_1280.jpg')] bg-cover bg-center opacity-[0.15] mix-blend-luminosity mask-image:linear-gradient(to_bottom,black_40%,transparent_100%)]" />
         
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full text-center mt-2 md:mt-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full text-center mt-2 md:mt-0">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -314,7 +315,7 @@ export default function Home() {
       </section>
 
       {/* EVENT CALENDAR SECTION */}
-      <section id="events" className="py-12 md:py-24">
+      <section id="events" className="py-12 md:py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Centered header */}
           <motion.div {...fadeIn} className="text-center mb-10">
