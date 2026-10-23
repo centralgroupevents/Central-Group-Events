@@ -47,7 +47,7 @@ export async function deliverBtlEmail(
   recipient: BtlRecipient,
   templateKey: string,
   tpl: { subject: string; body: string },
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; errorOut?: { message?: string } },
 ): Promise<"sent" | "skipped" | "failed"> {
   const email = recipient.email.toLowerCase().trim();
   // force skips the dedup gate — used by the admin "Resend" action so a
@@ -75,6 +75,7 @@ export async function deliverBtlEmail(
     return "sent";
   } catch (err) {
     const msg = err instanceof Error ? err.message.slice(0, 400) : "unknown";
+    if (opts?.errorOut) opts.errorOut.message = msg;
     await storage.recordBtlEmailSend({
       eventSlug: BTL_SLUG,
       rsvpId: recipient.rsvpId ?? null,
@@ -86,6 +87,33 @@ export async function deliverBtlEmail(
     }).catch(() => {});
     console.error(`[btl-mailer] ${templateKey} → ${email} failed:`, msg);
     return "failed";
+  }
+}
+
+/**
+ * Send a [TEST] copy of a template straight to an inbox — no dedup gate, no
+ * send-log row, and the raw SMTP error comes back so a broken Gmail setup
+ * (missing/revoked app password, blocked login) is visible in the admin.
+ */
+export async function sendBtlTestEmail(
+  to: string,
+  tpl: { subject: string; body: string },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const email = to.toLowerCase().trim();
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    return { ok: false, error: "GMAIL_USER / GMAIL_APP_PASSWORD are not set in the server's secrets — emails can't send until both are configured." };
+  }
+  try {
+    await transporter.sendMail({
+      from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
+      to: email,
+      replyTo: "centralgroupevents@gmail.com",
+      subject: `[TEST] ${tpl.subject}`,
+      html: btlShell(tpl.body, btlUnsubscribeUrl(email)),
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message.slice(0, 400) : "unknown error" };
   }
 }
 

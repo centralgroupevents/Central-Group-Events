@@ -657,8 +657,13 @@ function ResendButton({ invitee }: { invitee: BtlInvitee }) {
     try {
       const res = await apiRequest("POST", `/api/admin/btl/invitees/${invitee.id}/resend`, {});
       const body = await res.json();
-      toast({ title: body.outcome === "sent" ? `Invite re-sent to ${body.to}` : `Resend outcome: ${body.outcome}` });
+      if (body.outcome === "sent") {
+        toast({ title: `Invite re-sent to ${body.to}` });
+      } else {
+        toast({ title: `Resend ${body.outcome}`, description: body.error || "No error detail — check the Cadence view's failure panel.", variant: "destructive" });
+      }
       qc.invalidateQueries({ queryKey: ["/api/admin/btl/invitees"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/email-failures"] });
     } catch (err) {
       toast({ title: "Resend failed", description: String((err as Error).message), variant: "destructive" });
     } finally {
@@ -791,12 +796,35 @@ function PageView() {
 
 /* ── Cadence ───────────────────────────────────────────────────────────── */
 
+type EmailFailure = {
+  id: number;
+  recipientEmail: string;
+  templateKey: string;
+  errorMessage: string | null;
+  sentAt: string | null;
+};
+
 function CadenceView() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: rows = [], isLoading } = useQuery<CadenceRow[]>({ queryKey: ["/api/admin/btl/cadence"] });
+  const { data: failures = [] } = useQuery<EmailFailure[]>({ queryKey: ["/api/admin/btl/email-failures"] });
   const [preview, setPreview] = useState<{ key: string; subject: string; html: string } | null>(null);
   const [busyKey, setBusyKey] = useState("");
+  const [testKey, setTestKey] = useState("");
+
+  async function sendTest(row: CadenceRow) {
+    setTestKey(row.key);
+    try {
+      const res = await apiRequest("POST", `/api/admin/btl/cadence/${row.key}/test`, {});
+      const body = await res.json();
+      toast({ title: `Test sent to ${body.to}`, description: `"[TEST] …" — check the inbox for "${row.label}".` });
+    } catch (err) {
+      toast({ title: "Test send failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setTestKey("");
+    }
+  }
 
   async function openPreview(key: string) {
     try {
@@ -829,7 +857,24 @@ function CadenceView() {
       <p className="text-sm text-muted-foreground">
         Scheduled sends fire automatically on the hourly cron (times below are ET, editable in Settings).
         Everything is duplicate-safe: a template never reaches the same inbox twice.
+        "Test" emails a [TEST] copy to centralgroupevents@gmail.com without touching the real send history.
       </p>
+      {failures.length > 0 && (
+        <div className="bg-red-950/30 border border-red-500/30 rounded-xl px-4 py-3 space-y-1.5" data-testid="panel-btl-email-failures">
+          <p className="text-sm font-semibold text-red-300">Recent delivery failures — this is why emails aren't going through:</p>
+          {failures.slice(0, 5).map((f) => (
+            <p key={f.id} className="text-xs text-white/80">
+              <span className="text-muted-foreground">{f.sentAt ? new Date(f.sentAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : ""}</span>
+              {" · "}{f.templateKey} → {f.recipientEmail}
+              <span className="block text-red-300/90 pl-3">{f.errorMessage || "no error recorded"}</span>
+            </p>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            "Missing credentials" or "Username and Password not accepted" means the GMAIL_USER / GMAIL_APP_PASSWORD
+            secrets are missing or the app password was revoked — generate a new Google app password and update the secret.
+          </p>
+        </div>
+      )}
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
       ) : (
@@ -848,6 +893,17 @@ function CadenceView() {
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => openPreview(row.key)} className="border-white/20 text-white/70">
                   <Eye className="w-3.5 h-3.5 mr-1" /> Preview
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={testKey !== ""}
+                  onClick={() => sendTest(row)}
+                  className="border-primary/40 text-primary hover:bg-primary/10"
+                  title="Email a [TEST] copy to centralgroupevents@gmail.com"
+                  data-testid={`button-btl-test-${row.key}`}
+                >
+                  {testKey === row.key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><Send className="w-3.5 h-3.5 mr-1" /> Test</>}
                 </Button>
                 {row.key !== "initial_invite" && (
                   <Button
