@@ -3634,6 +3634,40 @@ Return every field you can confidently determine. Set null for any field the ima
     return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
   }
 
+  // Admin-managed sponsored image slots inside the digest — same JSON shapes
+  // as the events-page slots (top/bottom single-image + a multi-photo
+  // carousel). The carousel can't slide in email, so it rotates instead:
+  // each recipient gets the next photo in the cycle (seeded by subscriber id),
+  // and the whole cycle shifts week to week.
+  type DigestAdSlot = { imageUrl?: string; linkUrl?: string; alt?: string; caption?: string };
+  type DigestAdCarousel = { images?: string[]; linkUrl?: string; alt?: string; caption?: string };
+
+  async function loadDigestAdSlots(): Promise<{ top: DigestAdSlot | null; bottom: DigestAdSlot | null; carousel: DigestAdCarousel | null }> {
+    const parseSlot = (raw: string | null): DigestAdSlot | null => {
+      if (!raw) return null;
+      try {
+        const p = JSON.parse(raw);
+        return p && typeof p === "object" && p.imageUrl ? p : null;
+      } catch { return null; }
+    };
+    const parseCarousel = (raw: string | null): DigestAdCarousel | null => {
+      if (!raw) return null;
+      try {
+        const p = JSON.parse(raw);
+        if (p && typeof p === "object" && Array.isArray(p.images)) {
+          const images = p.images.filter((s: unknown) => typeof s === "string" && s.trim());
+          return images.length > 0 ? { ...p, images } : null;
+        }
+        return null;
+      } catch { return null; }
+    };
+    return {
+      top: parseSlot(await storage.getSetting("digest.adSlotTop")),
+      bottom: parseSlot(await storage.getSetting("digest.adSlotBottom")),
+      carousel: parseCarousel(await storage.getSetting("digest.adCarousel")),
+    };
+  }
+
   async function buildDigestData() {
     const today = todayInET();
     const until = shiftIsoDate(today, 7);
@@ -3664,14 +3698,15 @@ Return every field you can confidently determine. Set null for any field the ima
       await storage.setSetting("digest.sponsorLog", JSON.stringify(log));
       await storage.setSetting("digest.weekSponsors", JSON.stringify(sponsors.map((s) => s.id)));
     }
-    return { upcoming, sponsors };
+    return { upcoming, sponsors, adSlots: await loadDigestAdSlots() };
   }
 
   function buildDigestHtml(
     data: Awaited<ReturnType<typeof buildDigestData>>,
     firstRegion?: string | null,
+    rotateSeed = 0,
   ): { subject: string; html: string } {
-    const { upcoming, sponsors } = data;
+    const { upcoming, sponsors, adSlots } = data;
     const byRegion: Record<string, typeof upcoming> = {};
     for (const x of upcoming) (byRegion[digestRegionOf(x.e.region)] ??= []).push(x);
     const regionOrder = ["North NJ", "Central NJ", "South NJ", "Across NJ"];
@@ -3680,6 +3715,25 @@ Return every field you can confidently determine. Set null for any field the ima
 
     const go = (url: string, eventId?: number) =>
       `https://centralgroupevents.com/go?url=${encodeURIComponent(url)}${eventId ? `&eventId=${eventId}` : ""}`;
+
+    // One sponsored image block (shared by the fixed slots and the carousel).
+    const adImageHtml = (src: string, slot: { linkUrl?: string; alt?: string; caption?: string }) => {
+      const img = `<img src="${escapeHtml(src)}" alt="${escapeHtml(slot.alt || "Sponsored")}" width="576" style="display:block;width:100%;max-width:576px;height:auto;border-radius:12px;border:1px solid #eee" />`;
+      return `
+      <div style="margin:0 0 18px">
+        <p style="margin:0 0 6px;font-size:10px;letter-spacing:2px;color:#8B2FC9;font-weight:bold">SPONSORED</p>
+        ${slot.linkUrl ? `<a href="${go(slot.linkUrl)}" style="text-decoration:none">${img}</a>` : img}
+        ${slot.caption ? `<p style="margin:6px 0 0;font-size:12.5px;color:#777">${escapeHtml(slot.caption)}</p>` : ""}
+      </div>`;
+    };
+    const adTopHtml = adSlots.top?.imageUrl ? adImageHtml(adSlots.top.imageUrl, adSlots.top) : "";
+    const adBottomHtml = adSlots.bottom?.imageUrl ? adImageHtml(adSlots.bottom.imageUrl, adSlots.bottom) : "";
+    // Email can't slide, so the carousel rotates: each send picks the next
+    // photo in the cycle (rotateSeed = subscriber id).
+    const carouselImages = adSlots.carousel?.images ?? [];
+    const adCarouselHtml = carouselImages.length > 0
+      ? adImageHtml(carouselImages[((rotateSeed % carouselImages.length) + carouselImages.length) % carouselImages.length], adSlots.carousel!)
+      : "";
 
     const sponsorHtml = sponsors.map((b) => `
       <div style="border:1px solid #e8ddf5;background:#faf7ff;border-radius:12px;padding:16px 18px;margin:0 0 14px">
@@ -3708,8 +3762,11 @@ Return every field you can confidently determine. Set null for any field the ima
         <p style="margin:0 0 4px;font-size:11px;letter-spacing:2px;color:#8B2FC9;font-weight:bold">CENTRAL GROUP EVENTS</p>
         <h1 style="margin:0 0 6px;font-size:26px">This Weekend in NJ</h1>
         <p style="margin:0 0 22px;color:#666;font-size:14px">${upcoming.length} events across New Jersey over the next 7 days.</p>
+        ${adTopHtml}
         ${sponsorHtml}
+        ${adCarouselHtml}
         ${sections || '<p style="color:#666">The new list is loading — check <a href="https://centralgroupevents.com/things-to-do-in-nj" style="color:#8B2FC9">the live calendar</a>.</p>'}
+        ${adBottomHtml}
         <p style="text-align:center;margin:30px 0 6px">
           <a href="https://centralgroupevents.com/things-to-do-in-nj" style="display:inline-block;padding:13px 30px;background:#8B2FC9;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14.5px">See the full list →</a>
         </p>
@@ -3747,7 +3804,7 @@ Return every field you can confidently determine. Set null for any field the ima
     for (const sub of batch) {
       const to = sub.email.toLowerCase().trim();
       try {
-        const { subject, html } = buildDigestHtml(data, sub.region);
+        const { subject, html } = buildDigestHtml(data, sub.region, sub.id);
         const wrapped = wrapEmailLinks(`${html}${complianceFooter(to, reason, { dark: false })}`, blastId, to);
         await transporter.sendMail({
           from: `"Central Group Events" <${process.env.GMAIL_USER}>`,
@@ -3783,6 +3840,9 @@ Return every field you can confidently determine. Set null for any field the ima
         subscribers: subs.length,
         upcomingEvents: data.upcoming.length,
         sponsors: data.sponsors.map((b) => ({ id: b.id, name: b.eventName || b.venueName, eventDate: b.eventDate })),
+        adSlotTop: data.adSlots.top,
+        adSlotBottom: data.adSlots.bottom,
+        adCarousel: data.adSlots.carousel,
       });
     } catch (err) {
       console.error("[digest/status]", err);
@@ -3792,10 +3852,39 @@ Return every field you can confidently determine. Set null for any field the ima
 
   app.put("/api/admin/digest/settings", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const { enabled, sponsorSlots } = (req.body ?? {}) as { enabled?: boolean; sponsorSlots?: number };
+      const { enabled, sponsorSlots, adSlotTop, adSlotBottom, adCarousel } = (req.body ?? {}) as {
+        enabled?: boolean; sponsorSlots?: number;
+        adSlotTop?: Record<string, unknown> | null;
+        adSlotBottom?: Record<string, unknown> | null;
+        adCarousel?: Record<string, unknown> | null;
+      };
       if (typeof enabled === "boolean") await storage.setSetting("digest.enabled", enabled ? "true" : "false");
       if (typeof sponsorSlots === "number" && sponsorSlots >= 0 && sponsorSlots <= 5) {
         await storage.setSetting("digest.sponsorSlots", String(Math.floor(sponsorSlots)));
+      }
+      // Image slots: a null / imageless object clears the slot. Only string
+      // fields are stored, capped so a bad payload can't bloat settings.
+      const cleanSlot = (v: Record<string, unknown> | null | undefined): string => {
+        if (!v || typeof v !== "object" || !String(v.imageUrl ?? "").trim()) return "";
+        return JSON.stringify({
+          imageUrl: String(v.imageUrl).trim().slice(0, 2000),
+          linkUrl: String(v.linkUrl ?? "").trim().slice(0, 2000),
+          alt: String(v.alt ?? "").trim().slice(0, 300),
+          caption: String(v.caption ?? "").trim().slice(0, 500),
+        });
+      };
+      if (adSlotTop !== undefined) await storage.setSetting("digest.adSlotTop", cleanSlot(adSlotTop));
+      if (adSlotBottom !== undefined) await storage.setSetting("digest.adSlotBottom", cleanSlot(adSlotBottom));
+      if (adCarousel !== undefined) {
+        const images = Array.isArray(adCarousel?.images)
+          ? (adCarousel!.images as unknown[]).map((s) => String(s).trim()).filter(Boolean).slice(0, 50)
+          : [];
+        await storage.setSetting("digest.adCarousel", images.length === 0 ? "" : JSON.stringify({
+          images: images.map((s) => s.slice(0, 2000)),
+          linkUrl: String(adCarousel?.linkUrl ?? "").trim().slice(0, 2000),
+          alt: String(adCarousel?.alt ?? "").trim().slice(0, 300),
+          caption: String(adCarousel?.caption ?? "").trim().slice(0, 500),
+        }));
       }
       res.json({ saved: true });
     } catch (err) {
@@ -3806,7 +3895,8 @@ Return every field you can confidently determine. Set null for any field the ima
   app.get("/api/admin/digest/preview", requireAuth(), async (req: Request, res: Response) => {
     try {
       const data = await buildDigestData();
-      const { subject, html } = buildDigestHtml(data, String(req.query.region || "") || null);
+      // seed rotates the carousel photo — preview with ?seed=1,2,… to see the cycle.
+      const { subject, html } = buildDigestHtml(data, String(req.query.region || "") || null, Number(req.query.seed) || 0);
       res.json({ subject, html: `${html}${complianceFooter("preview@example.com", "You're receiving this because you subscribed to the weekly newsletter at centralgroupevents.com.", { dark: false })}` });
     } catch (err) {
       console.error("[digest/preview]", err);
@@ -3829,7 +3919,8 @@ Return every field you can confidently determine. Set null for any field the ima
   app.post("/api/admin/digest/test", requireAuth(), async (_req: Request, res: Response) => {
     try {
       const data = await buildDigestData();
-      const { subject, html } = buildDigestHtml(data, null);
+      // Random seed so repeated test sends walk through the carousel photos.
+      const { subject, html } = buildDigestHtml(data, null, Math.floor(Math.random() * 1000));
       const to = "centralgroupevents@gmail.com";
       await transporter.sendMail({
         from: `"Central Group Events" <${process.env.GMAIL_USER}>`,

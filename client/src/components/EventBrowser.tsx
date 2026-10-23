@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useEvents } from "@/hooks/use-landing";
 import { normalizeRegion } from "@shared/region";
+import { EVENT_TYPES, normalizeEventType } from "@shared/event-types";
 
 // Where "Learn more" points when an event has no link of its own — the CGE
 // Instagram beats a dead button. Still routed through /go so clicks count.
@@ -55,17 +56,13 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
 
   const allEvents = events || [];
 
+  // The dropdown shows canonical types only (12 buckets) — every free-form
+  // genre folds into one via normalizeEventType, so the list stays short no
+  // matter how messy the imported genres are.
   const availableEventTypes = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const e of allEvents) {
-      const g = (e.genre || "").trim();
-      if (g && !seen.has(g.toLowerCase())) {
-        seen.add(g.toLowerCase());
-        out.push(g);
-      }
-    }
-    return out.sort((a, b) => a.localeCompare(b));
+    const present = new Set<string>();
+    for (const e of allEvents) present.add(normalizeEventType(e.genre));
+    return EVENT_TYPES.filter((t) => present.has(t));
   }, [allEvents]);
 
   // Only show days in the filter dropdown that actually have events.
@@ -112,7 +109,7 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
       if (getDayOfWeek(e.date) !== dayOfWeek) return false;
     }
     if (eventType !== "All Types") {
-      if ((e.genre || "").trim().toLowerCase() !== eventType.toLowerCase()) return false;
+      if (normalizeEventType(e.genre) !== eventType) return false;
     }
     return true;
   });
@@ -161,7 +158,7 @@ export function EventBrowser({ maxItems, showSeeMoreButton = false, onSeeMore, p
                   data-testid={`tab-region-${region.replace(/\s/g, "-").toLowerCase()}`}
                   className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-white px-6 py-2.5"
                 >
-                  {region === "All" ? "All Regions" : region.replace(" NJ", "")}
+                  {region === "All" ? "All Regions" : region.replace(" NJ", " Jersey")}
                 </TabsTrigger>
               ))}
             </TabsList>
