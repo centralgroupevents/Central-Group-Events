@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import cgeLogo from "@assets/CGE_logo_1772075137138.png";
+import cgeLogo from "@assets/CGE_logo_2026.png";
 import { Link, useLocation } from "wouter";
 
 function TikTokIcon({ className }: { className?: string }) {

@@ -51,7 +51,7 @@ import {
   MessageCircle,
   Instagram,
 } from "lucide-react";
-import cgeLogo from "@assets/CGE_logo_1772075137138.png";
+import cgeLogo from "@assets/CGE_logo_2026.png";
 import { SEO } from "@/components/SEO";
 import { InvoicesTab } from "@/components/InvoicesTab";
 import { BuildToLastTab } from "@/components/BuildToLastTab";

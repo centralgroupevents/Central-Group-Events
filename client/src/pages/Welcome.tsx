@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { SEO } from "@/components/SEO";
-import cgeLogo from "@assets/CGE_logo_1772075137138.png";
+import cgeLogo from "@assets/CGE_logo_2026.png";
 
 export default function Welcome() {
   const [, setLocation] = useLocation();

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConsentNotice } from "@/components/ConsentNotice";
-import cgeLogo from "@assets/CGE_logo_1772075137138.png";
+import cgeLogo from "@assets/CGE_logo_2026.png";
 
 interface SubscribeModalProps {
   open: boolean;
@@ -121,7 +121,7 @@ export function SubscribeModal({ open, onOpenChange, redirectAfter, onSuccess }:
         <DialogDescription className="sr-only">Enter your email to get the weekly NJ event list.</DialogDescription>
 
         <div className="p-8 text-center space-y-5">
-          <img src={cgeLogo} alt="CGE Logo" className="w-14 h-14 mx-auto object-contain" />
+          <img src={cgeLogo} alt="CGE Logo" className="h-8 w-auto mx-auto object-contain" />
 
           <div className="space-y-1">
             <h2 className="text-xl font-bold text-white">Get the Weekly NJ Event List</h2>

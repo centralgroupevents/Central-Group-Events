@@ -3759,7 +3759,7 @@ Return every field you can confidently determine. Set null for any field the ima
     const subject = `This Weekend in NJ — ${upcoming.length} events (${weekLabel})`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; padding: 28px 22px; background:#ffffff; color:#1a1a1a;">
-        <p style="margin:0 0 4px;font-size:11px;letter-spacing:2px;color:#8B2FC9;font-weight:bold">CENTRAL GROUP EVENTS</p>
+        <img src="https://centralgroupevents.com/cge-logo.png" alt="Central Group Events" width="120" style="display:block;width:120px;height:auto;margin:0 0 14px" />
         <h1 style="margin:0 0 6px;font-size:26px">This Weekend in NJ</h1>
         <p style="margin:0 0 22px;color:#666;font-size:14px">${upcoming.length} events across New Jersey over the next 7 days.</p>
         ${adTopHtml}

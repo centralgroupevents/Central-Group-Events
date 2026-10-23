@@ -23,11 +23,22 @@ function esc(s: string): string {
 // - a single-line paragraph starting with "✦" → small gold section header
 // - a paragraph whose lines all start with ✔ / • / - / "1." → a list with
 //   hanging indents, so wrapped lines align under the text, not the marker
+// - [text](url) → a link that reads "text" instead of the raw URL; a
+//   paragraph that is ONLY such a link renders as a gold button
 // - everything else → a normal paragraph; single line breaks become <br>
 const BULLET_RE = /^(✔|✓|•|\*|-|\d+[.)])\s/;
+const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)<]+)\)/g;
 
 function inline(line: string): string {
-  return esc(line).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#8a6d3b">$1</a>');
+  // Stash [text](url) links first so the bare-URL pass can't re-wrap the
+  // URL sitting inside the href.
+  const stash: string[] = [];
+  let s = esc(line).replace(MD_LINK_RE, (_m, label: string, url: string) => {
+    stash.push(`<a href="${url}" style="color:#8a6d3b;font-weight:bold">${label}</a>`);
+    return `\u0000${stash.length - 1}\u0000`;
+  });
+  s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#8a6d3b">$1</a>');
+  return s.replace(/\u0000(\d+)\u0000/g, (_m, i: string) => stash[Number(i)]);
 }
 
 export function paras(text: string): string {
@@ -39,6 +50,12 @@ export function paras(text: string): string {
     .map((p) => {
       if (p.startsWith("✦") && !p.includes("\n")) {
         return `<p style="margin:28px 0 10px;font-family:Arial,Helvetica,sans-serif;font-size:12.5px;font-weight:bold;letter-spacing:2.5px;color:#8a6d3b">${inline(p)}</p>`;
+      }
+      // A paragraph that is nothing but one [text](url) link → gold button.
+      const btn = /^\[([^\]]+)\]\((https?:\/\/[^\s)<]+)\)$/.exec(p.replace(/\n/g, " ").trim());
+      if (btn) {
+        const [, label, url] = btn;
+        return `<p style="margin:26px 0;text-align:center"><a href="${esc(url)}" style="display:inline-block;background:#c9a35c;color:#1b150a;padding:13px 40px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;border-radius:3px">${esc(label)}</a></p>`;
       }
       const lines = p.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
       if (lines.length > 0 && lines.every((l) => BULLET_RE.test(l))) {
@@ -65,12 +82,15 @@ export function renderBtlText(text: string, vars: Record<string, string>): strin
     .trim();
 }
 
-// The shared shell: quiet, serif, personal. unsubscribeUrl renders as one
-// plain line at the bottom — no marketing footer bars.
+// The shared shell: quiet, serif, personal. A small CGE wordmark up top,
+// then the note; unsubscribeUrl renders as one plain line at the bottom —
+// no marketing footer bars.
 export function btlShell(bodyHtml: string, unsubscribeUrl: string): string {
+  const logoUrl = `${process.env.PUBLIC_SITE_URL || "https://centralgroupevents.com"}/cge-logo.png`;
   return `
   <div style="background:#faf8f4;padding:28px 16px">
     <div style="max-width:560px;margin:0 auto;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.75;color:#262118">
+      <img src="${logoUrl}" alt="Central Group Events" width="96" style="display:block;width:96px;height:auto;margin:0 0 26px" />
       ${bodyHtml}
       <p style="margin:34px 0 0;color:#9a917f;font-size:12px;font-family:Georgia,serif">
         You're getting this because of Build to Last Vol. 1.
@@ -141,7 +161,9 @@ Promoting events across this state, we've come across so many influential, hardw
 Thursday, November 12 · {{venue_name}}, Newark
 Dress code: come as yourself — we know plenty of you are coming straight from work. Business casual is perfect.
 
-Your name is already on the list — RSVP takes one tap: {{rsvp_url}}
+Your name is already on the list — RSVP takes one tap.
+
+[RSVP here]({{rsvp_url}})
 
 — Anthony
 Founder, Central Group Events`,
@@ -161,7 +183,9 @@ Thursday, November 12 · {{doors_time}}–8:30 PM · {{venue_name}}, Newark. Ope
 
 It's free, and the room is set by invitation. I'd love to have you — can I count you in?
 
-RSVP in one tap: {{rsvp_url}} — your name's already on the list; just confirm and tell us what you're looking to get out of the night.
+[RSVP here]({{rsvp_url}})
+
+Your name's already on the list — just confirm and tell us what you're looking to get out of the night.
 
 — Anthony
 Founder, Central Group Events`,
@@ -177,7 +201,7 @@ Thank you — whether you've locked in your spot for Build to Last on Thursday, 
 
 One quick ask, one tap: tell us what you're most looking to walk away with that night — new connections, industry perspectives, collaborators, visibility. It helps us set the room and the conversations.
 
-{{questions_url}}
+[Tell us here]({{questions_url}})
 
 If it turns out you can't make it this time, no stress — you'll be first in line for the next one.
 
@@ -213,7 +237,7 @@ Following up on the Build to Last invite from a couple weeks ago. The room is co
 
 If Nov 12 works for you, I'd love to have you in the room. If it doesn't, totally understand — just let me know and I'll make sure you're first on the list for Vol. 2.
 
-RSVP: {{rsvp_url}}
+[RSVP here]({{rsvp_url}})
 
 — Anthony`,
   },
@@ -302,7 +326,9 @@ See you then.
 
 Thursday night was something. Thank you for being in that room.
 
-The edited photos from the night are here — post whatever you like: {{photo_gallery_url}}
+The edited photos from the night are up — post whatever you like.
+
+[See the photos]({{photo_gallery_url}})
 
 The next Build to Last is already in motion. Same intention, new room. Everyone who attended the first one gets first access before invites go wide — and if there's someone you think belongs in the next room, reply with their name.
 

@@ -19,7 +19,7 @@ import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { AiExtractCard } from "@/components/AiExtractCard";
 import { apiRequest } from "@/lib/queryClient";
-import cgeLogo from "@assets/CGE_logo_1772075137138.png";
+import cgeLogo from "@assets/CGE_logo_2026.png";
 
 // ─── T&C content (verbatim from existing modal) ─────────────────────────────
 
