@@ -94,103 +94,113 @@ export const BTL_TEMPLATE_DEFS: BtlTemplateDef[] = [
     key: "confirmation",
     label: "RSVP confirmation (instant)",
     placeholders: ["name", "first_name", "venue_name", "doors_time"],
-    subject: "You're in — Build to Last Nov 12",
+    subject: "You're in — Build to Last, Nov 12",
     body: `Hey {{name}},
 
-You're confirmed for Build to Last Vol. 1 on Thursday, November 12th in Newark.
+You're confirmed for Build to Last on Thursday, November 12th at {{venue_name}} in Newark. Doors open at {{doors_time}}.
 
-Your question is noted and going into the briefing I'm sending each speaker once they're locked. If your question comes up that night, you'll know I heard you.
+We'll share more as the night gets closer — speakers, run of show, and everything else worth knowing.
 
-I'll be in touch over the next couple weeks with speaker announcements, venue details, and run of show.
+Looking forward to having you in the room.
 
-— Anthony`,
+— Anthony
+Founder, Central Group Events`,
   },
   {
     key: "initial_invite",
     label: "Initial invites",
     placeholders: ["name", "first_name", "rsvp_url", "venue_name", "doors_time", "program_start_time"],
-    subject: "Hey {{name}} — hosting something I want you in the room for.",
-    body: `Hey {{name}} —
+    subject: "You're invited — Build to Last, Nov 12 in Newark",
+    body: `Hey {{name}},
 
-I'm putting together the first Build to Last on Thursday, November 12th in Newark. It's an intimate convening for the people in this city who are serious about turning what they do into something that lasts: planners, DJs, influencers, venue owners, and the quiet operators building the next decade of Newark's creative economy.
+In about three weeks, we're hosting the first Build to Last — an invite-only mixer for the planners, venue owners, and creators we've met promoting events across New Jersey.
 
-The premise is simple. Newark has the talent. What it doesn't have — reliably — is the business architecture around that talent: the contracts that protect you, the funding you don't know how to access, the venue economics nobody explains, the real read on where this city is actually heading. So I'm bringing in four voices across those four questions, in conversation with each other and the room. Not a panel. Not a lecture.
+Promoting events across this state, we've come across so many influential, hardworking people who chose to curate spaces and places here — and who believe New Jersey is only going to present more opportunities for people like us. The best habit any of us can keep is an informed, active network that learns from one another. Build to Last is that habit, in person.
 
 ✦ WHAT TO EXPECT
 
-✔ Four conversation stations — legal protection, funding, venue economics, and where Newark's market is heading. You rotate through all four.
-✔ Speakers briefed on YOUR questions before the night — I'll ask for yours right after you sign up
-✔ Open bar + small bites throughout
-✔ A printed guest book of everyone in the room: who they are and what they're building
-✔ Intentional networking — not business-card roulette
+✔ An intentionally set crowd — planners, venue owners, and creators from across the state
+✔ Moderated conversations on event planning, spaces, and brand building in NJ
+✔ A professionally photographed night — you'll get the photos after
 
-✦ YOU'LL WALK AWAY WITH
+✦ THE ESSENTIALS
 
-✔ A straight answer to the question you've been circling
-✔ The contacts you actually need — tell me who you want to meet and I'll make the intro on the night
-✔ Field Notes after: the room's best questions with the speakers' answers written up
+✔ Open bar
+✔ Small bites
+✔ Programming + networking
+✔ Free · RSVP required
 
 ✦ EVENT FLOW
 
-{{doors_time}} — Doors, drinks, guest book
-{{program_start_time}} — Conversation stations begin
-8:00 PM — Open networking
-8:30 PM — Close
+{{doors_time}} — Doors open. Introductions and open bar.
+{{program_start_time}} — Moderated conversations centered around event planning, spaces, and brand building in NJ
+8:30 PM — Night cap
 
 ✦ THE DETAILS
 
 Thursday, November 12 · {{venue_name}}, Newark
-Free · RSVP required
-Dress code: come as yourself, elevated.
+Dress code: come as yourself — we know plenty of you are coming straight from work. Business casual is perfect.
 
-The room is small on purpose. I'd rather have 30 of the right people than 100 of everyone.
+Your name is already on the list — RSVP takes one tap: {{rsvp_url}}
 
-RSVP here: {{rsvp_url}}
+— Anthony
+Founder, Central Group Events`,
+  },
+  {
+    key: "nudge_1d",
+    label: "RSVP nudge (24h, no response)",
+    placeholders: ["name", "first_name", "rsvp_url", "venue_name", "doors_time"],
+    subject: "Can I count you in? — Build to Last, Nov 12",
+    body: `Hey {{name}},
 
-One ask when you register: there's a question asking what you most want answered that night. Please take it seriously — your answers are literally shaping what the speakers cover.
+Anthony from Central Group Events — floating my invite back to the top of your inbox.
 
-Build to Last is a series — this is Vol. 1, and the people in this room get first access to every room after it. Speakers announced in the next couple weeks.
+In about three weeks, we're hosting Build to Last — an invite-only mixer for the planners, venue owners, and creators we've met promoting events across New Jersey. People who curate spaces and places here, and believe this state is only going to open up more for people like us.
 
-— Anthony`,
+Thursday, November 12 · {{doors_time}}–8:30 PM · {{venue_name}}, Newark. Open bar, small bites, a photographer on site, and moderated conversations mid-evening on event planning, spaces, and brand building in NJ.
+
+It's free, and the room is set by invitation. I'd love to have you — can I count you in?
+
+RSVP in one tap: {{rsvp_url}} — your name's already on the list; just confirm and tell us what you're looking to get out of the night.
+
+— Anthony
+Founder, Central Group Events`,
   },
   {
     key: "guest_info",
-    label: "Thank you + your two questions",
+    label: "Thank you + what you want out of the night",
     placeholders: ["name", "first_name", "questions_url", "rsvp_url"],
-    subject: "Thank you — and two quick questions",
+    subject: "Thank you — one quick tap",
     body: `Hey {{name}},
 
-Thank you — whether you've locked in your spot for Build to Last on Thursday, November 12th or you're still figuring out if you can make it, I appreciate you even considering the room. It's free, and it's small on purpose.
+Thank you — whether you've locked in your spot for Build to Last on Thursday, November 12th or you're still figuring out if you can make it, I appreciate you considering the room.
 
-Either way, I have one ask that takes two minutes. Two questions:
+One quick ask, one tap: tell us what you're most looking to walk away with that night — new connections, industry perspectives, collaborators, visibility. It helps us set the room and the conversations.
 
-✔ One line on who you are and what you're working on — it goes into the printed guest book handed to every attendee
-✔ The one question you most want answered that night — I'm briefing every speaker on the room's actual questions
+{{questions_url}}
 
-Answer both here: {{questions_url}}
+If it turns out you can't make it this time, no stress — you'll be first in line for the next one.
 
-If it turns out you can't make it this time, your answers still shape the night — and you're first in line for Vol. 2.
-
-— Anthony`,
+— Anthony
+Founder, Central Group Events`,
   },
   {
     key: "touch_4",
-    label: "What this room wants to know",
-    placeholders: ["name", "question_themes"],
-    subject: "What this room wants to know",
-    body: `Hey {{name}} —
+    label: "What this room is coming for",
+    placeholders: ["name", "interests_breakdown"],
+    subject: "What this room is coming for",
+    body: `Hey {{name}},
 
 Quick update on Build to Last as we get closer.
 
-The questions coming in from the RSVPs so far have been honestly incredible. A few themes already emerging:
+The RSVPs have been coming in, and when we ask people what they're looking to walk away with, here's what this room says:
 
-{{question_themes}}
+{{interests_breakdown}}
 
-I'm using these to brief every speaker. Every station is going to be built around what people in the room actually want to know.
+We're shaping the night around exactly that. See you November 12th.
 
-Speaker announcements coming soon. See you Nov 12.
-
-— Anthony`,
+— Anthony
+Founder, Central Group Events`,
   },
   {
     key: "touch_5",
@@ -260,9 +270,9 @@ Four days until Build to Last.
 
 A few last things:
 
-- Full guest list is set. The room is who it needs to be.
-- If you need to introduce yourself to someone specific that night, reply here. I'm making a short list of intros to make on the fly.
-- Content: there'll be a photographer and videographer in the room. Candid shots only. You'll get edited photos and a short recap video within 48 hours with permission to post. No video of conversations without consent.
+- The guest list is set. The room is who it needs to be.
+- If there's someone specific you're hoping to meet that night, reply here — I'm keeping a short list of introductions to make.
+- There'll be a photographer in the room, candid shots only. You'll get the edited photos after, with permission to post.
 
 See you Thursday.
 
@@ -286,29 +296,20 @@ See you then.
   {
     key: "followup_48h",
     label: "48h follow-up (attendees)",
-    placeholders: ["name", "photo_gallery_url", "recap_video_url", "field_notes_url", "contact_sheet_line"],
-    subject: "Build to Last Vol. 1 — field notes, photos, and what's next",
-    body: `Hey {{name}} —
+    placeholders: ["name", "photo_gallery_url"],
+    subject: "Build to Last — the photos, and thank you",
+    body: `Hey {{name}},
 
 Thursday night was something. Thank you for being in that room.
 
-Here's what you need:
+The edited photos from the night are here — post whatever you like: {{photo_gallery_url}}
 
-Photos from the night: {{photo_gallery_url}}
+The next Build to Last is already in motion. Same intention, new room. Everyone who attended the first one gets first access before invites go wide — and if there's someone you think belongs in the next room, reply with their name.
 
-Recap video (90 seconds): {{recap_video_url}}
+See you around New Jersey.
 
-{{contact_sheet_line}}
-
-Field Notes: the top questions this room asked, with the speakers' answers written up — {{field_notes_url}}
-
-Vol. 2 is already in motion. Early 2027. Same format, different lineup, same intention. If there's someone you think should be in the next room — reply with their name.
-
-One more thing: everyone who attended Vol. 1 gets first access to Vol. 2 before invites go wide. Keep an eye out.
-
-See you around Newark.
-
-— Anthony`,
+— Anthony
+Founder, Central Group Events`,
   },
 ];
 

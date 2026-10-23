@@ -9,6 +9,7 @@
 
 import { storage } from "./storage";
 import { BTL_SLUG, btlTemplateDef, renderBtlText, paras } from "./btl-emails";
+import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
 import { deliverBtlEmail, btlRsvpUrl, btlSendPause, getBtlSettings, type BtlSettings } from "./btl-mailer";
 import { signToken, encodeEmail } from "./email-compliance";
 import type { EventRsvp, EventInvitee } from "@shared/schema";
@@ -34,7 +35,7 @@ export function etToUtc(local: string): Date {
   return guess;
 }
 
-export type BtlAudience = "rsvps" | "invitees_second_wave" | "invitees_all" | "checked_in";
+export type BtlAudience = "rsvps" | "invitees_second_wave" | "invitees_all" | "invitees_nudge" | "checked_in";
 
 export interface BtlCadenceEntry {
   key: string;
@@ -48,14 +49,18 @@ export interface BtlCadenceEntry {
 
 export const BTL_CADENCE: BtlCadenceEntry[] = [
   { key: "initial_invite", label: "Initial invites", audience: "manual", defaultSendAtEt: null },
-  { key: "guest_info", label: "Thank you + your two questions", audience: "invitees_all", defaultSendAtEt: null },
-  { key: "touch_4", label: "What this room wants to know", audience: "rsvps", defaultSendAtEt: "2026-10-29T10:00", requiresSettings: ["questionThemes"] },
+  { key: "guest_info", label: "Thank you + what you want out of the night", audience: "invitees_all", defaultSendAtEt: null },
+  // Evaluated every tick (send-at is in the past); the audience filter only
+  // admits invitees whose initial invite is 24h+ old with no RSVP, and the
+  // send log keeps it to one nudge per person.
+  { key: "nudge_1d", label: "RSVP nudge (24h, no response)", audience: "invitees_nudge", defaultSendAtEt: "2026-10-01T00:00" },
+  { key: "touch_4", label: "What this room is coming for", audience: "rsvps", defaultSendAtEt: "2026-10-29T10:00" },
   { key: "touch_5", label: "Second wave (non-responders)", audience: "invitees_second_wave", defaultSendAtEt: "2026-10-31T10:00" },
   { key: "touch_6", label: "Who's going to be in the room", audience: "rsvps", defaultSendAtEt: "2026-11-02T10:00" },
   { key: "touch_7", label: "Speaker announcement", audience: "rsvps", defaultSendAtEt: "2026-11-04T10:00", requiresSettings: ["speakers"] },
   { key: "touch_8", label: "Four days out", audience: "rsvps", defaultSendAtEt: "2026-11-08T10:00" },
   { key: "touch_9", label: "Tomorrow", audience: "rsvps", defaultSendAtEt: "2026-11-11T17:00" },
-  { key: "followup_48h", label: "48h follow-up (attendees)", audience: "checked_in", defaultSendAtEt: "2026-11-14T10:00", requiresSettings: ["photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl"] },
+  { key: "followup_48h", label: "48h follow-up (attendees)", audience: "checked_in", defaultSendAtEt: "2026-11-14T10:00", requiresSettings: ["photoGalleryUrl"] },
 ];
 
 export async function btlSendAtFor(key: string): Promise<string | null> {
@@ -91,6 +96,7 @@ export interface BtlRenderCtx {
   settings: BtlSettings;
   confirmedCount: number;
   breakdown: string;
+  interestsBreakdown: string;
 }
 
 export interface BtlTemplateTexts {
@@ -144,6 +150,7 @@ export function buildBtlVars(
     confirmed_count: String(ctx.confirmedCount),
     question_themes: s.questionThemes,
     category_breakdown: ctx.breakdown,
+    interests_breakdown: ctx.interestsBreakdown,
     speaker_lineup: speakerLineup,
     photo_gallery_url: s.photoGalleryUrl,
     recap_video_url: s.recapVideoUrl,
@@ -186,6 +193,18 @@ async function resolveAudience(audience: BtlAudience): Promise<Array<{ name: str
     const rows = await storage.listBtlRsvps(BTL_SLUG);
     return rows.filter((r) => !r.unsubscribed && r.checkedInAt).map((r) => ({ name: r.name, email: r.email, rsvpId: r.id, contactSheetOptin: r.contactSheetOptin }));
   }
+  if (audience === "invitees_nudge") {
+    // Initial invite went out 24h+ ago, no RSVP yet, still pending.
+    const invitees = await storage.listBtlInvitees(BTL_SLUG);
+    const rsvps = await storage.listBtlRsvps(BTL_SLUG);
+    const rsvpEmails = new Set(rsvps.map((r) => r.email));
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    return invitees
+      .filter((i: EventInvitee) =>
+        !i.unsubscribed && i.rsvpStatus === "pending" && !rsvpEmails.has(i.email) &&
+        !!i.initialInviteSentAt && new Date(i.initialInviteSentAt).getTime() <= dayAgo)
+      .map((i) => ({ name: i.name, email: i.email, inviteeId: i.id }));
+  }
   if (audience === "invitees_all") {
     const invitees = await storage.listBtlInvitees(BTL_SLUG);
     return invitees
@@ -201,10 +220,27 @@ async function resolveAudience(audience: BtlAudience): Promise<Array<{ name: str
     .map((i) => ({ name: i.name, email: i.email, inviteeId: i.id }));
 }
 
+/** "{{interests_breakdown}}" — what the room says it wants, from RSVPs. */
+export function interestsBreakdown(rsvps: EventRsvp[]): string {
+  const counts = new Map<string, number>();
+  for (const r of rsvps) {
+    try {
+      for (const k of JSON.parse(r.topicInterests || "[]")) {
+        if ((BTL_INTEREST_KEYS as readonly string[]).includes(k)) counts.set(k, (counts.get(k) ?? 0) + 1);
+      }
+    } catch { /* skip bad rows */ }
+  }
+  const lines = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([k]) => `- ${BTL_INTEREST_LABELS[k as keyof typeof BTL_INTEREST_LABELS]}`);
+  return lines.length > 0 ? lines.join("\n") : "- New connections\n- Industry news & perspectives\n- Expanding networks statewide";
+}
+
 export async function buildBtlRenderCtx(): Promise<BtlRenderCtx> {
   const settings = await getBtlSettings();
   const rsvps = await storage.listBtlRsvps(BTL_SLUG);
-  return { settings, confirmedCount: rsvps.length, breakdown: categoryBreakdown(rsvps) };
+  return { settings, confirmedCount: rsvps.length, breakdown: categoryBreakdown(rsvps), interestsBreakdown: interestsBreakdown(rsvps) };
 }
 
 /** Send one template to its audience right now (dedup makes this idempotent). */

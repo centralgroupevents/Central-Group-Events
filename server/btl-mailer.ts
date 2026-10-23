@@ -47,9 +47,12 @@ export async function deliverBtlEmail(
   recipient: BtlRecipient,
   templateKey: string,
   tpl: { subject: string; body: string },
+  opts?: { force?: boolean },
 ): Promise<"sent" | "skipped" | "failed"> {
   const email = recipient.email.toLowerCase().trim();
-  if (await storage.hasBtlEmailSend(BTL_SLUG, email, templateKey)) {
+  // force skips the dedup gate — used by the admin "Resend" action so a
+  // test inbox can receive the same template repeatedly.
+  if (!opts?.force && (await storage.hasBtlEmailSend(BTL_SLUG, email, templateKey))) {
     return "skipped";
   }
   const html = btlShell(tpl.body, btlUnsubscribeUrl(email));
@@ -114,7 +117,7 @@ const BTL_DEFAULTS: BtlSettings = {
   venueName: "Equal Space",
   venueAddress: "Equal Space, Newark, NJ",
   doorsTime: "6:00 PM",
-  programStartTime: "6:45 PM",
+  programStartTime: "7:00 PM",
   questionThemes: "",
   speakers: [],
   photoGalleryUrl: "",

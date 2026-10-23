@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Loader2 } from "lucide-react";
+import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
 import { SEO } from "@/components/SEO";
 
 // Build to Last Vol. 1 — standalone RSVP page. Deliberately NOT in the CGE
@@ -67,9 +68,14 @@ export default function BuildToLast() {
   const [identity] = useState(readIdentityFromUrl);
   const [name, setName] = useState(identity?.name ?? "");
   const [email, setEmail] = useState(identity?.email ?? "");
-  const [workingOnNow, setWorkingOnNow] = useState("");
-  const [keyQuestion, setKeyQuestion] = useState("");
-  const [contactOptin, setContactOptin] = useState<"" | "yes" | "no">("");
+  const [interests, setInterests] = useState<Set<string>>(new Set());
+
+  function toggleInterest(key: string) {
+    const next = new Set(interests);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setInterests(next);
+  }
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
@@ -78,12 +84,12 @@ export default function BuildToLast() {
     e.preventDefault();
     setError("");
     const effectiveName = name.trim() || (identity ? identity.email.split("@")[0] : "");
-    if (!effectiveName || !email.trim() || !workingOnNow.trim() || !keyQuestion.trim()) {
-      setError("Please fill in every required field.");
+    if (!effectiveName || !email.trim()) {
+      setError("Please fill in your name and email.");
       return;
     }
-    if (!contactOptin) {
-      setError("Let us know about the attendee contact sheet (yes or no).");
+    if (interests.size === 0) {
+      setError("Pick at least one — it helps us set the room.");
       return;
     }
     setSubmitting(true);
@@ -99,10 +105,10 @@ export default function BuildToLast() {
           email: email.trim().toLowerCase(),
           role: "",
           companyOrHandle: null,
-          workingOnNow: workingOnNow.trim(),
-          keyQuestion: keyQuestion.trim(),
-          topicInterests: [],
-          contactSheetOptin: contactOptin === "yes",
+          workingOnNow: "",
+          keyQuestion: "",
+          topicInterests: Array.from(interests),
+          contactSheetOptin: false,
           attendeeSource: src || "direct",
           ...(identity ? { e: identity.e, t: identity.t } : {}),
         }),
@@ -121,7 +127,7 @@ export default function BuildToLast() {
     <div style={{ minHeight: "100vh", background: INK, color: CREAM, fontFamily: "'Archivo', 'Helvetica Neue', Arial, sans-serif" }}>
       <SEO
         title="Build to Last Vol. 1 — Newark"
-        description="An intimate convening for the people quietly building the next decade of Newark's creative economy. Thursday, November 12, 2026. Free, RSVP required."
+        description="An invite-only mixer for the planners, venue owners, and creators building across New Jersey. Thursday, November 12, 2026. Free, RSVP required."
         canonical="https://centralgroupevents.com/build-to-last"
       />
       <Helmet>
@@ -144,7 +150,7 @@ export default function BuildToLast() {
             Thursday, November 12, 2026 · Newark
           </p>
           <p style={{ fontSize: 17, color: CREAM_DIM, maxWidth: 460, margin: "0 auto 36px", lineHeight: 1.65 }}>
-            An intimate convening for the people quietly building the next decade of Newark's creative economy.
+            An invite-only mixer for the planners, venue owners, and creators building across New Jersey.
           </p>
           <a
             href="#rsvp"
@@ -158,13 +164,13 @@ export default function BuildToLast() {
         {/* Premise */}
         <section style={{ padding: "52px 0", borderBottom: `1px solid ${LINE}` }}>
           <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 23, lineHeight: 1.65, margin: 0 }}>
-            Newark has the talent. What it doesn't have — reliably — is the business architecture around
-            that talent. The contracts that protect you, the funding you don't know how to access, the
-            venue economics nobody explains, the real read on where this city is actually heading.
+            Promoting events across New Jersey, we've come across so many influential, hardworking
+            people who chose to curate spaces and places here — and who believe this state is only
+            going to present more opportunities for people like us.
           </p>
           <p style={{ fontSize: 16, color: CREAM_DIM, lineHeight: 1.7, margin: "22px 0 0" }}>
-            Four conversations, one room, intentionally small. Open bar · small bites · programming +
-            networking. Free, RSVP required.
+            The best habit any of us can keep is an informed, active network that learns from one
+            another. Build to Last is that habit, in person — one room, an intentionally set crowd.
           </p>
         </section>
 
@@ -173,10 +179,10 @@ export default function BuildToLast() {
           <SectionTitle>What to Expect</SectionTitle>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 16, lineHeight: 1.7, color: CREAM_DIM }}>
             {[
-              ["Four conversation stations", "legal protection, grants & funding, venue economics, and where Newark is heading — you rotate through all four."],
-              ["Built around your questions", "every station is briefed on what the room actually asked at RSVP."],
-              ["An elevated atmosphere", "open bar, small bites, and a room curated on purpose."],
-              ["Organic networking", "with founders, operators, planners, DJs, and venue owners who are actually building."],
+              ["An intentionally set crowd", "planners, venue owners, and creators from across the state."],
+              ["Moderated conversations", "on event planning, spaces, and brand building in New Jersey."],
+              ["Organic networking", "with people building the same things you are."],
+              ["A professionally photographed night", "you'll get the photos after."],
             ].map(([bold, rest], i) => (
               <li key={i} style={{ margin: "0 0 14px", paddingLeft: 26, position: "relative" }}>
                 <span style={{ position: "absolute", left: 0, color: GOLD }}>✓</span>
@@ -191,10 +197,27 @@ export default function BuildToLast() {
           <SectionTitle>You'll Walk Away With</SectionTitle>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 16, lineHeight: 1.7, color: CREAM_DIM }}>
             {[
-              "Something concrete — a contact, an answer, a lead, or a decision you've been circling",
-              "A printed guest book of everyone in the room and what they're building",
-              "The attendee contact sheet within 48 hours (opt-in)",
-              "Edited photos and a recap video within 48 hours, yours to post",
+              "Relationships worth keeping — people you'll actually hear from again",
+              "A sharper sense of where New Jersey is heading, from the people building it",
+              "Perspectives you didn't walk in with",
+            ].map((item, i) => (
+              <li key={i} style={{ margin: "0 0 14px", paddingLeft: 26, position: "relative" }}>
+                <span style={{ position: "absolute", left: 0, color: GOLD }}>✓</span>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* The Essentials */}
+        <section style={{ padding: "52px 0", borderBottom: `1px solid ${LINE}` }}>
+          <SectionTitle>The Essentials</SectionTitle>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, fontSize: 16, lineHeight: 1.7, color: CREAM_DIM }}>
+            {[
+              "Open bar",
+              "Small bites",
+              "Programming + networking",
+              "Free · RSVP required",
             ].map((item, i) => (
               <li key={i} style={{ margin: "0 0 14px", paddingLeft: 26, position: "relative" }}>
                 <span style={{ position: "absolute", left: 0, color: GOLD }}>✓</span>
@@ -208,14 +231,13 @@ export default function BuildToLast() {
         <section style={{ padding: "52px 0", borderBottom: `1px solid ${LINE}` }}>
           <SectionTitle>Event Flow</SectionTitle>
           <div style={{ fontSize: 16, lineHeight: 2, color: CREAM_DIM }}>
-            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>6:00 PM</strong> — Doors, welcome mixer & open bar</p>
-            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>6:45 PM</strong> — Conversation stations begin</p>
-            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>8:00 PM</strong> — Closing mixer & introductions</p>
-            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>8:30 PM</strong> — Night ends</p>
+            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>6:00 PM</strong> — Doors open. Introductions and open bar.</p>
+            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>7:00 PM</strong> — Moderated conversations centered around event planning, spaces, and brand building in NJ</p>
+            <p style={{ margin: 0 }}><strong style={{ color: CREAM }}>8:30 PM</strong> — Night cap</p>
           </div>
           <p style={{ margin: "26px 0 0", fontSize: 15, color: CREAM_DIM }}>
             <span style={{ color: GOLD, letterSpacing: 1.5, textTransform: "uppercase", fontSize: 12 }}>Dress code</span>
-            <br />Come as yourself, elevated. · Equal Space, Newark
+            <br />Come as yourself — we know plenty of you are coming straight from work. Business casual is perfect. · Equal Space, Newark
           </p>
         </section>
 
@@ -231,7 +253,7 @@ export default function BuildToLast() {
             <form onSubmit={handleSubmit} noValidate>
               {identity ? (
                 <p style={{ fontSize: 14, color: GOLD, margin: "0 0 22px", letterSpacing: 0.5 }} data-testid="text-btl-identity">
-                  Answering as {identity.name || identity.email} — just the two questions below.
+                  RSVP'ing as {identity.name || identity.email} — one tap below and you're in.
                 </p>
               ) : (
                 <>
@@ -244,43 +266,20 @@ export default function BuildToLast() {
                 </>
               )}
               <Field
-                label="One line on who you are and what you're working on right now *"
-                helper={`This appears in the printed guest book handed to every attendee. Write it as you'd want others to read it. ${workingOnNow.length}/140`}
+                label="What are you most looking to walk away with? *"
+                helper="Pick as many as apply — it helps us set the room and the conversations."
               >
-                <textarea
-                  style={{ ...inputStyle, minHeight: 72, resize: "vertical" }}
-                  maxLength={140}
-                  value={workingOnNow}
-                  onChange={(e) => setWorkingOnNow(e.target.value)}
-                  required
-                  data-testid="input-btl-working-on"
-                />
-              </Field>
-              <Field
-                label="What's the one question you most want answered at Build to Last? *"
-                helper="Something you've been trying to figure out, something you'd pay to ask an expert, or something that's been in your head about your next move. Your answers shape what the speakers cover."
-              >
-                <textarea
-                  style={{ ...inputStyle, minHeight: 110, resize: "vertical" }}
-                  value={keyQuestion}
-                  onChange={(e) => setKeyQuestion(e.target.value)}
-                  required
-                  data-testid="input-btl-question"
-                />
-              </Field>
-              <Field label="Opt in to the attendee contact sheet shared 48 hours after the event? *">
-                <div style={{ display: "flex", gap: 26 }}>
-                  {(["yes", "no"] as const).map((v) => (
-                    <label key={v} style={{ display: "flex", gap: 10, alignItems: "center", cursor: "pointer", fontSize: 16, color: contactOptin === v ? CREAM : CREAM_DIM }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {BTL_INTEREST_KEYS.map((key) => (
+                    <label key={key} style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer", fontSize: 16, color: interests.has(key) ? CREAM : CREAM_DIM }}>
                       <input
-                        type="radio"
-                        name="contactOptin"
-                        checked={contactOptin === v}
-                        onChange={() => setContactOptin(v)}
-                        style={{ accentColor: GOLD, width: 16, height: 16 }}
-                        data-testid={`radio-btl-optin-${v}`}
+                        type="checkbox"
+                        checked={interests.has(key)}
+                        onChange={() => toggleInterest(key)}
+                        style={{ marginTop: 4, accentColor: GOLD, width: 16, height: 16 }}
+                        data-testid={`checkbox-btl-interest-${key}`}
                       />
-                      {v === "yes" ? "Yes" : "No"}
+                      {BTL_INTEREST_LABELS[key]}
                     </label>
                   ))}
                 </div>

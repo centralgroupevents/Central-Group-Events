@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Papa from "papaparse";
 import { Input } from "@/components/ui/input";
@@ -7,9 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Download, Loader2, Plus, Send, Upload, Eye, Check, Printer } from "lucide-react";
+import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
+import { Download, Loader2, Plus, Send, Upload, Eye, Check, Printer, Pencil, Trash2, X } from "lucide-react";
 
 type BtlRsvp = {
   id: number;
@@ -41,7 +43,17 @@ type BtlInvitee = {
   rsvpStatus: string;
   unsubscribed: boolean;
   notes: string | null;
+  interests: string;
 };
+
+function inviteeInterests(i: BtlInvitee): string[] {
+  try {
+    const arr = JSON.parse(i.interests || "[]");
+    return Array.isArray(arr) ? arr.filter((k) => typeof k === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 type CadenceRow = {
   key: string;
@@ -297,8 +309,45 @@ function InvitesView() {
   const qc = useQueryClient();
   const { data: invitees = [], isLoading } = useQuery<BtlInvitee[]>({ queryKey: ["/api/admin/btl/invitees"] });
   const fileRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState<"" | "import" | "initial" | "second">("");
+  const [busy, setBusy] = useState<"" | "import" | "initial" | "second" | "delete">("");
   const [manual, setManual] = useState({ name: "", email: "", instagram: "", category: "", tier: "2" });
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const allSelected = invitees.length > 0 && invitees.every((i) => selected.has(i.id));
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(invitees.map((i) => i.id)));
+  }
+
+  function toggleOne(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function deleteSelected() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    const names = invitees.filter((i) => selected.has(i.id)).map((i) => i.name || i.email);
+    const preview = names.slice(0, 5).join(", ") + (names.length > 5 ? ` and ${names.length - 5} more` : "");
+    if (!window.confirm(`Delete ${ids.length} invitee${ids.length === 1 ? "" : "s"} (${preview})? This removes them from the invite list permanently.`)) return;
+    setBusy("delete");
+    try {
+      const res = await apiRequest("POST", "/api/admin/btl/invitees/bulk-delete", { ids });
+      const body = await res.json();
+      toast({ title: `Deleted ${body.deleted} invitee${body.deleted === 1 ? "" : "s"}` });
+      setSelected(new Set());
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/invitees"] });
+    } catch (err) {
+      toast({ title: "Delete failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
 
   const pendingInitial = invitees.filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined").length;
 
@@ -417,44 +466,200 @@ function InvitesView() {
         <p className="text-xs text-muted-foreground">CSV columns: name, email, instagram, category, tier (1 = your personal top list). Duplicate emails are skipped automatically.</p>
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center justify-between gap-3 bg-red-950/30 border border-red-500/30 rounded-xl px-4 py-2.5">
+          <p className="text-sm text-white/90">{selected.size} selected</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} className="text-white/70 h-8">
+              <X className="w-3.5 h-3.5 mr-1" /> Clear
+            </Button>
+            <Button size="sm" variant="destructive" onClick={deleteSelected} disabled={busy !== ""} className="h-8" data-testid="button-btl-bulk-delete">
+              {busy === "delete" ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-1" />}
+              Delete selected
+            </Button>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
       ) : invitees.length === 0 ? (
         <p className="text-center text-muted-foreground py-10">No invitees yet — import the CSV when the list is ready.</p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="w-full text-sm" style={{ minWidth: "860px" }}>
+          <table className="w-full text-sm" style={{ minWidth: "980px" }}>
             <thead>
               <tr className="text-left text-muted-foreground border-b border-white/10 bg-white/[0.02]">
+                <th className="px-4 py-3 w-10">
+                  <Checkbox checked={allSelected} onCheckedChange={toggleAll} aria-label="Select all invitees" data-testid="checkbox-btl-select-all" />
+                </th>
                 <th className="px-4 py-3 font-medium">Who</th>
+                <th className="px-4 py-3 font-medium">Interests</th>
                 <th className="px-4 py-3 font-medium">Category</th>
                 <th className="px-4 py-3 font-medium">Tier</th>
                 <th className="px-4 py-3 font-medium">Invited</th>
-                <th className="px-4 py-3 font-medium">2nd wave</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {invitees.map((i, idx) => (
-                <tr key={i.id} className={`border-b border-white/5 ${idx % 2 !== 0 ? "bg-white/[0.02]" : ""}`} data-testid={`row-btl-invitee-${i.id}`}>
-                  <td className="px-4 py-3">
-                    <p className="text-white font-medium">{i.name}{i.unsubscribed && <span className="ml-2 text-xs text-red-400">(unsubscribed)</span>}</p>
-                    <p className="text-xs text-muted-foreground">{i.email}{i.instagramHandle ? ` · ${i.instagramHandle}` : ""}</p>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">{CATEGORIES.find((c) => c.value === i.category)?.label ?? i.category ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs">{i.priorityTier === 1 ? <span className="text-amber-300 font-bold">Tier 1</span> : "2"}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{i.initialInviteSentAt ? new Date(i.initialInviteSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{i.secondWaveSentAt ? new Date(i.secondWaveSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}</td>
-                  <td className="px-4 py-3">
-                    <StatusSelect invitee={i} />
-                  </td>
-                </tr>
-              ))}
+              {invitees.map((i, idx) => {
+                const chips = inviteeInterests(i);
+                return (
+                  <Fragment key={i.id}>
+                    <tr className={`border-b border-white/5 ${selected.has(i.id) ? "bg-primary/[0.08]" : idx % 2 !== 0 ? "bg-white/[0.02]" : ""}`} data-testid={`row-btl-invitee-${i.id}`}>
+                      <td className="px-4 py-3">
+                        <Checkbox checked={selected.has(i.id)} onCheckedChange={() => toggleOne(i.id)} aria-label={`Select ${i.name}`} data-testid={`checkbox-btl-invitee-${i.id}`} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-white font-medium">{i.name}{i.unsubscribed && <span className="ml-2 text-xs text-red-400">(unsubscribed)</span>}</p>
+                        <p className="text-xs text-muted-foreground">{i.email}{i.instagramHandle ? ` · ${i.instagramHandle}` : ""}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        {chips.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1 max-w-[220px]">
+                            {chips.map((k) => (
+                              <span key={k} className="text-[10px] bg-primary/15 text-primary border border-primary/25 rounded-full px-2 py-0.5 whitespace-nowrap">
+                                {BTL_INTEREST_LABELS[k as (typeof BTL_INTEREST_KEYS)[number]] ?? k}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{CATEGORIES.find((c) => c.value === i.category)?.label ?? i.category ?? "—"}</td>
+                      <td className="px-4 py-3 text-xs">{i.priorityTier === 1 ? <span className="text-amber-300 font-bold">Tier 1</span> : "2"}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {i.initialInviteSentAt ? new Date(i.initialInviteSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                        {i.secondWaveSentAt ? <span className="block text-[10px]">2nd: {new Date(i.secondWaveSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span> : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusSelect invitee={i} />
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <Button size="sm" variant="ghost" onClick={() => setEditingId(editingId === i.id ? null : i.id)} className="h-8 px-2 text-white/70 hover:text-white" data-testid={`button-btl-edit-${i.id}`}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <ResendButton invitee={i} />
+                      </td>
+                    </tr>
+                    {editingId === i.id && (
+                      <tr className="border-b border-white/5 bg-black/30">
+                        <td colSpan={8} className="px-4 py-4">
+                          <InviteeEditor invitee={i} onDone={() => setEditingId(null)} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
     </div>
+  );
+}
+
+// Inline row editor: name, email, and the "walking away with" interests —
+// the same keys the public RSVP form writes, so admin edits and RSVPs stay
+// in one vocabulary.
+function InviteeEditor({ invitee, onDone }: { invitee: BtlInvitee; onDone: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [name, setName] = useState(invitee.name);
+  const [email, setEmail] = useState(invitee.email);
+  const [interests, setInterests] = useState<Set<string>>(new Set(inviteeInterests(invitee)));
+  const [saving, setSaving] = useState(false);
+
+  function toggle(key: string) {
+    setInterests((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await apiRequest("PATCH", `/api/admin/btl/invitees/${invitee.id}`, {
+        name: name.trim(),
+        email: email.trim(),
+        interests: Array.from(interests),
+      });
+      toast({ title: "Invitee updated" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/invitees"] });
+      onDone();
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-black/30 border-white/10 h-9" data-testid={`input-btl-edit-name-${invitee.id}`} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Email</Label>
+          <Input value={email} onChange={(e) => setEmail(e.target.value)} className="bg-black/30 border-white/10 h-9" data-testid={`input-btl-edit-email-${invitee.id}`} />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Most interested in (what they're walking away with)</Label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-2">
+          {BTL_INTEREST_KEYS.map((key) => (
+            <label key={key} className="flex items-start gap-2 text-xs text-white/80 cursor-pointer">
+              <Checkbox checked={interests.has(key)} onCheckedChange={() => toggle(key)} className="mt-0.5" data-testid={`checkbox-btl-edit-interest-${key}-${invitee.id}`} />
+              {BTL_INTEREST_LABELS[key]}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={save} disabled={saving || !name.trim() || !email.trim()} className="bg-primary hover:bg-primary/90 h-8" data-testid={`button-btl-save-invitee-${invitee.id}`}>
+          {saving ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+          Save
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onDone} disabled={saving} className="text-white/70 h-8">Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
+// Re-send the initial invite to one person, bypassing the duplicate guard —
+// built so a test inbox can receive the email repeatedly while iterating.
+function ResendButton({ invitee }: { invitee: BtlInvitee }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [sending, setSending] = useState(false);
+
+  async function resend() {
+    if (!window.confirm(`Resend the initial invite to ${invitee.email}? This skips the "already sent" guard — use it for test inboxes.`)) return;
+    setSending(true);
+    try {
+      const res = await apiRequest("POST", `/api/admin/btl/invitees/${invitee.id}/resend`, {});
+      const body = await res.json();
+      toast({ title: body.outcome === "sent" ? `Invite re-sent to ${body.to}` : `Resend outcome: ${body.outcome}` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/invitees"] });
+    } catch (err) {
+      toast({ title: "Resend failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Button size="sm" variant="ghost" onClick={resend} disabled={sending} className="h-8 px-2 text-primary/80 hover:text-primary" title="Resend initial invite (bypasses dedup)" data-testid={`button-btl-resend-${invitee.id}`}>
+      {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+    </Button>
   );
 }
 

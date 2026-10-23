@@ -417,6 +417,9 @@ export const eventInviteList = pgTable("event_invite_list", {
   rsvpStatus: text("rsvp_status").notNull().default("pending"), // pending | confirmed | declined
   unsubscribed: boolean("unsubscribed").notNull().default(false),
   notes: text("notes"),
+  // JSON array of BTL_INTEREST_KEYS — editable by the admin, and synced from
+  // the person's own RSVP answer when they confirm.
+  interests: text("interests").notNull().default("[]"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => ({
   uq: uniqueIndex("event_invite_list_slug_email_uq").on(t.eventSlug, t.email),
@@ -646,15 +649,33 @@ export type InsertComment = z.infer<typeof insertCommentSchema>;
 
 export const BTL_TOPIC_KEYS = ["legal", "funding", "venue", "market"] as const;
 
+// "What are you most looking to walk away with?" — the RSVP multi-select,
+// also used to tag invitees in the admin.
+export const BTL_INTEREST_KEYS = [
+  "industry_news", "new_connections", "statewide_network", "services_partners",
+  "collaboration", "growth_funding", "visibility", "peer_learning",
+] as const;
+export const BTL_INTEREST_LABELS: Record<(typeof BTL_INTEREST_KEYS)[number], string> = {
+  industry_news: "Industry news & perspectives",
+  new_connections: "New connections",
+  statewide_network: "Expanding my network statewide",
+  services_partners: "Services & partners for my business",
+  collaboration: "Collaboration opportunities",
+  growth_funding: "Growth & funding opportunities",
+  visibility: "Visibility for my work",
+  peer_learning: "Learning from peers",
+};
+
 export const btlRsvpInputSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   email: z.string().trim().email("Enter a valid email"),
   role: z.string().trim().max(200).optional().default(""),
   companyOrHandle: z.string().trim().max(200).optional().nullable(),
-  workingOnNow: z.string().trim().min(1, "This appears in the printed guest book").max(140, "Keep it under 140 characters"),
-  keyQuestion: z.string().trim().min(1, "Your question shapes what the speakers cover").max(2000),
-  topicInterests: z.array(z.enum(BTL_TOPIC_KEYS)).optional().default([]),
-  contactSheetOptin: z.boolean(),
+  workingOnNow: z.string().trim().max(140, "Keep it under 140 characters").optional().default(""),
+  keyQuestion: z.string().trim().max(2000).optional().default(""),
+  // Stored in the topic_interests column; values are BTL_INTEREST_KEYS.
+  topicInterests: z.array(z.enum(BTL_INTEREST_KEYS)).optional().default([]),
+  contactSheetOptin: z.boolean().optional().default(false),
   attendeeSource: z.string().trim().max(100).optional().nullable(),
 });
 export type BtlRsvpInput = z.infer<typeof btlRsvpInputSchema>;

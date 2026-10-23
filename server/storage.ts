@@ -199,6 +199,7 @@ export interface IStorage {
   upsertBtlInvitees(eventSlug: string, rows: Array<{ name: string; email: string; instagramHandle?: string | null; category?: string | null; priorityTier?: number }>): Promise<{ imported: number; skipped: number }>;
   listBtlInvitees(eventSlug: string): Promise<EventInvitee[]>;
   updateBtlInvitee(id: number, patch: Partial<EventInvitee>): Promise<EventInvitee | null>;
+  deleteBtlInvitees(ids: number[]): Promise<number>;
   markReminderSent(id: number, status: "sent" | "failed" | "cancelled", opts?: { error?: string }): Promise<void>;
 
   // Invoices
@@ -1280,6 +1281,15 @@ export class DatabaseStorage implements IStorage {
   async updateBtlInvitee(id: number, patch: Partial<EventInvitee>): Promise<EventInvitee | null> {
     const [row] = await db.update(eventInviteList).set(patch).where(eq(eventInviteList.id, id)).returning();
     return row ?? null;
+  }
+
+  // Bulk delete from the invite list; their send-log rows cascade away.
+  async deleteBtlInvitees(ids: number[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const deleted = await db.delete(eventInviteList)
+      .where(inArray(eventInviteList.id, ids))
+      .returning({ id: eventInviteList.id });
+    return deleted.length;
   }
 
   // ── Invoices ──────────────────────────────────────────────────────────
