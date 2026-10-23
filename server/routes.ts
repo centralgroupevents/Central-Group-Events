@@ -734,7 +734,21 @@ ${blogList || "_No recent posts yet._"}
             workingOnNow: input.workingOnNow,
             keyQuestion: input.keyQuestion,
             contactSheetOptin: input.contactSheetOptin,
+            topicInterests: JSON.stringify(input.topicInterests),
           });
+          // Keep the invite row's mirror of their answer current too.
+          try {
+            const invitees = await storage.listBtlInvitees(slug);
+            const match = invitees.find((i) => i.email === email);
+            if (match) {
+              await storage.updateBtlInvitee(match.id, {
+                rsvpStatus: "confirmed",
+                interests: JSON.stringify(input.topicInterests ?? []),
+              });
+            }
+          } catch (err) {
+            console.warn("[btl] invite-status sync failed:", err);
+          }
           return res.json({ message: "Your answers are in — see you November 12th." });
         }
         return res.status(409).json({ message: "You're already on the list for Build to Last — check your inbox for the confirmation." });
@@ -759,7 +773,14 @@ ${blogList || "_No recent posts yet._"}
       try {
         const invitees = await storage.listBtlInvitees(slug);
         const match = invitees.find((i) => i.email === email);
-        if (match) await storage.updateBtlInvitee(match.id, { rsvpStatus: "confirmed" });
+        if (match) {
+          await storage.updateBtlInvitee(match.id, {
+            rsvpStatus: "confirmed",
+            // Mirror their "walk away with" answer onto the invite row so the
+            // admin sees it inline.
+            interests: JSON.stringify(input.topicInterests ?? []),
+          });
+        }
       } catch (err) {
         console.warn("[btl] invite-status sync failed:", err);
       }
@@ -911,8 +932,23 @@ ${blogList || "_No recent posts yet._"}
     try {
       const id = parseInt(req.params.id as string, 10);
       if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
-      const { rsvpStatus, notes, priorityTier, category } = req.body as { rsvpStatus?: string; notes?: string; priorityTier?: number; category?: string };
+      const { rsvpStatus, notes, priorityTier, category, name, email, interests } = req.body as { rsvpStatus?: string; notes?: string; priorityTier?: number; category?: string; name?: string; email?: string; interests?: string[] };
       const patch: Record<string, unknown> = {};
+      if (name !== undefined) {
+        const v = String(name).trim();
+        if (!v) return res.status(400).json({ message: "Name can't be empty" });
+        patch.name = v.slice(0, 200);
+      }
+      if (email !== undefined) {
+        const v = String(email).trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return res.status(400).json({ message: "Enter a valid email" });
+        patch.email = v;
+      }
+      if (interests !== undefined) {
+        const { BTL_INTEREST_KEYS } = await import("@shared/schema");
+        const clean = Array.isArray(interests) ? interests.filter((k) => (BTL_INTEREST_KEYS as readonly string[]).includes(k)) : [];
+        patch.interests = JSON.stringify(clean);
+      }
       if (rsvpStatus !== undefined) {
         if (!["pending", "confirmed", "declined"].includes(rsvpStatus)) return res.status(400).json({ message: "Invalid rsvpStatus" });
         patch.rsvpStatus = rsvpStatus;
@@ -925,6 +961,47 @@ ${blogList || "_No recent posts yet._"}
       res.json(updated);
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: bulk delete invitees (multi-select in the Invites view).
+  app.post("/api/admin/btl/invitees/bulk-delete", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const ids = ((req.body as { ids?: unknown[] })?.ids ?? []).map(Number).filter(Number.isFinite);
+      if (ids.length === 0) return res.status(400).json({ message: "ids[] required" });
+      const deleted = await storage.deleteBtlInvitees(ids);
+      res.json({ deleted });
+    } catch (err) {
+      console.error("[btl/invitees bulk-delete] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin: resend the initial invite to ONE invitee, bypassing the
+  // no-duplicate gate — built for test inboxes.
+  app.post("/api/admin/btl/invitees/:id/resend", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const { getBtlTemplateTexts, renderBtlFromTexts, buildBtlRenderCtx } = await import("./btl-cadence");
+      const { deliverBtlEmail } = await import("./btl-mailer");
+      const invitees = await storage.listBtlInvitees(slug);
+      const invitee = invitees.find((i) => i.id === id);
+      if (!invitee) return res.status(404).json({ message: "Invitee not found" });
+      const texts = await getBtlTemplateTexts("initial_invite");
+      if (!texts) return res.status(500).json({ message: "initial_invite template missing" });
+      const ctx = await buildBtlRenderCtx();
+      const tpl = renderBtlFromTexts(texts, { name: invitee.name, email: invitee.email }, ctx);
+      const outcome = await deliverBtlEmail({ email: invitee.email, inviteeId: invitee.id }, "initial_invite", tpl, { force: true });
+      if (outcome === "sent" && !invitee.initialInviteSentAt) {
+        await storage.updateBtlInvitee(invitee.id, { initialInviteSentAt: new Date() });
+      }
+      res.json({ outcome, to: invitee.email });
+    } catch (err) {
+      console.error("[btl/invitee resend] error:", err);
+      const detail = err instanceof Error ? err.message.slice(0, 200) : "unknown";
+      res.status(500).json({ message: `Resend failed: ${detail}` });
     }
   });
 
@@ -997,6 +1074,8 @@ ${blogList || "_No recent posts yet._"}
       const rsvpEmails = new Set(rsvps.map((r) => r.email));
       const secondWave = invitees.filter((i) => !i.unsubscribed && i.rsvpStatus === "pending" && i.initialInviteSentAt && !rsvpEmails.has(i.email)).length;
       const uninvited = invitees.filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined").length;
+      const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+      const nudgeable = invitees.filter((i) => !i.unsubscribed && i.rsvpStatus === "pending" && !rsvpEmails.has(i.email) && !!i.initialInviteSentAt && new Date(i.initialInviteSentAt).getTime() <= dayAgo).length;
       const out = [] as unknown[];
       for (const entry of BTL_CADENCE) {
         const sentCount = sends.filter((x) => x.templateKey === entry.key && x.status === "sent").reduce((a, x) => a + x.count, 0);
@@ -1005,6 +1084,7 @@ ${blogList || "_No recent posts yet._"}
           : entry.audience === "checked_in" ? checkedIn
           : entry.audience === "invitees_second_wave" ? secondWave
           : entry.audience === "invitees_all" ? invitees.filter((i) => !i.unsubscribed && i.rsvpStatus !== "declined").length
+          : entry.audience === "invitees_nudge" ? nudgeable
           : uninvited;
         const missing = (entry.requiresSettings ?? []).filter((k) => {
           const v = (ctx.settings as unknown as Record<string, unknown>)[k];
