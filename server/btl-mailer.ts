@@ -11,7 +11,7 @@ import nodemailer from "nodemailer";
 import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
-import { signToken } from "./email-compliance";
+import { signToken, encodeEmail } from "./email-compliance";
 import { btlShell, BTL_FROM_NAME, BTL_SLUG, CGE_LOGO_CID } from "./btl-emails";
 
 // The wordmark ships INSIDE each email as an inline (CID) attachment, so it
@@ -77,7 +77,10 @@ export async function deliverBtlEmail(
   }
   const logo = cgeLogoAttachment();
   const html0 = btlShell(tpl.body, btlUnsubscribeUrl(email));
-  const html = logo ? html0 : stripLogoImg(html0);
+  // Open-tracking pixel — signed per recipient, stamps emailOpenedAt on
+  // first render (see GET /api/build-to-last/open).
+  const pixel = `<img src="${btlSiteBase()}/api/build-to-last/open?e=${encodeEmail(email)}&t=${signToken(email)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0" />`;
+  const html = (logo ? html0 : stripLogoImg(html0)) + pixel;
   try {
     await transporter.sendMail({
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
