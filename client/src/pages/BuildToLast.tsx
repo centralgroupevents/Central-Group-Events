@@ -120,6 +120,8 @@ export default function BuildToLast() {
   const [name, setName] = useState(identity?.name ?? "");
   const [email, setEmail] = useState(identity?.email ?? "");
   const [interests, setInterests] = useState<Set<string>>(new Set());
+  const [otherChecked, setOtherChecked] = useState(false);
+  const [otherText, setOtherText] = useState("");
 
   function toggleInterest(key: string) {
     const next = new Set(interests);
@@ -139,7 +141,8 @@ export default function BuildToLast() {
       setError("Please fill in your name and email.");
       return;
     }
-    if (interests.size === 0) {
+    const other = otherChecked ? otherText.trim() : "";
+    if (interests.size === 0 && !other) {
       setError("Pick at least one — it helps us set the room.");
       return;
     }
@@ -159,6 +162,7 @@ export default function BuildToLast() {
           workingOnNow: "",
           keyQuestion: "",
           topicInterests: Array.from(interests),
+          otherInterest: other,
           contactSheetOptin: false,
           attendeeSource: src || "direct",
           ...(identity ? { e: identity.e, t: identity.t } : {}),
@@ -295,6 +299,26 @@ export default function BuildToLast() {
                       {BTL_INTEREST_LABELS[key]}
                     </label>
                   ))}
+                  <label style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer", fontSize: 16, color: otherChecked ? CREAM : CREAM_DIM }}>
+                    <input
+                      type="checkbox"
+                      checked={otherChecked}
+                      onChange={() => setOtherChecked(!otherChecked)}
+                      style={{ marginTop: 4, accentColor: GOLD, width: 16, height: 16 }}
+                      data-testid="checkbox-btl-interest-other"
+                    />
+                    Other
+                  </label>
+                  {otherChecked && (
+                    <input
+                      style={{ ...inputStyle, marginLeft: 28, width: "calc(100% - 28px)" }}
+                      value={otherText}
+                      onChange={(e) => setOtherText(e.target.value)}
+                      maxLength={200}
+                      placeholder="Tell us in a few words…"
+                      data-testid="input-btl-interest-other"
+                    />
+                  )}
                 </div>
               </Field>
 

@@ -678,6 +678,9 @@ export const btlRsvpInputSchema = z.object({
   keyQuestion: z.string().trim().max(2000).optional().default(""),
   // Stored in the topic_interests column; values are BTL_INTEREST_KEYS.
   topicInterests: z.array(z.enum(BTL_INTEREST_KEYS)).optional().default([]),
+  // Free-text "Other" from the RSVP form — stored alongside the keys as an
+  // "Other: <text>" entry in the same JSON array.
+  otherInterest: z.string().trim().max(200).optional().default(""),
   contactSheetOptin: z.boolean().optional().default(false),
   attendeeSource: z.string().trim().max(100).optional().nullable(),
 });

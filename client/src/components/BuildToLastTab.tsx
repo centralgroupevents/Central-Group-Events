@@ -638,6 +638,20 @@ function InviteeEditor({ invitee, onDone }: { invitee: BtlInvitee; onDone: () =>
             </label>
           ))}
         </div>
+        {/* Free-text answers from the RSVP form's "Other" option — kept on
+            save; ✕ removes one. */}
+        {Array.from(interests).filter((k) => !(BTL_INTEREST_KEYS as readonly string[]).includes(k)).length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {Array.from(interests).filter((k) => !(BTL_INTEREST_KEYS as readonly string[]).includes(k)).map((k) => (
+              <span key={k} className="inline-flex items-center gap-1 text-[11px] bg-amber-400/10 text-amber-200 border border-amber-400/25 rounded-full px-2 py-0.5">
+                {k}
+                <button type="button" onClick={() => toggle(k)} className="text-amber-200/60 hover:text-amber-200" aria-label={`Remove ${k}`}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <div className="flex gap-2">
         <Button size="sm" onClick={save} disabled={saving || !name.trim() || !email.trim()} className="bg-primary hover:bg-primary/90 h-8" data-testid={`button-btl-save-invitee-${invitee.id}`}>
