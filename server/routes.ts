@@ -725,6 +725,12 @@ ${blogList || "_No recent posts yet._"}
       }
       const email = (verifiedEmail || input.email).toLowerCase().trim();
       const { BTL_SLUG: slug } = await import("./btl-emails");
+      // Canonical interest keys + the free-text "Other" in one array; the
+      // breakdown/filters ignore non-key entries, the admin chips show them.
+      const interestsJson = JSON.stringify([
+        ...input.topicInterests,
+        ...(input.otherInterest ? [`Other: ${input.otherInterest}`] : []),
+      ]);
 
       const existing = await storage.getBtlRsvpByEmail(slug, email);
       if (existing) {
@@ -734,7 +740,7 @@ ${blogList || "_No recent posts yet._"}
             workingOnNow: input.workingOnNow,
             keyQuestion: input.keyQuestion,
             contactSheetOptin: input.contactSheetOptin,
-            topicInterests: JSON.stringify(input.topicInterests),
+            topicInterests: interestsJson,
           });
           // Keep the invite row's mirror of their answer current too.
           try {
@@ -743,7 +749,7 @@ ${blogList || "_No recent posts yet._"}
             if (match) {
               await storage.updateBtlInvitee(match.id, {
                 rsvpStatus: "confirmed",
-                interests: JSON.stringify(input.topicInterests ?? []),
+                interests: interestsJson,
               });
             }
           } catch (err) {
@@ -762,7 +768,7 @@ ${blogList || "_No recent posts yet._"}
         companyOrHandle: input.companyOrHandle || null,
         workingOnNow: input.workingOnNow,
         keyQuestion: input.keyQuestion,
-        topicInterests: JSON.stringify(input.topicInterests),
+        topicInterests: interestsJson,
         contactSheetOptin: input.contactSheetOptin,
         attendeeSource: input.attendeeSource || null,
       });
@@ -778,7 +784,7 @@ ${blogList || "_No recent posts yet._"}
             rsvpStatus: "confirmed",
             // Mirror their "walk away with" answer onto the invite row so the
             // admin sees it inline.
-            interests: JSON.stringify(input.topicInterests ?? []),
+            interests: interestsJson,
           });
         }
       } catch (err) {
@@ -946,7 +952,13 @@ ${blogList || "_No recent posts yet._"}
       }
       if (interests !== undefined) {
         const { BTL_INTEREST_KEYS } = await import("@shared/schema");
-        const clean = Array.isArray(interests) ? interests.filter((k) => (BTL_INTEREST_KEYS as readonly string[]).includes(k)) : [];
+        // Canonical keys pass through; free-text entries (the RSVP form's
+        // "Other: …") are kept too, sanitized and capped.
+        const clean = (Array.isArray(interests) ? interests : [])
+          .map((k) => String(k).trim().slice(0, 220))
+          .filter((k, idx, arr) => k.length > 0 && arr.indexOf(k) === idx)
+          .filter((k) => (BTL_INTEREST_KEYS as readonly string[]).includes(k) || !/[<>]/.test(k))
+          .slice(0, 20);
         patch.interests = JSON.stringify(clean);
       }
       if (rsvpStatus !== undefined) {
