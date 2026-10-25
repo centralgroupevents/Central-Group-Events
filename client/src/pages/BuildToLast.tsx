@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { Loader2 } from "lucide-react";
@@ -105,6 +105,18 @@ export default function BuildToLast() {
     staleTime: 60_000,
   });
   const [identity] = useState(readIdentityFromUrl);
+
+  // Personalized link opened → tell the server who clicked (signed token,
+  // verified server-side; fire-and-forget).
+  useEffect(() => {
+    if (!identity) return;
+    fetch("/api/build-to-last/link-open", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ e: identity.e, t: identity.t }),
+    }).catch(() => {});
+  }, [identity]);
+
   const [name, setName] = useState(identity?.name ?? "");
   const [email, setEmail] = useState(identity?.email ?? "");
   const [interests, setInterests] = useState<Set<string>>(new Set());

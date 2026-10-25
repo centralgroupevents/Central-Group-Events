@@ -420,6 +420,9 @@ export const eventInviteList = pgTable("event_invite_list", {
   // JSON array of BTL_INTEREST_KEYS — editable by the admin, and synced from
   // the person's own RSVP answer when they confirm.
   interests: text("interests").notNull().default("[]"),
+  // First time this person opened their personalized invite link (signed
+  // token verified) — the "who clicked" signal in the admin Invites view.
+  linkClickedAt: timestamp("link_clicked_at"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => ({
   uq: uniqueIndex("event_invite_list_slug_email_uq").on(t.eventSlug, t.email),
