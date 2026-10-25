@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
 import { BTL_PAGE_DEFAULTS } from "@shared/btl-page";
 import { SEO } from "@/components/SEO";
+import aisleGoLogo from "@assets/aislego-logo.png";
 
 // Build to Last Vol. 1 — standalone RSVP page. Deliberately NOT in the CGE
 // purple system: near-black + cream + gold, serif display. Personal, spare,
@@ -301,6 +302,22 @@ export default function BuildToLast() {
             </form>
           )}
         </section>
+
+        {/* Sponsor thank-you */}
+        <footer style={{ padding: "44px 0 72px", borderTop: `1px solid ${LINE}`, textAlign: "center" }}>
+          <p style={{ fontSize: 12, letterSpacing: 2.5, textTransform: "uppercase", color: GOLD, margin: "0 0 18px" }}>
+            Special thanks to our sponsor
+          </p>
+          <img
+            src={aisleGoLogo}
+            alt="AisleGo"
+            style={{ width: 64, height: 64, objectFit: "contain", display: "block", margin: "0 auto 10px" }}
+            data-testid="img-btl-sponsor-logo"
+          />
+          <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 24, fontWeight: 600, color: CREAM, margin: 0 }}>
+            AisleGo
+          </p>
+        </footer>
       </div>
     </div>
   );
