@@ -137,7 +137,14 @@ export function buildBtlVars(
   return {
     name: recipient.name,
     first_name: recipient.name.trim().split(/\s+/)[0] || recipient.name,
-    rsvp_url: s.rsvpUrl.trim() || btlRsvpUrl("invite"),
+    // Personalized when we know the recipient: the signed identity prefills
+    // the RSVP form (no typing) and lets us record exactly who opened their
+    // link. A sponsor rsvpUrl (external ticketing) can't carry our token,
+    // so it wins untouched when set.
+    rsvp_url: s.rsvpUrl.trim()
+      || (recipient.email
+        ? `${btlRsvpUrl("invite")}&e=${encodeEmail(recipient.email)}&t=${signToken(recipient.email)}&n=${encodeURIComponent(recipient.name)}`
+        : btlRsvpUrl("invite")),
     // Personalized: carries a signed identity so the questions form skips
     // name/email for people we already know (AisleGo sign-ups, invitees).
     questions_url: recipient.email

@@ -1069,6 +1069,27 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Public: a personalized invite link was opened. The page fires this
+  // beacon with the link's signed e/t pair; a valid signature stamps
+  // linkClickedAt (first open only) on the matching invitee, so the admin
+  // sees exactly who clicked. Forged tokens are ignored.
+  app.post("/api/build-to-last/link-open", formLimiter, async (req: Request, res: Response) => {
+    try {
+      const { e, t } = (req.body ?? {}) as { e?: string; t?: string };
+      const email = decodeEmail(String(e || ""));
+      if (!email || !verifySignedToken(email, String(t || ""))) return res.status(204).end();
+      const { BTL_SLUG: slug } = await import("./btl-emails");
+      const invitees = await storage.listBtlInvitees(slug);
+      const match = invitees.find((i) => i.email === email.toLowerCase().trim());
+      if (match && !match.linkClickedAt) {
+        await storage.updateBtlInvitee(match.id, { linkClickedAt: new Date() });
+      }
+      res.status(204).end();
+    } catch {
+      res.status(204).end();
+    }
+  });
+
   // ── Build to Last page copy ──────────────────────────────────────────
   // Every prose block on /build-to-last is editable from the admin's Page
   // view. Overrides live in app_settings as btl.page.<key>; a blank
@@ -1174,7 +1195,7 @@ ${blogList || "_No recent posts yet._"}
       const { btlShell } = await import("./btl-emails");
       const { btlUnsubscribeUrl } = await import("./btl-mailer");
       const ctx = await buildBtlRenderCtx();
-      const tpl = await renderBtlTemplate(String(req.params.key), { name: "Jordan", contactSheetOptin: true }, ctx);
+      const tpl = await renderBtlTemplate(String(req.params.key), { name: "Jordan", email: "preview@example.com", contactSheetOptin: true }, ctx);
       if (!tpl) return res.status(404).json({ message: "Unknown template" });
       // Real sends embed the logo as a CID attachment; the browser preview
       // can't resolve cid:, so point it at the served file instead.

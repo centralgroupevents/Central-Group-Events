@@ -45,6 +45,7 @@ type BtlInvitee = {
   unsubscribed: boolean;
   notes: string | null;
   interests: string;
+  linkClickedAt: string | null;
 };
 
 function inviteeInterests(i: BtlInvitee): string[] {
@@ -543,6 +544,11 @@ function InvitesView() {
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {i.initialInviteSentAt ? new Date(i.initialInviteSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
                         {i.secondWaveSentAt ? <span className="block text-[10px]">2nd: {new Date(i.secondWaveSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span> : null}
+                        {i.linkClickedAt ? (
+                          <span className="block text-[10px] text-green-400" data-testid={`text-btl-clicked-${i.id}`}>
+                            clicked {new Date(i.linkClickedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3">
                         <StatusSelect invitee={i} />
