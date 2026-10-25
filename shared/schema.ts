@@ -423,6 +423,10 @@ export const eventInviteList = pgTable("event_invite_list", {
   // First time this person opened their personalized invite link (signed
   // token verified) — the "who clicked" signal in the admin Invites view.
   linkClickedAt: timestamp("link_clicked_at"),
+  // First time any BTL email to this person rendered its tracking pixel —
+  // the "opened" signal. Approximate by nature: image-blocking hides opens,
+  // and some clients (Apple Mail privacy) prefetch and overcount.
+  emailOpenedAt: timestamp("email_opened_at"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => ({
   uq: uniqueIndex("event_invite_list_slug_email_uq").on(t.eventSlug, t.email),

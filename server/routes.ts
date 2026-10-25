@@ -1081,6 +1081,26 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Public: the 1×1 open-tracking pixel inside BTL emails. A valid signed
+  // e/t pair stamps emailOpenedAt (first open only) on the matching
+  // invitee; always answers with the gif so broken tokens stay invisible.
+  app.get("/api/build-to-last/open", async (req: Request, res: Response) => {
+    const GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
+    try {
+      const email = decodeEmail(String(req.query.e || ""));
+      if (email && verifySignedToken(email, String(req.query.t || ""))) {
+        const { BTL_SLUG: slug } = await import("./btl-emails");
+        const invitees = await storage.listBtlInvitees(slug);
+        const match = invitees.find((i) => i.email === email.toLowerCase().trim());
+        if (match && !match.emailOpenedAt) {
+          await storage.updateBtlInvitee(match.id, { emailOpenedAt: new Date() });
+        }
+      }
+    } catch { /* never block the pixel */ }
+    res.set({ "Content-Type": "image/gif", "Cache-Control": "no-store, no-cache, must-revalidate", "Content-Length": String(GIF.length) });
+    res.end(GIF);
+  });
+
   // Public: a personalized invite link was opened. The page fires this
   // beacon with the link's signed e/t pair; a valid signature stamps
   // linkClickedAt (first open only) on the matching invitee, so the admin
