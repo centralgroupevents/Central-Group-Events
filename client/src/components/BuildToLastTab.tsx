@@ -982,9 +982,36 @@ function TemplatesView() {
   const { data: templates = [], isLoading, error } = useQuery<BtlTemplate[]>({ queryKey: ["/api/admin/btl/templates"] });
   const [selectedKey, setSelectedKey] = useState<string>("initial_invite");
   const [draft, setDraft] = useState<{ key: string; subject: string; body: string } | null>(null);
-  const [busy, setBusy] = useState<"" | "save" | "reset">("");
+  const [busy, setBusy] = useState<"" | "save" | "reset" | "send">("");
   const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // "Send to…" — fire the selected template at one person (name + email).
+  // Built for the speaker emails; works for any template.
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendName, setSendName] = useState("");
+  const [sendEmail, setSendEmail] = useState("");
+
+  async function sendToPerson() {
+    if (!selected) return;
+    if (dirty) {
+      toast({ title: "Save the template first", description: "Sends use the saved version — hit Save template, then send.", variant: "destructive" });
+      return;
+    }
+    if (!window.confirm(`Send "${selected.label}" to ${sendName.trim()} <${sendEmail.trim()}> now? It comes from centralgroupevents@gmail.com as Anthony.`)) return;
+    setBusy("send");
+    try {
+      const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send`, { name: sendName.trim(), email: sendEmail.trim() });
+      const body = await res.json();
+      toast({ title: `Sent to ${body.to}` });
+      setSendOpen(false);
+      setSendName("");
+      setSendEmail("");
+    } catch (err) {
+      toast({ title: "Send failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
 
   const selected = templates.find((t) => t.key === selectedKey) ?? templates[0];
   const subject = draft && draft.key === selected?.key ? draft.subject : selected?.subject ?? "";
@@ -1107,6 +1134,9 @@ function TemplatesView() {
             <Button size="sm" variant="outline" onClick={openPreview} className="border-white/20 text-white/70" data-testid="button-btl-template-preview">
               <Eye className="w-3.5 h-3.5 mr-1" /> Preview
             </Button>
+            <Button size="sm" variant="outline" onClick={() => setSendOpen((v) => !v)} className="border-primary/40 text-primary hover:bg-primary/10" data-testid="button-btl-template-sendto">
+              <Send className="w-3.5 h-3.5 mr-1" /> Send to…
+            </Button>
             {selected.customized && (
               <Button size="sm" variant="outline" onClick={resetToDefault} disabled={busy !== ""} className="border-white/20 text-white/70" data-testid="button-btl-template-reset">
                 {busy === "reset" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Reset to original"}
@@ -1117,6 +1147,29 @@ function TemplatesView() {
             </Button>
           </div>
         </div>
+
+        {sendOpen && (
+          <div className="bg-black/30 border border-primary/25 rounded-xl p-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Sends this template to one person — their name fills {"{{name}}"} / {"{{first_name}}"}. Real send, no [TEST] tag.
+              Made for the speaker emails, but any template works.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+              <div className="space-y-1">
+                <Label className="text-white/70 text-xs">Name</Label>
+                <Input value={sendName} onChange={(e) => setSendName(e.target.value)} placeholder="Alnazir Blackman" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-sendto-name" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-white/70 text-xs">Email</Label>
+                <Input value={sendEmail} onChange={(e) => setSendEmail(e.target.value)} placeholder="them@example.com" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-sendto-email" />
+              </div>
+              <Button size="sm" onClick={sendToPerson} disabled={busy !== "" || !sendName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sendEmail.trim())} className="bg-primary hover:bg-primary/90 h-9" data-testid="button-btl-sendto-send">
+                {busy === "send" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Send className="w-3.5 h-3.5 mr-1.5" />}
+                Send now
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div>
           <Label className="text-white/70 text-xs">Subject</Label>

@@ -1396,6 +1396,34 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Admin: send any template to one person by name + email — built for the
+  // speaker emails (speakers aren't on the invite list), but works for every
+  // template. Real subject (no [TEST]), bypasses dedup so repeat sends work.
+  app.post("/api/admin/btl/templates/:key/send", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { getBtlTemplateTexts, renderBtlFromTexts, buildBtlRenderCtx } = await import("./btl-cadence");
+      const { deliverBtlEmail } = await import("./btl-mailer");
+      const key = String(req.params.key);
+      const texts = await getBtlTemplateTexts(key);
+      if (!texts) return res.status(404).json({ message: `Unknown template "${key}"` });
+      const { name, email } = (req.body ?? {}) as { name?: string; email?: string };
+      const to = String(email || "").trim().toLowerCase();
+      const who = String(name || "").trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ message: "Enter a valid email" });
+      if (!who) return res.status(400).json({ message: "Enter their name" });
+      const ctx = await buildBtlRenderCtx();
+      const tpl = renderBtlFromTexts(texts, { name: who, email: to }, ctx);
+      const errorOut: { message?: string } = {};
+      const outcome = await deliverBtlEmail({ email: to }, key, tpl, { force: true, errorOut });
+      if (outcome !== "sent") return res.status(502).json({ message: errorOut.message || "Send failed", to });
+      res.json({ sent: true, to });
+    } catch (err) {
+      console.error("[btl/template send] error:", err);
+      const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
+      res.status(500).json({ message: `Send failed: ${detail}` });
+    }
+  });
+
   // ── Unsubscribe (CAN-SPAM / RFC 8058 one-click) ──────────────────────
   // Every marketing email carries a signed link: ?e=<base64url email>&t=<hmac>.
   // The same URL is used in the List-Unsubscribe header, which mailbox

@@ -340,6 +340,100 @@ See you around New Jersey.
 — Anthony
 Founder, Central Group Events`,
   },
+  // ── Speaker emails — sent one-at-a-time from Templates → "Send to…",
+  //    never by the cadence (they have no BTL_CADENCE entry). ───────────
+  {
+    key: "speaker_invite",
+    label: "Speaker — the ask",
+    placeholders: ["name", "first_name", "venue_name", "doors_time", "program_start_time"],
+    subject: "Speak at Build to Last — Nov 12, Newark",
+    body: `Hey {{first_name}},
+
+Anthony here — founder of Central Group Events. We promote events across New Jersey, and on Thursday, November 12th we're hosting Build to Last: an invite-only mixer at {{venue_name}} in Newark for the planners, venue owners, and creators building across the state.
+
+The heart of the night is a set of moderated conversations on event planning, spaces, and brand building in NJ — and I'd love to have you on the mic. Your perspective is exactly what this room is coming for.
+
+✦ THE SHAPE OF IT
+
+✔ Thursday, November 12 · {{venue_name}}, Newark
+✔ Doors at {{doors_time}} with an open bar · conversations at {{program_start_time}} · night cap at 8:30 PM
+✔ Your part: a moderated conversation — no slides, no deck, just a real exchange in front of a sharp crowd
+✔ Professionally photographed — you get the photos after, free to post
+
+It's free, the room is set by invitation, and it's built to be worth your evening. Can I count you in as a speaker? Reply here and I'll send everything else.
+
+— Anthony
+Founder, Central Group Events`,
+  },
+  {
+    key: "speaker_confirm",
+    label: "Speaker — confirmed + what I need",
+    placeholders: ["name", "first_name", "venue_name", "doors_time", "program_start_time"],
+    subject: "You're on — Build to Last, Nov 12",
+    body: `Hey {{first_name}},
+
+Locked in — you're speaking at Build to Last on Thursday, November 12th at {{venue_name}} in Newark. Thank you.
+
+So we can announce you properly, reply with three things:
+
+1. A headshot you like
+2. Two or three lines on who you are and what you build
+3. The Instagram handle you want tagged
+
+✦ WHAT TO EXPECT
+
+✔ Doors at {{doors_time}} — come early and meet the room over the open bar
+✔ Moderated conversations start at {{program_start_time}}; I'll send your segment time and the conversation directions beforehand — no slides, nothing to memorize
+✔ A photographer covers the night — you get the edited photos after
+
+Full logistics land the week of. Anything you need from me in the meantime, just reply.
+
+— Anthony
+Founder, Central Group Events`,
+  },
+  {
+    key: "speaker_logistics",
+    label: "Speaker — week-of logistics",
+    placeholders: ["name", "first_name", "venue_address", "doors_time", "program_start_time"],
+    subject: "Thursday's run-through — Build to Last",
+    body: `Hey {{first_name}},
+
+Build to Last is this Thursday. Everything you need:
+
+✦ LOGISTICS
+
+✔ {{venue_address}}
+✔ Arrive by {{doors_time}} and check in with me at the door
+✔ Conversations start at {{program_start_time}} — I'll walk you through the order when you arrive
+✔ Dress code: come as yourself — business casual is perfect
+✔ Open bar and small bites all night
+
+Format reminder: it's a moderated conversation, not a presentation. I'll guide it — you just bring your perspective.
+
+If anything comes up before Thursday, reply here.
+
+See you Thursday.
+
+— Anthony`,
+  },
+  {
+    key: "speaker_thanks",
+    label: "Speaker — thank you (after)",
+    placeholders: ["name", "first_name", "photo_gallery_url"],
+    subject: "Thank you — you made the room",
+    body: `Hey {{first_name}},
+
+Thursday wouldn't have been the same without you — thank you for giving the room your time and your perspective. People were still quoting you at the night cap.
+
+The edited photos from the night are up — post whatever you like.
+
+[See the photos]({{photo_gallery_url}})
+
+Build to Last Vol. 2 is already in motion, and you'll be one of the first calls. And if there's anything I can do for you — an introduction from that room, a promo push for something you're building — reply and it's done.
+
+— Anthony
+Founder, Central Group Events`,
+  },
 ];
 
 export function btlTemplateDef(key: string): BtlTemplateDef | undefined {
