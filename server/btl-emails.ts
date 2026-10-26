@@ -346,23 +346,27 @@ Founder, Central Group Events`,
     key: "speaker_invite",
     label: "Speaker — the ask",
     placeholders: ["name", "first_name", "venue_name", "doors_time", "program_start_time"],
-    subject: "Speak at Build to Last — Nov 12, Newark",
-    body: `Hey {{first_name}},
+    subject: "Invitation to Speak — Build to Last, November 12, Newark",
+    body: `Dear {{first_name}},
 
-Anthony here — founder of Central Group Events. We promote events across New Jersey, and on Thursday, November 12th we're hosting Build to Last: an invite-only mixer at {{venue_name}} in Newark for the planners, venue owners, and creators building across the state.
+My name is Anthony, founder of Central Group Events. We promote events across New Jersey, and on Thursday, November 12th we are hosting Build to Last — an invite-only evening at {{venue_name}} in Newark bringing together the planners, venue owners, and creators building across the state.
 
-The heart of the night is a set of moderated conversations on event planning, spaces, and brand building in NJ — and I'd love to have you on the mic. Your perspective is exactly what this room is coming for.
+The centerpiece of the evening is a series of moderated conversations on event planning, spaces, and brand building in New Jersey, and I would be honored to have you join us as a featured speaker. Your perspective is precisely what this room is gathering for.
 
-✦ THE SHAPE OF IT
+✦ THE DETAILS
 
 ✔ Thursday, November 12 · {{venue_name}}, Newark
-✔ Doors at {{doors_time}} with an open bar · conversations at {{program_start_time}} · night cap at 8:30 PM
-✔ Your part: a moderated conversation — no slides, no deck, just a real exchange in front of a sharp crowd
-✔ Professionally photographed — you get the photos after, free to post
+✔ Doors at {{doors_time}} with an open bar · conversations begin at {{program_start_time}} · the evening closes at 8:30 PM
+✔ Your role: a moderated conversation — no slides or prepared remarks required, simply your perspective in an engaged room
+✔ The night is professionally photographed; you will receive the full set of edited photos, free to share
 
-It's free, the room is set by invitation, and it's built to be worth your evening. Can I count you in as a speaker? Reply here and I'll send everything else.
+Attendance is complimentary and the room is set by invitation. It would be a privilege to include you on the program — may I confirm your participation?
 
-— Anthony
+I'm happy to answer any questions by reply, or to arrange a brief call at your convenience.
+
+With appreciation,
+
+Anthony
 Founder, Central Group Events`,
   },
   {
