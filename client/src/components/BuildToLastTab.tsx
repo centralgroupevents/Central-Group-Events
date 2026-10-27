@@ -308,6 +308,57 @@ function RsvpsView({ rsvps, isLoading }: { rsvps: BtlRsvp[]; isLoading: boolean 
 
 /* ── Invites ───────────────────────────────────────────────────────────── */
 
+// "Send now / schedule" picker. Value is a datetime-local string read as
+// Eastern time ("" = send now).
+function WhenPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const scheduling = value !== "";
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      <label className="flex items-center gap-2 text-xs text-white/80 cursor-pointer">
+        <Checkbox checked={scheduling} onCheckedChange={(c) => onChange(c ? defaultScheduleValue() : "")} data-testid="checkbox-btl-schedule" />
+        Schedule for later
+      </label>
+      {scheduling && (
+        <>
+          <Input
+            type="datetime-local"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="bg-black/40 border-white/10 h-9 w-[220px] text-xs"
+            data-testid="input-btl-schedule-at"
+          />
+          <span className="text-[11px] text-muted-foreground">Eastern time · fires on the hourly cron, within the hour after</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Tomorrow 9:00 AM ET-ish default for the picker (string math only; the
+// server validates the real instant).
+function defaultScheduleValue(): string {
+  const d = new Date(Date.now() + 24 * 3600_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T09:00`;
+}
+
+type ScheduledSend = {
+  id: number;
+  kind: string;
+  templateKey: string;
+  recipientName: string | null;
+  recipientEmail: string | null;
+  cc: string | null;
+  inviteeIds: string | null;
+  sendAt: string;
+  status: string;
+  resultMessage: string | null;
+};
+
+function etLabel(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET";
+}
+
 function InvitesView() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -317,6 +368,26 @@ function InvitesView() {
   const [manual, setManual] = useState({ name: "", email: "", instagram: "", category: "", tier: "2" });
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [schedOpen, setSchedOpen] = useState(false);
+  const [schedAt, setSchedAt] = useState(defaultScheduleValue());
+
+  async function scheduleInvites() {
+    const useSelection = selected.size > 0;
+    const count = useSelection ? selected.size : pendingInitial;
+    if (!window.confirm(`Schedule the initial invite for ${schedAt.replace("T", " ")} ET to ${useSelection ? `the ${count} selected` : `all ${count} not-yet-invited`} ${count === 1 ? "person" : "people"}? You can cancel it from the Cadence view until it fires.`)) return;
+    setBusy("initial");
+    try {
+      await apiRequest("POST", "/api/admin/btl/scheduled", { kind: "invitees", sendAtEt: schedAt, ...(useSelection ? { inviteeIds: Array.from(selected) } : {}) });
+      toast({ title: "Invites scheduled", description: `Fires ${schedAt.replace("T", " ")} ET — see the Cadence view to cancel.` });
+      setSchedOpen(false);
+      if (useSelection) setSelected(new Set());
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/scheduled"] });
+    } catch (err) {
+      toast({ title: "Couldn't schedule", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
 
   const allSelected = invitees.length > 0 && invitees.every((i) => selected.has(i.id));
 
@@ -455,12 +526,27 @@ function InvitesView() {
               {busy === "initial" ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
               {selected.size > 0 ? `Send Invite to Selected (${selected.size})` : `Send Initial Invites (${pendingInitial})`}
             </Button>
+            <Button onClick={() => setSchedOpen((v) => !v)} disabled={busy !== "" || (selected.size === 0 && pendingInitial === 0)} variant="outline" className="border-white/20 text-white/80" data-testid="button-btl-schedule-invites">
+              Schedule…
+            </Button>
             <Button onClick={sendSecondWave} disabled={busy !== ""} variant="outline" className="border-primary/40 text-primary hover:bg-primary/10" data-testid="button-btl-send-second">
               {busy === "second" ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
               Send Second Wave
             </Button>
           </div>
         </div>
+        {schedOpen && (
+          <div className="bg-black/30 border border-primary/25 rounded-xl p-4 flex items-center gap-3 flex-wrap" data-testid="panel-btl-schedule-invites">
+            <span className="text-xs text-white/80">
+              Schedule the initial invite for {selected.size > 0 ? `the ${selected.size} selected` : `all ${pendingInitial} not-yet-invited`}:
+            </span>
+            <Input type="datetime-local" value={schedAt} onChange={(e) => setSchedAt(e.target.value)} className="bg-black/40 border-white/10 h-9 w-[220px] text-xs" data-testid="input-btl-invites-schedule-at" />
+            <span className="text-[11px] text-muted-foreground">Eastern time · hourly cron</span>
+            <Button size="sm" onClick={scheduleInvites} disabled={busy !== "" || !schedAt} className="bg-primary hover:bg-primary/90 h-9" data-testid="button-btl-invites-schedule-confirm">
+              Schedule
+            </Button>
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 items-end">
           <Input placeholder="Name" value={manual.name} onChange={(e) => setManual({ ...manual, name: e.target.value })} className="bg-black/30 border-white/10 h-9" />
           <Input placeholder="email@…" value={manual.email} onChange={(e) => setManual({ ...manual, email: e.target.value })} className="bg-black/30 border-white/10 h-9 sm:col-span-2" />
@@ -835,6 +921,19 @@ function CadenceView() {
   const qc = useQueryClient();
   const { data: rows = [], isLoading } = useQuery<CadenceRow[]>({ queryKey: ["/api/admin/btl/cadence"] });
   const { data: failures = [] } = useQuery<EmailFailure[]>({ queryKey: ["/api/admin/btl/email-failures"] });
+  const { data: scheduled = [] } = useQuery<ScheduledSend[]>({ queryKey: ["/api/admin/btl/scheduled"] });
+  const { data: tplDefs = [] } = useQuery<Array<{ key: string; label: string }>>({ queryKey: ["/api/admin/btl/templates"] });
+
+  async function cancelScheduled(id: number) {
+    if (!window.confirm("Cancel this scheduled send?")) return;
+    try {
+      await apiRequest("DELETE", `/api/admin/btl/scheduled/${id}`);
+      toast({ title: "Scheduled send cancelled" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/scheduled"] });
+    } catch (err) {
+      toast({ title: "Couldn't cancel", description: String((err as Error).message), variant: "destructive" });
+    }
+  }
   const [preview, setPreview] = useState<{ key: string; subject: string; html: string } | null>(null);
   const [busyKey, setBusyKey] = useState("");
   const [testKey, setTestKey] = useState("");
@@ -885,6 +984,37 @@ function CadenceView() {
         Everything is duplicate-safe: a template never reaches the same inbox twice.
         "Test" emails a [TEST] copy to centralgroupevents@gmail.com without touching the real send history.
       </p>
+      {scheduled.length > 0 && (
+        <div className="bg-secondary/30 border border-primary/25 rounded-xl px-4 py-3 space-y-2" data-testid="panel-btl-scheduled">
+          <p className="text-sm font-semibold text-white">Scheduled sends</p>
+          {scheduled.slice(0, 12).map((r) => {
+            const label = tplDefs.find((t) => t.key === r.templateKey)?.label ?? r.templateKey;
+            const who = r.kind === "person"
+              ? `${r.recipientName} <${r.recipientEmail}>${r.cc ? ` · cc ${r.cc}` : ""}`
+              : `${(() => { try { return JSON.parse(r.inviteeIds || "[]").length; } catch { return 0; } })()} invitees`;
+            const badge = r.status === "pending" ? "text-amber-300 border-amber-400/30 bg-amber-400/10"
+              : r.status === "sent" ? "text-green-300 border-green-400/30 bg-green-400/10"
+              : r.status === "failed" ? "text-red-300 border-red-400/30 bg-red-400/10"
+              : "text-white/50 border-white/15 bg-white/5";
+            return (
+              <div key={r.id} className="flex items-center justify-between gap-3 flex-wrap text-xs" data-testid={`row-btl-scheduled-${r.id}`}>
+                <div className="min-w-[240px] flex-1">
+                  <p className="text-white/90">{label} → {who}</p>
+                  <p className="text-muted-foreground">
+                    {etLabel(r.sendAt)}{r.resultMessage ? ` · ${r.resultMessage}` : ""}
+                  </p>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wider ${badge}`}>{r.status}</span>
+                {r.status === "pending" && (
+                  <Button size="sm" variant="ghost" onClick={() => cancelScheduled(r.id)} className="h-7 text-red-300 hover:text-red-200" data-testid={`button-btl-scheduled-cancel-${r.id}`}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
       {failures.length > 0 && (
         <div className="bg-red-950/30 border border-red-500/30 rounded-xl px-4 py-3 space-y-1.5" data-testid="panel-btl-email-failures">
           <p className="text-sm font-semibold text-red-300">Recent delivery failures — this is why emails aren't going through:</p>
@@ -991,6 +1121,7 @@ function TemplatesView() {
   const [sendName, setSendName] = useState("");
   const [sendEmail, setSendEmail] = useState("");
   const [sendCc, setSendCc] = useState("");
+  const [sendWhen, setSendWhen] = useState(""); // "" = now, else ET datetime-local
 
   async function sendToPerson() {
     if (!selected) return;
@@ -998,18 +1129,30 @@ function TemplatesView() {
       toast({ title: "Save the template first", description: "Sends use the saved version — hit Save template, then send.", variant: "destructive" });
       return;
     }
-    if (!window.confirm(`Send "${selected.label}" to ${sendName.trim()} <${sendEmail.trim()}>${sendCc.trim() ? ` (cc: ${sendCc.trim()})` : ""} now? It comes from centralgroupevents@gmail.com as Anthony.`)) return;
+    const scheduling = sendWhen !== "";
+    const ccPart = sendCc.trim() ? ` (cc: ${sendCc.trim()})` : "";
+    const confirmMsg = scheduling
+      ? `Schedule "${selected.label}" to ${sendName.trim()} <${sendEmail.trim()}>${ccPart} for ${sendWhen.replace("T", " ")} ET? You can cancel it from the Cadence view until it fires.`
+      : `Send "${selected.label}" to ${sendName.trim()} <${sendEmail.trim()}>${ccPart} now? It comes from centralgroupevents@gmail.com as Anthony.`;
+    if (!window.confirm(confirmMsg)) return;
     setBusy("send");
     try {
-      const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send`, { name: sendName.trim(), email: sendEmail.trim(), cc: sendCc.trim() });
-      const body = await res.json();
-      toast({ title: `Sent to ${body.to}${body.cc?.length ? ` (cc: ${body.cc.join(", ")})` : ""}` });
+      if (scheduling) {
+        await apiRequest("POST", "/api/admin/btl/scheduled", { kind: "person", templateKey: selected.key, name: sendName.trim(), email: sendEmail.trim(), cc: sendCc.trim(), sendAtEt: sendWhen });
+        toast({ title: "Send scheduled", description: `Fires ${sendWhen.replace("T", " ")} ET — see the Cadence view to cancel.` });
+        qc.invalidateQueries({ queryKey: ["/api/admin/btl/scheduled"] });
+      } else {
+        const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send`, { name: sendName.trim(), email: sendEmail.trim(), cc: sendCc.trim() });
+        const body = await res.json();
+        toast({ title: `Sent to ${body.to}${body.cc?.length ? ` (cc: ${body.cc.join(", ")})` : ""}` });
+      }
       setSendOpen(false);
       setSendName("");
       setSendEmail("");
       setSendCc("");
+      setSendWhen("");
     } catch (err) {
-      toast({ title: "Send failed", description: String((err as Error).message), variant: "destructive" });
+      toast({ title: scheduling ? "Couldn't schedule" : "Send failed", description: String((err as Error).message), variant: "destructive" });
     } finally {
       setBusy("");
     }
@@ -1171,9 +1314,10 @@ function TemplatesView() {
               </div>
               <Button size="sm" onClick={sendToPerson} disabled={busy !== "" || !sendName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sendEmail.trim())} className="bg-primary hover:bg-primary/90 h-9" data-testid="button-btl-sendto-send">
                 {busy === "send" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Send className="w-3.5 h-3.5 mr-1.5" />}
-                Send now
+                {sendWhen ? "Schedule send" : "Send now"}
               </Button>
             </div>
+            <WhenPicker value={sendWhen} onChange={setSendWhen} />
           </div>
         )}
 

@@ -690,6 +690,26 @@ export const btlRsvpInputSchema = z.object({
 });
 export type BtlRsvpInput = z.infer<typeof btlRsvpInputSchema>;
 
+// Build to Last sends queued for later. Processed by the hourly cron tick:
+// kind "person" = one template to one name/email (+ optional CC, e.g. a
+// speaker email); kind "invitees" = the initial invite to a snapshot of
+// invitee ids chosen when it was scheduled.
+export const btlScheduledSends = pgTable("btl_scheduled_sends", {
+  id: serial("id").primaryKey(),
+  kind: text("kind").notNull(), // person | invitees
+  templateKey: text("template_key").notNull(),
+  recipientName: text("recipient_name"),
+  recipientEmail: text("recipient_email"),
+  cc: text("cc"), // comma-separated
+  inviteeIds: text("invitee_ids"), // JSON array of ids (kind = invitees)
+  sendAt: timestamp("send_at").notNull(),
+  status: text("status").notNull().default("pending"), // pending | running | sent | failed | cancelled
+  resultMessage: text("result_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
 export type EventRsvp = typeof eventRsvps.$inferSelect;
 export type EventEmailSend = typeof eventEmailSends.$inferSelect;
 export type EventInvitee = typeof eventInviteList.$inferSelect;
+export type BtlScheduledSend = typeof btlScheduledSends.$inferSelect;
