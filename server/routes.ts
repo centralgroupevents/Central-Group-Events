@@ -1023,37 +1023,12 @@ ${blogList || "_No recent posts yet._"}
   // per-row *SentAt so re-clicks never re-send (plus the send-log dedup).
   app.post("/api/admin/btl/invites/send-initial", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const { BTL_SLUG: slug } = await import("./btl-emails");
-      const { getBtlTemplateTexts, renderBtlFromTexts, buildBtlRenderCtx } = await import("./btl-cadence");
-      const { deliverBtlEmail, btlSendPause } = await import("./btl-mailer");
-      const texts = await getBtlTemplateTexts("initial_invite");
-      if (!texts) return res.status(500).json({ message: "initial_invite template missing" });
-      const ctx = await buildBtlRenderCtx();
-      const invitees = await storage.listBtlInvitees(slug);
+      const { sendInitialInvites } = await import("./btl-scheduled");
       // Optional ids[] narrows the send to the admin's current selection;
       // without it, everyone who hasn't gotten the invite yet is targeted.
       const rawIds = (req.body as { ids?: unknown[] })?.ids;
       const onlyIds = Array.isArray(rawIds) ? new Set(rawIds.map(Number).filter(Number.isFinite)) : null;
-      const targets = invitees.filter((i) =>
-        !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined" &&
-        (!onlyIds || onlyIds.has(i.id)));
-      // Selected rows that already got the invite are reported as skipped —
-      // the per-row Resend button is the deliberate way to send again.
-      let sent = 0, failed = 0;
-      let skipped = onlyIds ? invitees.filter((i) => onlyIds.has(i.id) && !!i.initialInviteSentAt).length : 0;
-      for (const i of targets) {
-        const tpl = renderBtlFromTexts(texts, { name: i.name, email: i.email }, ctx);
-        const outcome = await deliverBtlEmail({ email: i.email, inviteeId: i.id }, "initial_invite", tpl);
-        if (outcome === "sent") {
-          sent++;
-          await storage.updateBtlInvitee(i.id, { initialInviteSentAt: new Date() });
-          await btlSendPause();
-        } else if (outcome === "skipped") {
-          skipped++;
-          await storage.updateBtlInvitee(i.id, { initialInviteSentAt: new Date() });
-        } else failed++;
-      }
-      res.json({ sent, skipped, failed, total: targets.length });
+      res.json(await sendInitialInvites(onlyIds));
     } catch (err) {
       console.error("[btl/send-initial] error:", err);
       const detail = err instanceof Error ? err.message.slice(0, 200) : "unknown";
@@ -1401,31 +1376,92 @@ ${blogList || "_No recent posts yet._"}
   // template. Real subject (no [TEST]), bypasses dedup so repeat sends work.
   app.post("/api/admin/btl/templates/:key/send", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const { getBtlTemplateTexts, renderBtlFromTexts, buildBtlRenderCtx } = await import("./btl-cadence");
-      const { deliverBtlEmail } = await import("./btl-mailer");
+      const { sendTemplateToPerson, parseCcList, EMAIL_RE } = await import("./btl-scheduled");
       const key = String(req.params.key);
-      const texts = await getBtlTemplateTexts(key);
-      if (!texts) return res.status(404).json({ message: `Unknown template "${key}"` });
+      const { btlTemplateDef } = await import("./btl-emails");
+      if (!btlTemplateDef(key)) return res.status(404).json({ message: `Unknown template "${key}"` });
       const { name, email, cc } = (req.body ?? {}) as { name?: string; email?: string; cc?: string };
       const to = String(email || "").trim().toLowerCase();
       const who = String(name || "").trim();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ message: "Enter a valid email" });
+      if (!EMAIL_RE.test(to)) return res.status(400).json({ message: "Enter a valid email" });
       if (!who) return res.status(400).json({ message: "Enter their name" });
-      // Optional CC: comma/space/semicolon separated, each validated, max 5.
-      const ccList = Array.from(new Set(String(cc || "").split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean)));
-      const badCc = ccList.find((c) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c));
-      if (badCc) return res.status(400).json({ message: `"${badCc}" isn't a valid CC email` });
-      if (ccList.length > 5) return res.status(400).json({ message: "CC up to 5 people" });
-      const ctx = await buildBtlRenderCtx();
-      const tpl = renderBtlFromTexts(texts, { name: who, email: to }, ctx);
-      const errorOut: { message?: string } = {};
-      const outcome = await deliverBtlEmail({ email: to }, key, tpl, { force: true, cc: ccList, errorOut });
-      if (outcome !== "sent") return res.status(502).json({ message: errorOut.message || "Send failed", to });
+      let ccList: string[];
+      try { ccList = parseCcList(cc); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+      const r = await sendTemplateToPerson(key, who, to, ccList);
+      if (!r.ok) return res.status(502).json({ message: r.error, to });
       res.json({ sent: true, to, cc: ccList });
     } catch (err) {
       console.error("[btl/template send] error:", err);
       const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
       res.status(500).json({ message: `Send failed: ${detail}` });
+    }
+  });
+
+  // ── Scheduled sends ────────────────────────────────────────────────────
+  // Queue a speaker/one-off template send or the initial invites for later.
+  // sendAtEt is a datetime-local string ("YYYY-MM-DDTHH:mm") read as
+  // Eastern time. The hourly cron runs due rows, so a send fires within the
+  // hour after its time.
+  app.post("/api/admin/btl/scheduled", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { etToUtc } = await import("./btl-cadence");
+      const { btlTemplateDef, BTL_SLUG: slug } = await import("./btl-emails");
+      const { parseCcList, EMAIL_RE } = await import("./btl-scheduled");
+      const b = (req.body ?? {}) as { kind?: string; templateKey?: string; name?: string; email?: string; cc?: string; inviteeIds?: unknown[]; sendAtEt?: string };
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(b.sendAtEt || ""))) return res.status(400).json({ message: "Pick a send date and time" });
+      const sendAt = etToUtc(String(b.sendAtEt));
+      if (Number.isNaN(sendAt.getTime())) return res.status(400).json({ message: "Invalid send time" });
+      if (sendAt.getTime() < Date.now() - 60_000) return res.status(400).json({ message: "That time has already passed — pick a future time" });
+      if (sendAt.getTime() > Date.now() + 366 * 24 * 3600_000) return res.status(400).json({ message: "Pick a time within the next year" });
+
+      if (b.kind === "person") {
+        const key = String(b.templateKey || "");
+        if (!btlTemplateDef(key)) return res.status(404).json({ message: `Unknown template "${key}"` });
+        const to = String(b.email || "").trim().toLowerCase();
+        const who = String(b.name || "").trim();
+        if (!EMAIL_RE.test(to)) return res.status(400).json({ message: "Enter a valid email" });
+        if (!who) return res.status(400).json({ message: "Enter their name" });
+        let ccList: string[];
+        try { ccList = parseCcList(b.cc); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+        const row = await storage.createBtlScheduledSend({ kind: "person", templateKey: key, recipientName: who, recipientEmail: to, cc: ccList.join(", ") || null, inviteeIds: null, sendAt });
+        return res.status(201).json(row);
+      }
+
+      if (b.kind === "invitees") {
+        // Snapshot who gets it now: the selection, or everyone not yet invited.
+        const invitees = await storage.listBtlInvitees(slug);
+        const wanted = Array.isArray(b.inviteeIds) ? new Set(b.inviteeIds.map(Number).filter(Number.isFinite)) : null;
+        const ids = invitees
+          .filter((i) => !i.initialInviteSentAt && !i.unsubscribed && i.rsvpStatus !== "declined" && (!wanted || wanted.has(i.id)))
+          .map((i) => i.id);
+        if (ids.length === 0) return res.status(400).json({ message: "No one eligible — everyone selected already has the invite" });
+        const row = await storage.createBtlScheduledSend({ kind: "invitees", templateKey: "initial_invite", recipientName: null, recipientEmail: null, cc: null, inviteeIds: JSON.stringify(ids), sendAt });
+        return res.status(201).json(row);
+      }
+      return res.status(400).json({ message: "Unknown schedule type" });
+    } catch (err) {
+      console.error("[btl/scheduled create] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/btl/scheduled", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      res.json(await storage.listBtlScheduledSends(40));
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/btl/scheduled/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string, 10);
+      if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+      const ok = await storage.cancelBtlScheduledSend(id);
+      if (!ok) return res.status(409).json({ message: "Already sent or cancelled" });
+      res.json({ cancelled: true });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -4051,6 +4087,14 @@ Return every field you can confidently determine. Set null for any field the ima
       } catch (err) {
         console.error("[cron] btl cadence tick failed:", err);
       }
+      // Admin-scheduled Build to Last sends (speaker emails, queued invites).
+      let btlScheduled: unknown[] = [];
+      try {
+        const { runDueScheduledSends } = await import("./btl-scheduled");
+        btlScheduled = await runDueScheduledSends();
+      } catch (err) {
+        console.error("[cron] btl scheduled sends failed:", err);
+      }
       // Weekly digest rides the hourly tick too — it gates itself to
       // Friday 1 PM ET and continues chunked sends on later ticks.
       let digest: unknown = null;
@@ -4059,7 +4103,7 @@ Return every field you can confidently determine. Set null for any field the ima
       } catch (err) {
         console.error("[cron] weekly digest tick failed:", err);
       }
-      res.json({ ...result, btl, digest });
+      res.json({ ...result, btl, btlScheduled, digest });
     } catch (err) {
       console.error("[cron/scheduled-emails] error:", err);
       res.status(500).json({ message: "Internal server error" });

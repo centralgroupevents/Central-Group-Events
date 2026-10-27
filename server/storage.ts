@@ -21,6 +21,7 @@ import {
   eventRsvps,
   eventEmailSends,
   eventInviteList,
+  btlScheduledSends,
   pageRedirects,
   comments,
   pages,
@@ -47,6 +48,7 @@ import {
   type InsertLandingPageSubmission,
   type EventRsvp,
   type EventInvitee,
+  type BtlScheduledSend,
   type Invoice,
 } from "@shared/schema";
 import { eq, desc, sql, count, and, isNull, gte, lt, inArray } from "drizzle-orm";
@@ -201,6 +203,11 @@ export interface IStorage {
   listBtlInvitees(eventSlug: string): Promise<EventInvitee[]>;
   updateBtlInvitee(id: number, patch: Partial<EventInvitee>): Promise<EventInvitee | null>;
   deleteBtlInvitees(ids: number[]): Promise<number>;
+  createBtlScheduledSend(row: Omit<BtlScheduledSend, "id" | "status" | "resultMessage" | "createdAt" | "completedAt">): Promise<BtlScheduledSend>;
+  listBtlScheduledSends(limit: number): Promise<BtlScheduledSend[]>;
+  claimDueBtlScheduledSends(now: Date): Promise<BtlScheduledSend[]>;
+  finishBtlScheduledSend(id: number, status: "sent" | "failed", message: string): Promise<void>;
+  cancelBtlScheduledSend(id: number): Promise<boolean>;
   markReminderSent(id: number, status: "sent" | "failed" | "cancelled", opts?: { error?: string }): Promise<void>;
 
   // Invoices
@@ -1300,6 +1307,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Bulk delete from the invite list; their send-log rows cascade away.
+  async createBtlScheduledSend(row: Omit<BtlScheduledSend, "id" | "status" | "resultMessage" | "createdAt" | "completedAt">): Promise<BtlScheduledSend> {
+    const [created] = await db.insert(btlScheduledSends).values(row).returning();
+    return created;
+  }
+
+  async listBtlScheduledSends(limit: number): Promise<BtlScheduledSend[]> {
+    return db.select().from(btlScheduledSends).orderBy(desc(btlScheduledSends.sendAt)).limit(limit);
+  }
+
+  // Atomically flips due pending rows to "running" and returns them, so two
+  // overlapping cron ticks can never both send the same row.
+  async claimDueBtlScheduledSends(now: Date): Promise<BtlScheduledSend[]> {
+    return db.update(btlScheduledSends)
+      .set({ status: "running" })
+      .where(and(eq(btlScheduledSends.status, "pending"), lt(btlScheduledSends.sendAt, now)))
+      .returning();
+  }
+
+  async finishBtlScheduledSend(id: number, status: "sent" | "failed", message: string): Promise<void> {
+    await db.update(btlScheduledSends)
+      .set({ status, resultMessage: message.slice(0, 500), completedAt: new Date() })
+      .where(eq(btlScheduledSends.id, id));
+  }
+
+  async cancelBtlScheduledSend(id: number): Promise<boolean> {
+    const rows = await db.update(btlScheduledSends)
+      .set({ status: "cancelled", completedAt: new Date() })
+      .where(and(eq(btlScheduledSends.id, id), eq(btlScheduledSends.status, "pending")))
+      .returning({ id: btlScheduledSends.id });
+    return rows.length > 0;
+  }
+
   async deleteBtlInvitees(ids: number[]): Promise<number> {
     if (ids.length === 0) return 0;
     const deleted = await db.delete(eventInviteList)
