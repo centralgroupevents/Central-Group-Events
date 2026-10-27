@@ -990,6 +990,7 @@ function TemplatesView() {
   const [sendOpen, setSendOpen] = useState(false);
   const [sendName, setSendName] = useState("");
   const [sendEmail, setSendEmail] = useState("");
+  const [sendCc, setSendCc] = useState("");
 
   async function sendToPerson() {
     if (!selected) return;
@@ -997,15 +998,16 @@ function TemplatesView() {
       toast({ title: "Save the template first", description: "Sends use the saved version — hit Save template, then send.", variant: "destructive" });
       return;
     }
-    if (!window.confirm(`Send "${selected.label}" to ${sendName.trim()} <${sendEmail.trim()}> now? It comes from centralgroupevents@gmail.com as Anthony.`)) return;
+    if (!window.confirm(`Send "${selected.label}" to ${sendName.trim()} <${sendEmail.trim()}>${sendCc.trim() ? ` (cc: ${sendCc.trim()})` : ""} now? It comes from centralgroupevents@gmail.com as Anthony.`)) return;
     setBusy("send");
     try {
-      const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send`, { name: sendName.trim(), email: sendEmail.trim() });
+      const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send`, { name: sendName.trim(), email: sendEmail.trim(), cc: sendCc.trim() });
       const body = await res.json();
-      toast({ title: `Sent to ${body.to}` });
+      toast({ title: `Sent to ${body.to}${body.cc?.length ? ` (cc: ${body.cc.join(", ")})` : ""}` });
       setSendOpen(false);
       setSendName("");
       setSendEmail("");
+      setSendCc("");
     } catch (err) {
       toast({ title: "Send failed", description: String((err as Error).message), variant: "destructive" });
     } finally {
@@ -1151,10 +1153,10 @@ function TemplatesView() {
         {sendOpen && (
           <div className="bg-black/30 border border-primary/25 rounded-xl p-4 space-y-3">
             <p className="text-xs text-muted-foreground">
-              Sends this template to one person — their name fills {"{{name}}"} / {"{{first_name}}"}. Real send, no [TEST] tag.
+              Sends this template to one person (CC anyone who should see it, separated by commas) — their name fills {"{{name}}"} / {"{{first_name}}"}. Real send, no [TEST] tag.
               Made for the speaker emails, but any template works.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
               <div className="space-y-1">
                 <Label className="text-white/70 text-xs">Name</Label>
                 <Input value={sendName} onChange={(e) => setSendName(e.target.value)} placeholder="Alnazir Blackman" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-sendto-name" />
@@ -1162,6 +1164,10 @@ function TemplatesView() {
               <div className="space-y-1">
                 <Label className="text-white/70 text-xs">Email</Label>
                 <Input value={sendEmail} onChange={(e) => setSendEmail(e.target.value)} placeholder="them@example.com" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-sendto-email" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-white/70 text-xs">CC (optional)</Label>
+                <Input value={sendCc} onChange={(e) => setSendCc(e.target.value)} placeholder="manager@…, team@…" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-sendto-cc" />
               </div>
               <Button size="sm" onClick={sendToPerson} disabled={busy !== "" || !sendName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sendEmail.trim())} className="bg-primary hover:bg-primary/90 h-9" data-testid="button-btl-sendto-send">
                 {busy === "send" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Send className="w-3.5 h-3.5 mr-1.5" />}

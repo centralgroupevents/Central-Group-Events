@@ -67,7 +67,7 @@ export async function deliverBtlEmail(
   recipient: BtlRecipient,
   templateKey: string,
   tpl: { subject: string; body: string },
-  opts?: { force?: boolean; errorOut?: { message?: string } },
+  opts?: { force?: boolean; cc?: string[]; errorOut?: { message?: string } },
 ): Promise<"sent" | "skipped" | "failed"> {
   const email = recipient.email.toLowerCase().trim();
   // force skips the dedup gate — used by the admin "Resend" action so a
@@ -85,6 +85,7 @@ export async function deliverBtlEmail(
     await transporter.sendMail({
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
       to: email,
+      cc: opts?.cc && opts.cc.length > 0 ? opts.cc : undefined,
       replyTo: "centralgroupevents@gmail.com",
       subject: tpl.subject,
       html,

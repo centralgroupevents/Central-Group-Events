@@ -1406,17 +1406,22 @@ ${blogList || "_No recent posts yet._"}
       const key = String(req.params.key);
       const texts = await getBtlTemplateTexts(key);
       if (!texts) return res.status(404).json({ message: `Unknown template "${key}"` });
-      const { name, email } = (req.body ?? {}) as { name?: string; email?: string };
+      const { name, email, cc } = (req.body ?? {}) as { name?: string; email?: string; cc?: string };
       const to = String(email || "").trim().toLowerCase();
       const who = String(name || "").trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ message: "Enter a valid email" });
       if (!who) return res.status(400).json({ message: "Enter their name" });
+      // Optional CC: comma/space/semicolon separated, each validated, max 5.
+      const ccList = Array.from(new Set(String(cc || "").split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean)));
+      const badCc = ccList.find((c) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c));
+      if (badCc) return res.status(400).json({ message: `"${badCc}" isn't a valid CC email` });
+      if (ccList.length > 5) return res.status(400).json({ message: "CC up to 5 people" });
       const ctx = await buildBtlRenderCtx();
       const tpl = renderBtlFromTexts(texts, { name: who, email: to }, ctx);
       const errorOut: { message?: string } = {};
-      const outcome = await deliverBtlEmail({ email: to }, key, tpl, { force: true, errorOut });
+      const outcome = await deliverBtlEmail({ email: to }, key, tpl, { force: true, cc: ccList, errorOut });
       if (outcome !== "sent") return res.status(502).json({ message: errorOut.message || "Send failed", to });
-      res.json({ sent: true, to });
+      res.json({ sent: true, to, cc: ccList });
     } catch (err) {
       console.error("[btl/template send] error:", err);
       const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
