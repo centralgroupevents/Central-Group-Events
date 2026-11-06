@@ -77,6 +77,7 @@ type BtlSettings = {
   programStartTime: string;
   questionThemes: string;
   speakers: Array<{ name: string; credential: string; topic: string }>;
+  speakersSaved?: boolean;
   photoGalleryUrl: string;
   recapVideoUrl: string;
   fieldNotesUrl: string;
@@ -1576,12 +1577,9 @@ function CheckinView({ rsvps }: { rsvps: BtlRsvp[] }) {
 
 /* ── Settings ──────────────────────────────────────────────────────────── */
 
-const SPEAKER_TOPIC_DEFAULTS = [
-  "legal protection for creators",
-  "grants and non-dilutive funding in Newark",
-  "venue economics from the operator's seat",
-  "where Newark is actually heading in the next three years",
-];
+// The Vol. 1 panel is one moderated conversation (real estate, automation,
+// policy), so speakers no longer carry a per-person topic by default.
+const SPEAKER_TOPIC_DEFAULTS = ["", "", "", ""];
 
 function SettingsView() {
   const { toast } = useToast();
@@ -1645,13 +1643,17 @@ function SettingsView() {
 
       <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-3">
         <h3 className="font-bold text-white">Speakers (unlocks the speaker-announcement email)</h3>
+        <p className="text-xs text-muted-foreground">
+          Pre-filled with the Vol. 1 panel. Their photos and LinkedIn links are added to the emails automatically.
+          {!s.speakersSaved && " Press Save settings below to confirm the panel and unlock the announcement."}
+        </p>
         {[0, 1, 2, 3].map((i) => {
           const sp = s.speakers[i] ?? { name: "", credential: "", topic: SPEAKER_TOPIC_DEFAULTS[i] };
           return (
             <div key={i} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Input placeholder={`Speaker ${i + 1} name`} value={sp.name} onChange={(e) => setSpeaker(i, "name", e.target.value)} className={inputCls} data-testid={`input-btl-speaker-name-${i}`} />
               <Input placeholder="Credential (e.g. Esq., entertainment attorney)" value={sp.credential} onChange={(e) => setSpeaker(i, "credential", e.target.value)} className={inputCls} />
-              <p className="text-xs text-muted-foreground sm:col-span-2">on {sp.topic || SPEAKER_TOPIC_DEFAULTS[i]}</p>
+              {sp.topic && <p className="text-xs text-muted-foreground sm:col-span-2">on {sp.topic}</p>}
             </div>
           );
         })}

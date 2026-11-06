@@ -353,6 +353,23 @@ export default function BuildToLast() {
           <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 24, fontWeight: 600, color: CREAM, margin: 0 }}>
             AisleGo
           </p>
+
+          {/* Venue partner — the logo file lives at client/public/equal-space-logo.png.
+              Until it's added the image hides itself and only the name shows. */}
+          <p style={{ fontSize: 12, letterSpacing: 2.5, textTransform: "uppercase", color: GOLD, margin: "44px 0 16px" }}>
+            Hosted at
+          </p>
+          <img
+            src="/equal-space-logo.png"
+            alt="Equal Space"
+            onError={(e) => { e.currentTarget.style.display = "none"; }}
+            style={{ maxWidth: 190, maxHeight: 72, objectFit: "contain", display: "block", margin: "0 auto 10px", background: "#f3ecdd", padding: "10px 16px", borderRadius: 4 }}
+            data-testid="img-btl-venue-logo"
+          />
+          <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 24, fontWeight: 600, color: CREAM, margin: 0 }} data-testid="text-btl-venue-name">
+            Equal Space
+          </p>
+          <p style={{ fontSize: 13, color: "rgba(243,236,221,0.55)", margin: "4px 0 0" }}>Newark, NJ</p>
         </footer>
       </div>
     </div>

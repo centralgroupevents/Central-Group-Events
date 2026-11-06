@@ -1,7 +1,8 @@
 // Build to Last Vol. 1 — email templates.
 //
 // These are deliberately personal notes, not marketing emails: serif body,
-// generous line-height, no header bars or logos, a plain unsubscribe line.
+// generous line-height, a small CGE wordmark on top, the sponsor and venue
+// logos at the bottom, and a plain unsubscribe line.
 //
 // Every template is plain text with {{placeholders}} — the defaults live
 // here, and the admin can override any template's subject/body from the
@@ -9,6 +10,9 @@
 // "btl.tpl.<key>.subject" / "btl.tpl.<key>.body", resolved in btl-cadence).
 // A line that is just "✦ SECTION TITLE" renders as a small gold section
 // header; "✔" bullets and plain lines render as-is.
+
+import { CGE_LOGO_CID, partnersFooterHtml } from "./btl-brand";
+export { CGE_LOGO_CID };
 
 export const BTL_SLUG = "build-to-last-vol-1";
 export const BTL_FROM_NAME = "Anthony from Central Group Events";
@@ -87,15 +91,14 @@ export function renderBtlText(text: string, vars: Record<string, string>): strin
 // no marketing footer bars. The logo references a CID inline attachment
 // (see cgeLogoAttachment in btl-mailer) so it displays without depending
 // on the website hosting the image; previews swap the cid: for a URL.
-export const CGE_LOGO_CID = "cge-logo";
-
 export function btlShell(bodyHtml: string, unsubscribeUrl: string): string {
   return `
   <div style="background:#faf8f4;padding:28px 16px">
     <div style="max-width:560px;margin:0 auto;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.75;color:#262118">
       <img src="cid:${CGE_LOGO_CID}" alt="Central Group Events" width="96" height="22" style="display:block;width:96px;height:auto;margin:0 0 26px;border:0" />
       ${bodyHtml}
-      <p style="margin:34px 0 0;color:#9a917f;font-size:12px;font-family:Georgia,serif">
+      ${partnersFooterHtml()}
+      <p style="margin:26px 0 0;color:#9a917f;font-size:12px;font-family:Georgia,serif">
         You're getting this because of Build to Last Vol. 1.
         <a href="${unsubscribeUrl}" style="color:#9a917f">Unsubscribe from these emails</a>.
       </p>
@@ -116,13 +119,17 @@ export const BTL_TEMPLATE_DEFS: BtlTemplateDef[] = [
   {
     key: "confirmation",
     label: "RSVP confirmation (instant)",
-    placeholders: ["name", "first_name", "venue_name", "doors_time"],
+    placeholders: ["name", "first_name", "venue_name", "doors_time", "speaker_cards"],
     subject: "You're in — Build to Last, Nov 12",
     body: `Hey {{name}},
 
 You're confirmed for Build to Last on Thursday, November 12th at {{venue_name}} in Newark. Doors open at {{doors_time}}.
 
-We'll share more as the night gets closer — speakers, run of show, and everything else worth knowing.
+✦ MEET THE PANEL
+
+{{speaker_cards}}
+
+We'll share more as the night gets closer — run of show and everything else worth knowing.
 
 Looking forward to having you in the room.
 
@@ -132,7 +139,7 @@ Founder, Central Group Events`,
   {
     key: "initial_invite",
     label: "Initial invites",
-    placeholders: ["name", "first_name", "rsvp_url", "venue_name", "doors_time", "program_start_time"],
+    placeholders: ["name", "first_name", "rsvp_url", "venue_name", "doors_time", "program_start_time", "speaker_cards"],
     subject: "You're invited — Build to Last, Nov 12 in Newark",
     body: `Hey {{name}},
 
@@ -145,6 +152,10 @@ Promoting events across this state, we've come across so many influential, hardw
 ✔ An intentionally set crowd — planners, venue owners, and creators from across the state
 ✔ Moderated conversations on event planning, spaces, and brand building in NJ
 ✔ A professionally photographed night — you'll get the photos after
+
+✦ MEET THE PANEL
+
+{{speaker_cards}}
 
 ✦ THE ESSENTIALS
 
@@ -264,15 +275,15 @@ If there's anyone specific you're hoping to meet in the room, hit reply and tell
   {
     key: "touch_7",
     label: "Speaker announcement",
-    placeholders: ["name", "speaker_lineup", "venue_name", "venue_address", "doors_time", "program_start_time"],
+    placeholders: ["name", "speaker_cards", "speaker_lineup", "venue_name", "venue_address", "doors_time", "program_start_time"],
     subject: "Your Nov 12 speakers",
     body: `Hey {{name}} —
 
-The lineup for Build to Last Vol. 1:
+Meet the panel for Build to Last Vol. 1 — real estate, automation, and policy:
 
-{{speaker_lineup}}
+{{speaker_cards}}
 
-Format: four small-group conversation stations. You'll rotate through all four over the course of the night. Intimate, direct, every voice heard.
+Format: a moderated panel conversation with time for your questions, with mixing before and after. Intimate, direct, every voice heard.
 
 Logistics:
 
@@ -282,14 +293,14 @@ Logistics:
 - Open bar and small bites throughout
 - Light dress code: come as yourself, elevated
 
-See you one week from Thursday.
+See you Thursday.
 
 — Anthony`,
   },
   {
     key: "touch_8",
     label: "Four days out",
-    placeholders: ["name"],
+    placeholders: ["name", "speaker_cards"],
     subject: "Four days",
     body: `Hey {{name}} —
 
@@ -301,6 +312,10 @@ A few last things:
 - If there's someone specific you're hoping to meet that night, reply here — I'm keeping a short list of introductions to make.
 - There'll be a photographer in the room, candid shots only. You'll get the edited photos after, with permission to post.
 
+✦ ON THE PANEL
+
+{{speaker_cards}}
+
 See you Thursday.
 
 — Anthony`,
@@ -308,11 +323,15 @@ See you Thursday.
   {
     key: "touch_9",
     label: "Tomorrow",
-    placeholders: ["name", "venue_address", "doors_time"],
+    placeholders: ["name", "venue_address", "doors_time", "speaker_cards"],
     subject: "Tomorrow",
     body: `Hey {{name}},
 
 Tomorrow night. {{venue_address}}. Doors at {{doors_time}}.
+
+✦ ON THE PANEL
+
+{{speaker_cards}}
 
 If anything comes up and you can't make it, reply and let me know — your seat goes to someone who can.
 
