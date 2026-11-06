@@ -1204,13 +1204,10 @@ ${blogList || "_No recent posts yet._"}
       const ctx = await buildBtlRenderCtx();
       const tpl = await renderBtlTemplate(String(req.params.key), { name: "Jordan", email: "preview@example.com", contactSheetOptin: true }, ctx);
       if (!tpl) return res.status(404).json({ message: "Unknown template" });
-      // Real sends embed the logo as a CID attachment; the browser preview
-      // can't resolve cid:, so point it at the served file instead.
-      const { cidsToUrls } = await import("./btl-brand");
-      const html = cidsToUrls(
-        btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com")),
-        `${req.protocol}://${req.get("host")}`,
-      );
+      // Real sends embed the images as CID attachments; the browser preview
+      // can't resolve cid:, so inline the same images as data URIs.
+      const { cidsToDataUris } = await import("./btl-brand");
+      const html = cidsToDataUris(btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com")));
       res.json({ subject: tpl.subject, html });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
