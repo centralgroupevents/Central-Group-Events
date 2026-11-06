@@ -9,6 +9,7 @@
 
 import { storage } from "./storage";
 import { BTL_SLUG, btlTemplateDef, renderBtlText, paras } from "./btl-emails";
+import { speakerCardsHtml } from "./btl-brand";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
 import { deliverBtlEmail, btlRsvpUrl, btlSendPause, getBtlSettings, type BtlSettings } from "./btl-mailer";
 import { signToken, encodeEmail } from "./email-compliance";
@@ -72,6 +73,10 @@ export async function btlSendAtFor(key: string): Promise<string | null> {
 
 function missingSettings(entry: BtlCadenceEntry, settings: BtlSettings): string[] {
   return (entry.requiresSettings ?? []).filter((k) => {
+    // The panel is pre-filled, so "speakers" counts as filled in only once
+    // the admin has reviewed and saved the Settings view — the announcement
+    // never goes out on the built-in defaults alone.
+    if (k === "speakers") return !settings.speakersSaved || settings.speakers.length === 0;
     const v = settings[k];
     return Array.isArray(v) ? v.length === 0 : !String(v ?? "").trim();
   });
@@ -123,6 +128,8 @@ export async function getBtlTemplateTexts(key: string): Promise<BtlTemplateTexts
 /** Every placeholder, for every template — a recipient-specific map fed to
  *  renderBtlText. Unknown placeholders typed into an edited template stay
  *  visible in the preview instead of silently disappearing. */
+const SPEAKER_CARDS_MARK = "[[speaker_cards]]";
+
 export function buildBtlVars(
   recipient: { name: string; email?: string; contactSheetOptin?: boolean },
   ctx: BtlRenderCtx,
@@ -132,7 +139,7 @@ export function buildBtlVars(
     ? `Attendee contact sheet (those who opted in): ${s.contactSheetUrl}`
     : "";
   const speakerLineup = s.speakers
-    .map((sp) => `- ${sp.name}, ${sp.credential} — on ${sp.topic}`)
+    .map((sp) => `- ${sp.name}, ${sp.credential}${sp.topic?.trim() ? ` — on ${sp.topic.trim()}` : ""}`)
     .join("\n");
   return {
     name: recipient.name,
@@ -159,6 +166,9 @@ export function buildBtlVars(
     category_breakdown: ctx.breakdown,
     interests_breakdown: ctx.interestsBreakdown,
     speaker_lineup: speakerLineup,
+    // Swapped for the photo cards after the text is rendered (see
+    // renderBtlFromTexts) — the cards are HTML, the templates are text.
+    speaker_cards: SPEAKER_CARDS_MARK,
     photo_gallery_url: s.photoGalleryUrl,
     recap_video_url: s.recapVideoUrl,
     field_notes_url: s.fieldNotesUrl,
@@ -175,9 +185,14 @@ export function renderBtlFromTexts(
   ctx: BtlRenderCtx,
 ): { subject: string; body: string } {
   const vars = buildBtlVars(recipient, ctx);
+  const cards = speakerCardsHtml(ctx.settings.speakers);
   return {
     subject: renderBtlText(texts.subject, vars),
-    body: paras(renderBtlText(texts.body, vars)),
+    // The marker sits alone in its own paragraph; replace that whole <p>.
+    body: paras(renderBtlText(texts.body, vars)).replace(
+      /<p[^>]*>\[\[speaker_cards\]\]<\/p>/g,
+      () => cards,
+    ),
   };
 }
 

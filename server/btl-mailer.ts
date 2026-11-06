@@ -13,6 +13,7 @@ import path from "path";
 import { storage } from "./storage";
 import { signToken, encodeEmail } from "./email-compliance";
 import { btlShell, BTL_FROM_NAME, BTL_SLUG, CGE_LOGO_CID } from "./btl-emails";
+import { inlineImages, BTL_SPEAKER_DEFAULTS } from "./btl-brand";
 
 // The wordmark ships INSIDE each email as an inline (CID) attachment, so it
 // renders in Gmail & co. without depending on the live site hosting the
@@ -75,12 +76,13 @@ export async function deliverBtlEmail(
   if (!opts?.force && (await storage.hasBtlEmailSend(BTL_SLUG, email, templateKey))) {
     return "skipped";
   }
-  const logo = cgeLogoAttachment();
-  const html0 = btlShell(tpl.body, btlUnsubscribeUrl(email));
+  // Backs every cid: image (logos, speaker photos) with its file and drops
+  // any whose file is missing.
+  const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email)));
   // Open-tracking pixel — signed per recipient, stamps emailOpenedAt on
   // first render (see GET /api/build-to-last/open).
   const pixel = `<img src="${btlSiteBase()}/api/build-to-last/open?e=${encodeEmail(email)}&t=${signToken(email)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0" />`;
-  const html = (logo ? html0 : stripLogoImg(html0)) + pixel;
+  const html = shell.html + pixel;
   try {
     await transporter.sendMail({
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
@@ -89,7 +91,7 @@ export async function deliverBtlEmail(
       replyTo: "centralgroupevents@gmail.com",
       subject: tpl.subject,
       html,
-      attachments: logo ? [logo] : undefined,
+      attachments: shell.attachments.length > 0 ? shell.attachments : undefined,
     });
     await storage.recordBtlEmailSend({
       eventSlug: BTL_SLUG,
@@ -131,15 +133,14 @@ export async function sendBtlTestEmail(
     return { ok: false, error: "GMAIL_USER / GMAIL_APP_PASSWORD are not set in the server's secrets — emails can't send until both are configured." };
   }
   try {
-    const logo = cgeLogoAttachment();
-    const html0 = btlShell(tpl.body, btlUnsubscribeUrl(email));
+    const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email)));
     await transporter.sendMail({
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
       to: email,
       replyTo: "centralgroupevents@gmail.com",
       subject: `[TEST] ${tpl.subject}`,
-      html: logo ? html0 : stripLogoImg(html0),
-      attachments: logo ? [logo] : undefined,
+      html: shell.html,
+      attachments: shell.attachments.length > 0 ? shell.attachments : undefined,
     });
     return { ok: true };
   } catch (err) {
@@ -164,6 +165,9 @@ export interface BtlSettings {
   programStartTime: string;
   questionThemes: string;
   speakers: Array<{ name: string; credential: string; topic: string }>;
+  /** True once the admin has saved speakers in Settings (the built-in panel
+   *  above is only a pre-fill). */
+  speakersSaved: boolean;
   photoGalleryUrl: string;
   recapVideoUrl: string;
   fieldNotesUrl: string;
@@ -177,7 +181,8 @@ const BTL_DEFAULTS: BtlSettings = {
   doorsTime: "6:00 PM",
   programStartTime: "7:00 PM",
   questionThemes: "",
-  speakers: [],
+  speakers: BTL_SPEAKER_DEFAULTS,
+  speakersSaved: false,
   photoGalleryUrl: "",
   recapVideoUrl: "",
   fieldNotesUrl: "",
@@ -198,7 +203,7 @@ export async function getBtlSettings(): Promise<BtlSettings> {
   if (speakersRaw) {
     try {
       const parsed = JSON.parse(speakersRaw);
-      if (Array.isArray(parsed)) out.speakers = parsed;
+      if (Array.isArray(parsed)) { out.speakers = parsed; out.speakersSaved = true; }
     } catch { /* keep default */ }
   }
   return out;

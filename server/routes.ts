@@ -1206,8 +1206,11 @@ ${blogList || "_No recent posts yet._"}
       if (!tpl) return res.status(404).json({ message: "Unknown template" });
       // Real sends embed the logo as a CID attachment; the browser preview
       // can't resolve cid:, so point it at the served file instead.
-      const html = btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com"))
-        .replace("cid:cge-logo", `${req.protocol}://${req.get("host")}/cge-logo.png`);
+      const { cidsToUrls } = await import("./btl-brand");
+      const html = cidsToUrls(
+        btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com")),
+        `${req.protocol}://${req.get("host")}`,
+      );
       res.json({ subject: tpl.subject, html });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
