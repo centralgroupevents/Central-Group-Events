@@ -28,7 +28,7 @@ const SPEAKER_LINKEDIN: Record<string, string> = {
   "alnazir-blackman": "https://www.linkedin.com/in/blackmanrealty",
   "tc-cuthbertson": "https://www.linkedin.com/in/tc-cuthbertson-598b2032",
   "tammy-holloway": "https://www.linkedin.com/in/tammy-holloway-cigi-39813914a",
-  // Kimberly Simone's LinkedIn isn't known yet — add it here when it is.
+  "kimberly-simone": "https://www.linkedin.com/in/kimberly-mckoy-9a54901a5",
 };
 
 function esc(s: string): string {
@@ -85,9 +85,29 @@ export function cidToPublicPath(cid: string): string | null {
   return null;
 }
 
+/** Bytes of a brand image: the file in the public folder if there is one,
+ *  otherwise the copy embedded in the code. null = we don't have it. */
+export function readAsset(rel: string): Buffer | null {
+  const file = publicFile(rel);
+  if (file) {
+    try { return fs.readFileSync(file); } catch { /* fall through to the embedded copy */ }
+  }
+  const b64 = EMBEDDED_BRAND_ASSETS[rel];
+  return b64 ? Buffer.from(b64, "base64") : null;
+}
+
+export function hasAsset(rel: string): boolean {
+  return !!publicFile(rel) || !!EMBEDDED_BRAND_ASSETS[rel];
+}
+
+function mimeFor(rel: string): string {
+  return rel.endsWith(".png") ? "image/png" : "image/jpeg";
+}
+
 export interface InlineAttachment {
   filename: string;
-  path: string;
+  content: Buffer;
+  contentType: string;
   cid: string;
   contentDisposition: "inline";
 }
@@ -102,9 +122,9 @@ export function inlineImages(html: string): { html: string; attachments: InlineA
   let out = html;
   for (const cid of cids) {
     const rel = cidToPublicPath(cid);
-    const file = rel ? publicFile(rel) : null;
-    if (file) {
-      attachments.push({ filename: path.basename(file), path: file, cid, contentDisposition: "inline" });
+    const buf = rel ? readAsset(rel) : null;
+    if (rel && buf) {
+      attachments.push({ filename: path.basename(rel), content: buf, contentType: mimeFor(rel), cid, contentDisposition: "inline" });
     } else {
       out = out.replace(new RegExp(`<img[^>]*cid:${cid}[^>]*>`, "g"), "");
     }
@@ -112,11 +132,18 @@ export function inlineImages(html: string): { html: string; attachments: InlineA
   return { html: out, attachments };
 }
 
-/** Browser previews can't resolve cid:, so point each at the served file. */
-export function cidsToUrls(html: string, base: string): string {
-  return html.replace(/cid:([a-z0-9-]+)/g, (m, cid: string) => {
+/**
+ * Admin previews can't resolve cid:, so each image is inlined as a data URI
+ * taken from the same bytes the real email attaches — what you preview is
+ * exactly what gets sent, with no dependence on URLs, proxies or static
+ * file serving. Images we don't have are dropped, as in a real send.
+ */
+export function cidsToDataUris(html: string): string {
+  const { html: kept } = inlineImages(html);
+  return kept.replace(/cid:([a-z0-9-]+)/g, (m, cid: string) => {
     const rel = cidToPublicPath(cid);
-    return rel ? `${base}/${rel}` : m;
+    const buf = rel ? readAsset(rel) : null;
+    return rel && buf ? `data:${mimeFor(rel)};base64,${buf.toString("base64")}` : m;
   });
 }
 
@@ -130,7 +157,7 @@ export function speakerCardsHtml(speakers: Array<{ name: string; credential: str
     .filter((s) => s.name.trim())
     .map((s) => {
       const slug = speakerSlug(s.name);
-      const hasPhoto = !!publicFile(`speakers/${slug}.jpg`);
+      const hasPhoto = hasAsset(`speakers/${slug}.jpg`);
       const linkedin = SPEAKER_LINKEDIN[slug];
       const initials = s.name.split(",")[0].trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
       const photo = hasPhoto
@@ -161,7 +188,7 @@ export function speakerCardsHtml(speakers: Array<{ name: string; credential: str
  */
 export function partnersFooterHtml(): string {
   const cell = (cid: string, file: string, alt: string, label: string, w: number) =>
-    publicFile(file)
+    hasAsset(file)
       ? `<td align="center" valign="middle" style="padding:0 18px"><img src="cid:${cid}" alt="${alt}" height="44" style="display:block;height:44px;width:auto;max-width:${w}px;margin:0 auto 6px;border:0" /><div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#9a917f">${label}</div></td>`
       : `<td align="center" valign="middle" style="padding:0 18px"><div style="font-size:15px;font-weight:bold;color:#262118">${alt}</div><div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#9a917f">${label}</div></td>`;
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:34px auto 0;border-top:1px solid #e6dcc6;padding-top:22px"><tr>

@@ -269,9 +269,20 @@ export default function BuildToLast() {
           ) : (
             <form onSubmit={handleSubmit} noValidate>
               {identity ? (
-                <p style={{ fontSize: 14, color: GOLD, margin: "0 0 22px", letterSpacing: 0.5 }} data-testid="text-btl-identity">
-                  RSVP'ing as {identity.name || identity.email} — one tap below and you're in.
-                </p>
+                <div style={{ margin: "0 0 22px" }}>
+                  <p style={{ fontSize: 14, color: GOLD, margin: 0, letterSpacing: 0.5 }} data-testid="text-btl-identity">
+                    RSVP'ing as {identity.name || identity.email} — one tap below and you're in.
+                  </p>
+                  {/* A forwarded invite carries the original person's signed
+                      link; this gives a friend their own, separate RSVP. */}
+                  <a
+                    href="/build-to-last?src=forwarded"
+                    style={{ display: "inline-block", marginTop: 8, fontSize: 13, color: "rgba(243,236,221,0.6)", textDecoration: "underline" }}
+                    data-testid="link-btl-not-you"
+                  >
+                    Not {identity.name || "you"}? RSVP with your own name and email
+                  </a>
+                </div>
               ) : (
                 <>
                   <Field label="Name *">
