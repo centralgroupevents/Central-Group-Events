@@ -8,6 +8,7 @@
 
 import fs from "fs";
 import path from "path";
+import { EMBEDDED_BRAND_ASSETS } from "./btl-embedded-assets";
 
 export const CGE_LOGO_CID = "cge-logo";
 export const AISLEGO_LOGO_CID = "aislego-logo";
@@ -42,6 +43,26 @@ export function speakerSlug(name: string): string {
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Writes any embedded brand image that isn't already in the public folder
+ * (so emails can attach it and the site can serve it). Run at server start.
+ * A real file in client/public / dist/public is never overwritten.
+ */
+export function ensureBrandAssets(): void {
+  const root = ["dist/public", "client/public"].map((r) => path.resolve(process.cwd(), r)).find((r) => fs.existsSync(r));
+  if (!root) return;
+  for (const [rel, b64] of Object.entries(EMBEDDED_BRAND_ASSETS)) {
+    const target = path.join(root, rel);
+    if (fs.existsSync(target)) continue;
+    try {
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, Buffer.from(b64, "base64"));
+    } catch (err) {
+      console.error(`[btl-brand] could not write ${rel}:`, err instanceof Error ? err.message : err);
+    }
+  }
 }
 
 /** Absolute path of a file in the public folder, or null if it isn't there. */
