@@ -28,6 +28,7 @@ const SPEAKER_LINKEDIN: Record<string, string> = {
   "alnazir-blackman": "https://www.linkedin.com/in/blackmanrealty",
   "tc-cuthbertson": "https://www.linkedin.com/in/tc-cuthbertson-598b2032",
   "tammy-holloway": "https://www.linkedin.com/in/tammy-holloway-cigi-39813914a",
+  // Kimberly Simone's LinkedIn isn't known yet — add it here when it is.
 };
 
 function esc(s: string): string {
