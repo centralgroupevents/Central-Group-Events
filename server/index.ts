@@ -8,6 +8,9 @@ import { ensureBrandAssets } from "./btl-brand";
 import { createServer } from "http";
 
 const app = express();
+// Replit terminates requests at its reverse proxy. Trust only the nearest hop,
+// not arbitrary client-supplied entries at the left of X-Forwarded-For.
+app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 declare module "http" {
@@ -93,7 +96,7 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      if (capturedJsonResponse && !path.startsWith("/api/assistant/")) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 

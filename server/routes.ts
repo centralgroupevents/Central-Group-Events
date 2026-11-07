@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
+import { registerAssistantRoutes } from "./assistant-routes";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import rateLimit from "express-rate-limit";
@@ -289,6 +290,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  registerAssistantRoutes(app);
   // ── Sitemap & Robots — registered FIRST, before any catch-alls ───────
   app.get("/sitemap.xml", async (_req: Request, res: Response) => {
     console.log("[sitemap] GET /sitemap.xml hit");

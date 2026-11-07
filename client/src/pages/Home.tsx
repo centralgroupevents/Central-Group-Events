@@ -21,6 +21,7 @@ import { useSubscribeNewsletter } from "@/hooks/use-landing";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { EventBrowser } from "@/components/EventBrowser";
+import EventAssistant from "@/components/EventAssistant";
 import { EventsJsonLd } from "@/components/EventsJsonLd";
 import { SubscribeModal } from "@/components/SubscribeModal";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -247,72 +248,7 @@ export default function Home() {
       <EventsJsonLd maxItems={10} />
       <Navigation />
 
-      {/* HERO SECTION — compact everywhere so the event calendar sits high:
-          event-goers should see the list is the product, not just the
-          promo pitch. No min-height; the content sets the height. */}
-      <section className="relative flex items-center pt-24 pb-10 md:pt-32 md:pb-16 overflow-hidden">
-        {/* Abstract dark glowing orbs in background */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[120px] mix-blend-screen" />
-        <div className="absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] bg-accent/20 rounded-full blur-[150px] mix-blend-screen" />
-        
-        {/* nightlife concert crowd abstract */}
-        <div className="absolute inset-0 bg-[url('https://pixabay.com/get/gd42b3a651fcd574e9734b3832e94b40d6f5a62c307da9126b767530ce7e17bbda530b6eed2703ebda06fd2e3f309efbf07d3080cfbf7a0e20e56506f8c8208f8_1280.jpg')] bg-cover bg-center opacity-[0.15] mix-blend-luminosity mask-image:linear-gradient(to_bottom,black_40%,transparent_100%)]" />
-        
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full text-center mt-2 md:mt-0">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-panel mb-8 border-primary/30 text-primary-foreground/80 text-sm font-medium"
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-            </span>
-            North • Central • South NJ
-          </motion.div>
-          
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.1, ease: "easeOut" }}
-            className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-4 md:mb-6 leading-[1.1]"
-          >
-            Things to Do in NJ <br/>
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 via-yellow-400 to-amber-400 text-glow">
-              This Weekend.
-            </span>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
-            className="mt-4 md:mt-6 text-lg md:text-2xl text-muted-foreground max-w-3xl mx-auto font-light"
-          >
-            The curated weekly events guide for New Jersey — concerts, day parties, brunches, festivals, watch parties, and nightlife across North, Central, and South Jersey. Updated every week.
-          </motion.p>
-          
-          <motion.div 
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
-            className="mt-7 md:mt-12 flex justify-center"
-          >
-            {/* One door in the hero: business owners jump to the packages.
-                Event-goers don't need a button — the calendar peeks right
-                below the fold and this section sits directly above it. */}
-            <Button
-              size="lg"
-              className="w-full sm:w-auto h-14 px-8 text-lg rounded-2xl bg-white text-black hover:bg-white/90 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105 transition-all duration-300 font-semibold"
-              data-testid="button-hero-pricing"
-              onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}
-            >
-              Promote Your Event <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
-          </motion.div>
-        </div>
-      </section>
+      <EventAssistant />
 
       {/* EVENT CALENDAR SECTION */}
       <section id="events" className="py-12 md:py-16">

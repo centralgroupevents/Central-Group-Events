@@ -72,6 +72,20 @@ export const events = pgTable("events", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Private contact details for assistant submissions. Never join into public feeds.
+export const eventOrganizerContacts = pgTable("event_organizer_contacts", {
+  eventId: integer("event_id").primaryKey().references(() => events.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Shared across server instances/restarts so the public AI quota is enforceable.
+export const assistantRateLimits = pgTable("assistant_rate_limits", {
+  key: text("key").primaryKey(),
+  hits: integer("hits").notNull(),
+  resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+});
+
 export const pages = pgTable("pages", {
   id: serial("id").primaryKey(),
   slug: text("slug").unique().notNull(),

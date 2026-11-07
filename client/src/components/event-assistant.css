@@ -1,0 +1,10 @@
+.cge-assistant { --assistant-nav-height: 80px; }
+.cge-assistant input, .cge-assistant textarea, .cge-assistant select { color-scheme: dark; }
+.cge-assistant :is(button, a, input, textarea, select):focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: 4px; }
+.cge-assistant button:disabled { cursor: not-allowed; opacity: .55; }
+.cge-assistant-field { width: 100%; border: 1px solid hsl(var(--border)); border-radius: .75rem; background: hsl(var(--background)); padding: .75rem; font-size: .875rem; }
+.cge-assistant-enter { animation: cge-assistant-enter .35s ease-out both; }
+@keyframes cge-assistant-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .cge-assistant *, .cge-assistant *::before, .cge-assistant *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
