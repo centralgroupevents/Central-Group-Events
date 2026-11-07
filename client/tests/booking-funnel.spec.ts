@@ -25,6 +25,47 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("legacy pricing direct loads replace the bookmark without a history loop", async ({ page }) => {
+  await page.goto("/faq");
+  await page.goto("/#pricing");
+  await expect(page).toHaveURL(/\/book$/);
+  await expect(page.getByRole("heading", { name: "Choose Your Package", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page).toHaveURL(/\/book$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/faq$/);
+  await page.goForward();
+  await expect(page).toHaveURL(/\/book$/);
+});
+
+test("legacy pricing hash changes redirect and leave Back usable", async ({ page }) => {
+  await page.goto("/#events");
+  await expect(page.getByTestId("button-submit-event")).toBeAttached();
+  await page.evaluate(() => { window.location.hash = "pricing"; });
+  await expect(page).toHaveURL(/\/book$/);
+  await expect(page.getByRole("heading", { name: "Choose Your Package", exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/#events$/);
+  // A remounted homepage must still handle later hash changes.
+  await expect(page.getByTestId("button-submit-event")).toBeAttached();
+  await page.evaluate(() => { window.location.hash = "pricing"; });
+  await expect(page).toHaveURL(/\/book$/);
+});
+
+test("other homepage anchors and pricing hashes on other pages stay unchanged", async ({ page }) => {
+  await page.goto("/#events");
+  await expect(page.getByTestId("button-submit-event")).toBeAttached();
+  await expect(page).toHaveURL(/\/#events$/);
+  for (const hash of ["newsletter", "book", "services"]) {
+    await page.evaluate(hash => { window.location.hash = hash; }, hash);
+    await expect(page).toHaveURL(new RegExp(`/\\#${hash}$`));
+    await expect(page.locator(`#${hash}`)).toBeAttached();
+  }
+  await page.goto("/faq#pricing");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(/\/faq#pricing$/);
+});
+
 test("Step 1 hides every price and shows the Eastern promotion window", async ({ page }) => {
   // UTC Monday is still Sunday in NJ; the visitor timezone must not matter.
   await page.clock.setFixedTime(new Date("2026-07-06T03:30:00Z"));

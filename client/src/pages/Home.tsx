@@ -88,6 +88,17 @@ const staggerItem = {
 
 export default function Home() {
   const [, navigate] = useLocation();
+  useEffect(() => {
+    const redirectLegacyPricing = () => {
+      if (window.location.pathname === "/" && window.location.hash === "#pricing") {
+        // Replace the obsolete bookmark so Back cannot return to a redirect loop.
+        navigate("/book", { replace: true });
+      }
+    };
+    window.addEventListener("hashchange", redirectLegacyPricing);
+    redirectLegacyPricing();
+    return () => window.removeEventListener("hashchange", redirectLegacyPricing);
+  }, [navigate]);
   const { toast } = useToast();
   const [subscribeModalOpen, setSubscribeModalOpen] = useState(false);
   const [heroSubscribed, setHeroSubscribed] = useState(false);
