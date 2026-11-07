@@ -1,0 +1,76 @@
+.cge-photo-strip {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.cge-photo-strip:focus-visible {
+  outline: 2px solid hsl(var(--accent));
+  outline-offset: -2px;
+}
+
+.cge-photo-track {
+  display: flex;
+  width: max-content;
+  animation: cge-photo-loop 64s linear infinite;
+}
+
+.cge-photo-sequence {
+  display: flex;
+  gap: 12px;
+  padding-right: 12px;
+  flex-shrink: 0;
+}
+
+.cge-photo-sequence img {
+  display: block;
+  width: clamp(160px, 22vw, 280px);
+  height: auto;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.cge-photo-strip:hover .cge-photo-track,
+.cge-photo-strip:focus-within .cge-photo-track,
+.cge-photo-strip[data-paused="true"] .cge-photo-track {
+  animation-play-state: paused;
+}
+
+.cge-crowd-background {
+  background-size: cover;
+  background-position: center;
+  isolation: isolate;
+}
+
+.cge-crowd-background::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 70%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes cge-photo-loop {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cge-photo-strip {
+    overflow-x: auto;
+  }
+
+  .cge-photo-track {
+    animation: none;
+  }
+
+  .cge-photo-sequence[aria-hidden="true"] {
+    display: none;
+  }
+
+  .cge-instagram-skeleton {
+    animation: none;
+  }
+}

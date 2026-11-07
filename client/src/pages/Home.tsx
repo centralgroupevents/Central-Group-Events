@@ -24,6 +24,8 @@ import { EventBrowser } from "@/components/EventBrowser";
 import EventAssistant from "@/components/EventAssistant";
 import { EventsJsonLd } from "@/components/EventsJsonLd";
 import { SubscribeModal } from "@/components/SubscribeModal";
+import { HomepagePhotoStrip } from "@/components/HomepagePhotoStrip";
+import { InstagramFeed } from "@/components/InstagramFeed";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import cgeLogo from "@assets/CGE_logo_2026.png";
 
@@ -273,6 +275,8 @@ export default function Home() {
         </div>
       </section>
 
+      <HomepagePhotoStrip />
+
       {/* NEWSLETTER SECTION */}
       <section id="newsletter" className="py-24 bg-gradient-to-b from-transparent to-primary/5 relative border-y border-white/5">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -376,7 +380,14 @@ export default function Home() {
       <ExploreNjSection />
 
       {/* WHAT WE DO SECTION */}
-      <section id="services" className="py-24 relative">
+      <section
+        id="services"
+        className="py-24 relative cge-crowd-background"
+        style={{
+          /* REPLACE: upload real event crowd photo to Cloudinary and swap background-image src here */
+          backgroundImage: 'url("/images/homepage/services-crowd.svg")',
+        }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeIn} className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-sm font-bold text-primary tracking-widest uppercase mb-3">What We Do</h2>
@@ -477,7 +488,14 @@ export default function Home() {
       </section>
 
       {/* PROCESS SECTION */}
-      <section className="py-24 border-y border-white/5">
+      <section
+        className="py-24 border-y border-white/5 relative cge-crowd-background"
+        data-testid="homepage-process"
+        style={{
+          /* REPLACE: upload real event crowd photo to Cloudinary and swap background-image src here */
+          backgroundImage: 'url("/images/homepage/process-crowd.svg")',
+        }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeIn} className="text-center mb-16">
             <h2 className="text-sm font-bold text-accent tracking-widest uppercase mb-3">Process</h2>
@@ -530,6 +548,7 @@ export default function Home() {
               </svg>
               @centralgroupevents
             </a>
+             <InstagramFeed />
           </motion.div>
         </div>
       </section>
