@@ -65,7 +65,7 @@ test("desktop live Claude recommendations, sticky bar, ticket nudge, persistence
   await newTab.close();
 });
 
-test("mobile error retry, live off-topic guardrail and homepage booking navigation", async ({ page }) => {
+test("mobile error retry, live off-topic guardrail and booking wizard navigation", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -79,8 +79,6 @@ test("mobile error retry, live off-topic guardrail and homepage booking navigati
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByText(/Yo, I’m only plugged into the NJ scene/)).toBeVisible({ timeout: 45000 });
   await page.getByRole("button", { name: "Submit my event", exact: true }).click();
-  await expect(page).toHaveURL(/#book$/);
-  await expect(page.locator("#cge-assistant-results")).toBeHidden();
-  await expect(page.getByTestId("button-get-started")).toBeInViewport();
-  await expect(page.getByTestId("button-get-started")).toHaveAttribute("href", "/book");
+  await expect(page).toHaveURL(/\/book$/);
+  await expect(page.getByRole("heading", { name: "Choose Your Package", exact: true })).toBeVisible();
 });

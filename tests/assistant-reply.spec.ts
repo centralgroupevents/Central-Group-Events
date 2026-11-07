@@ -104,19 +104,15 @@ test("mobile sticky close remains available below the conversation", async ({ pa
   await expect(reply).toBeVisible();
 });
 
-test("submit my event goes to homepage booking and closes chat", async ({ page }) => {
+test("submit my event opens the booking wizard and preserves stored chat", async ({ page }) => {
   await page.route("**/api/assistant/chat", route => route.fulfill(chatResponse("Your chat is still here.")));
   await page.goto("/");
   await page.getByRole("searchbox", { name: "Ask about New Jersey events" }).fill("Newark tonight");
   await page.getByRole("button", { name: "Search events", exact: true }).click();
   await expect(page.getByText("Your chat is still here.")).toBeVisible();
   await page.getByRole("button", { name: "Submit my event", exact: true }).click();
-  await expect(page).toHaveURL(/#book$/);
-  await expect(page.locator("#cge-assistant-results")).toBeHidden();
-  await expect(page.getByTestId("assistant-search-bar")).toHaveCSS("position", "relative");
-  await expect(page.getByTestId("button-get-started")).toBeInViewport();
-  await expect(page.getByTestId("button-get-started")).toBeFocused();
-  await expect(page.getByTestId("button-get-started")).toHaveAttribute("href", "/book");
-  await page.getByRole("button", { name: "Find events", exact: true }).click();
+  await expect(page).toHaveURL(/\/book$/);
+  await expect(page.getByRole("heading", { name: "Choose Your Package", exact: true })).toBeVisible();
+  await page.goto("/");
   await expect(page.getByText("Your chat is still here.")).toBeVisible();
 });

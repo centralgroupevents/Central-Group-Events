@@ -19,6 +19,8 @@ import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { AiExtractCard } from "@/components/AiExtractCard";
 import { apiRequest } from "@/lib/queryClient";
+import { PACKAGES, getIncludedPackageFeatures } from "@/lib/promotion-packages";
+import { getNextPromotionWindow } from "@/lib/promotion-window";
 import cgeLogo from "@assets/CGE_logo_2026.png";
 
 // ─── T&C content (verbatim from existing modal) ─────────────────────────────
@@ -47,43 +49,6 @@ const TERMS_SECTIONS = [
   {
     heading: "Contact",
     body: "For questions regarding your submission or these terms, please contact us at centralgroupevents@gmail.com.",
-  },
-];
-
-// ─── Packages ────────────────────────────────────────────────────────────────
-
-const PACKAGES = [
-  {
-    id: "Basic",
-    label: "Basic",
-    price: "FREE",
-    badge: null,
-    features: ["Event calendar listing"],
-    testId: "card-package-basic",
-  },
-  {
-    id: "Starter",
-    label: "Starter",
-    price: "$70",
-    badge: null,
-    features: ["Event calendar listing", "Instagram story feature", "Newsletter mention", "Facebook post"],
-    testId: "card-package-starter",
-  },
-  {
-    id: "Growth",
-    label: "Growth",
-    price: "$150",
-    badge: "Most Popular",
-    features: ["Everything in Starter", "Instagram reel feature", "Premium newsletter placement", "SMS blast to subscribers"],
-    testId: "card-package-growth",
-  },
-  {
-    id: "Custom",
-    label: "Custom",
-    price: "$300+",
-    badge: null,
-    features: ["Everything in Growth", "Influencer reposts", "Strategy call included", "Custom campaign timeline"],
-    testId: "card-package-custom",
   },
 ];
 
@@ -482,6 +447,7 @@ export default function Book() {
     "bg-black/40 border-white/10 h-12 rounded-xl text-white placeholder:text-white/30 focus-visible:ring-primary/50";
 
   const logicalStep = stepToLogical(stepState);
+  const selectedPackage = PACKAGES.find(pkg => pkg.id === data.mode);
 
   const subLabel =
     step === 2
@@ -596,9 +562,6 @@ export default function Book() {
                           </span>
                         )}
                         <p className="font-bold text-lg mb-1">{pkg.label}</p>
-                        {pkg.price ? (
-                          <p className="text-2xl font-black text-primary mb-3 min-h-[3rem]">{pkg.price}</p>
-                        ) : null}
                         <ul className="space-y-1">
                           {pkg.features.map((f) => (
                             <li key={f} className="text-xs text-white/60 flex items-start gap-1.5">
@@ -614,6 +577,10 @@ export default function Book() {
                         )}
                       </button>
                     ))}
+                  </div>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <p>We run promotions on a weekly cycle. Slots for the current week fill up by Tuesday.</p>
+                    <p>Next available promotion window: {getNextPromotionWindow()}</p>
                   </div>
                   <FieldError msg={errors.mode} />
                 </div>
@@ -929,6 +896,24 @@ export default function Book() {
                       <span className="text-xs text-red-400">Save failed — see email below</span>
                     )}
                   </div>
+
+                  {selectedPackage && (
+                    <section aria-labelledby="promotion-package-heading" data-testid="promotion-package-summary" className="bg-primary/5 border border-primary/20 rounded-2xl p-5 mb-6">
+                      <h3 id="promotion-package-heading" className="font-bold text-white/80 mb-4">Here’s your promotion package</h3>
+                      <div className="flex flex-wrap items-baseline justify-between gap-3 mb-4">
+                        <p className="text-xl font-black">{selectedPackage.label}</p>
+                        <p className="text-3xl font-black text-primary">{selectedPackage.price}</p>
+                      </div>
+                      <ul className="space-y-2">
+                        {getIncludedPackageFeatures(selectedPackage.id).map(feature => (
+                          <li key={feature} className="text-sm text-white/70 flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Summary */}

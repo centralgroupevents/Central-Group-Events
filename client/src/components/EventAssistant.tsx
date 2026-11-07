@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { ArrowRight, Search, Plus, RotateCcw, X } from "lucide-react";
 import { useReducedMotion } from "framer-motion";
+import { useLocation } from "wouter";
 import { useEventAssistant } from "@/hooks/use-event-assistant";
 import { AssistantEventCard } from "./AssistantEventCard";
 import { AssistantSubmissionForm } from "./AssistantSubmissionForm";
@@ -9,6 +10,7 @@ import "./event-assistant.css";
 const placeholders = ["What’s the word this weekend?", "Find something to do in NJ", "Drop your event and let the people know"];
 
 export default function EventAssistant() {
+  const [, navigate] = useLocation();
   const { messages, loading, error, sessionWarning, sendMessage, submitEvent, clearMessages } = useEventAssistant();
   const [input, setInput] = useState("");
   const [placeholder, setPlaceholder] = useState(0);
@@ -105,17 +107,7 @@ export default function EventAssistant() {
   }
   function onSubmit(event: FormEvent) { event.preventDefault(); void search(input); }
   function openSubmission() {
-    closeChat();
-    requestAnimationFrame(() => {
-      const booking = document.getElementById("book");
-      if (!booking) return;
-      window.history.replaceState(null, "", "#book");
-      window.scrollTo({
-        top: booking.getBoundingClientRect().top + window.scrollY - navHeight,
-        behavior: reducedMotion ? "instant" : "smooth",
-      });
-      booking.querySelector<HTMLAnchorElement>('a[href="/book"]')?.focus({ preventScroll: true });
-    });
+    navigate("/book");
   }
   function ticketNudge() {
     if (timer.current) clearTimeout(timer.current);
@@ -131,7 +123,7 @@ export default function EventAssistant() {
         <div className="relative mx-auto max-w-4xl">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-xs font-semibold">
             <p className="flex items-center gap-2 uppercase tracking-[.16em] text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-accent" />North · Central · South NJ</p>
-            <a href="#pricing" className="inline-flex min-h-10 items-center gap-2 text-accent underline-offset-4 hover:underline">Promote Your Event<ArrowRight className="h-3.5 w-3.5" /></a>
+            <a href="/book" className="inline-flex min-h-10 items-center gap-2 text-accent underline-offset-4 hover:underline">Promote Your Event<ArrowRight className="h-3.5 w-3.5" /></a>
           </div>
           <p className="mb-3 text-xs font-semibold uppercase tracking-[.22em] text-accent">The CGE Assistant / Your inside line</p>
           <h1 id="cge-assistant-title" className="max-w-3xl text-4xl font-black leading-[1.05] tracking-tighter sm:text-6xl md:text-7xl">Things to do in NJ.<br /><span className="text-accent">This weekend. Tonight.</span></h1>

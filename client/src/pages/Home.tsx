@@ -263,7 +263,7 @@ export default function Home() {
               asChild
               data-testid="button-submit-event"
             >
-              <a href="#book">
+              <a href="/book">
                 <Plus className="w-4 h-4" /> Submit Your Event
               </a>
             </Button>

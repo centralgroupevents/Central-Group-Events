@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { registerAssistantRoutes } from "./assistant-routes";
+import { BASIC_FOLLOWUP_KIND, buildBasicFollowupEmail, runBasicFollowups } from "./basic-booking-followup";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import rateLimit from "express-rate-limit";
@@ -3584,7 +3585,9 @@ Return every field you can confidently determine. Set null for any field the ima
   // booking — extracted so the admin preview + send-now endpoints can
   // reuse the exact same renderer as the cron tick.
   function renderScheduledEmail(row: { id: number; kind: string; recipientEmail: string; bookingId: number }, booking: any, dryRun: boolean) {
-    const tpl = row.kind === "reminder_t4" ? buildReminderEmail(booking) : buildFeedbackEmail(booking);
+    const tpl = row.kind === BASIC_FOLLOWUP_KIND
+      ? buildBasicFollowupEmail({ ...booking, email: row.recipientEmail })
+      : row.kind === "reminder_t4" ? buildReminderEmail(booking) : buildFeedbackEmail(booking);
     const subject = dryRun ? `[TEST] ${tpl.subject}` : tpl.subject;
     const to = dryRun ? "centralgroupevents@gmail.com" : row.recipientEmail;
     const html = dryRun
@@ -3603,6 +3606,14 @@ Return every field you can confidently determine. Set null for any field the ima
     // Sub-step failures land here instead of 500ing the whole tick, so one
     // bad booking row or a missing table can't block every other send.
     const errors: string[] = [];
+    let basicFollowups = { sent: 0, failed: 0, skipped: 0 };
+    try {
+      basicFollowups = await runBasicFollowups({ dryRun, sendMail: mail => transporter.sendMail(mail) });
+      if (basicFollowups.failed) errors.push(`${basicFollowups.failed} Basic follow-up email(s) failed; queued for retry`);
+    } catch (err) {
+      console.error("[scheduled-emails] Basic follow-up tick failed:", err);
+      errors.push("Basic follow-up processing failed; pending jobs retained");
+    }
 
     const allBookings = await storage.getBookings();
     let backfilled = 0;
@@ -3629,8 +3640,11 @@ Return every field you can confidently determine. Set null for any field the ima
     }
 
     const pending = await storage.listPendingScheduledEmails(today);
-    let sent = 0, failed = 0, skipped = 0;
+    let { sent, failed, skipped } = basicFollowups;
     for (const row of pending) {
+      // Timestamp-based Basic follow-ups use the concurrency-safe worker above,
+      // not the event-date-based reminder/feedback logic below.
+      if (row.kind === BASIC_FOLLOWUP_KIND) continue;
       const booking = allBookings.find((b) => b.id === row.bookingId);
       if (!booking) {
         await storage.markScheduledEmailSent(row.id, "skipped", { error: "booking not found", dryRun });
@@ -4167,6 +4181,13 @@ Return every field you can confidently determine. Set null for any field the ima
       const row = await storage.getScheduledEmailRow(id);
       if (!row) return res.status(404).json({ message: "Row not found" });
       if (row.status !== "pending") return res.status(400).json({ message: `Row already ${row.status}` });
+      if (row.kind === BASIC_FOLLOWUP_KIND) {
+        const dryRun = (await storage.getSetting("cronDryRun")) !== "false";
+        const result = await runBasicFollowups({
+          dryRun, onlyId: row.id, sendMail: mail => transporter.sendMail(mail),
+        });
+        return res.json({ ...result, message: dryRun ? "Dry run: follow-up remains queued" : result.sent ? "Follow-up sent" : "Follow-up not sent: not yet due, ineligible, or already being processed" });
+      }
       const bookings = await storage.getBookings();
       const booking = bookings.find((b) => b.id === row.bookingId);
       if (!booking) {

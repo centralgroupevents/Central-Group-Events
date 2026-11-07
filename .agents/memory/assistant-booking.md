@@ -2,8 +2,8 @@
 name: Assistant booking destination
 description: User-selected destination for the assistant submission action.
 ---
-The user chose the homepage booking section for “Submit my event,” rather than the assistant’s inline form or a direct link to the separate booking page.
+The user now requires all “Submit Your Event,” “Promote Your Event,” and “Book Promotion” navigation buttons, including the assistant action, to go directly to /book.
 
-**Why:** The user explicitly selected “Homepage booking form” when asked which destination to use.
+**Why:** The later booking funnel requirements explicitly supersede the earlier homepage booking-section choice.
 
-**How to apply:** Keep this action tied to the homepage booking flow; do not restore the separate inline assistant form without approval.
+**How to apply:** Use /book for promotion navigation, without changing the behavior of actual form-submit buttons.

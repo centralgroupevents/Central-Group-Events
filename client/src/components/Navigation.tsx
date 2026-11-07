@@ -186,7 +186,7 @@ export function Navigation() {
                 className="w-full mt-2 rounded-xl bg-accent text-black hover:bg-accent/90"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <a href={isHomePage ? "#pricing" : "/#pricing"}>Book Promotion</a>
+                <a href="/book">Book Promotion</a>
               </Button>
             </div>
           </motion.div>

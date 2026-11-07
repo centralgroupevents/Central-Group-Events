@@ -1,2 +1,2 @@
 - [Assistant provider](assistant-provider.md) — approved Haiku 4.5 for event discovery; no Gemini for this feature.
-- [Assistant booking destination](assistant-booking.md) — “Submit my event” should use the homepage booking section.
+- [Booking destination](assistant-booking.md) — all promotion navigation actions should go directly to /book.

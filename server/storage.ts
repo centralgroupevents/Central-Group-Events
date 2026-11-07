@@ -515,15 +515,19 @@ export class DatabaseStorage implements IStorage {
   // ── Bookings ──────────────────────────────────────────────────────────
 
   async createBooking(booking: InsertBooking): Promise<Booking> {
-    const [inserted] = await db.insert(promotionBookings).values(booking).returning();
-    const year = new Date().getFullYear();
-    const referenceId = `CGE-${year}-${String(inserted.id).padStart(4, "0")}`;
-    const [newBooking] = await db
-      .update(promotionBookings)
-      .set({ referenceId })
-      .where(eq(promotionBookings.id, inserted.id))
-      .returning();
-    return newBooking;
+    const { queueBasicFollowup } = await import("./basic-booking-followup");
+    return db.transaction(async tx => {
+      const [inserted] = await tx.insert(promotionBookings).values(booking).returning();
+      const year = new Date().getFullYear();
+      const referenceId = `CGE-${year}-${String(inserted.id).padStart(4, "0")}`;
+      const [newBooking] = await tx
+        .update(promotionBookings)
+        .set({ referenceId })
+        .where(eq(promotionBookings.id, inserted.id))
+        .returning();
+      await queueBasicFollowup(tx, newBooking);
+      return newBooking;
+    });
   }
 
   async getBookings(): Promise<Booking[]> {

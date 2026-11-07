@@ -208,8 +208,8 @@ export const funnelEvents = pgTable("funnel_events", {
 export const scheduledEmailSends = pgTable("scheduled_email_sends", {
   id: serial("id").primaryKey(),
   bookingId: integer("booking_id").notNull().references(() => promotionBookings.id, { onDelete: "cascade" }),
-  kind: text("kind").notNull(), // "reminder_t4" | "feedback_t1"
-  scheduledFor: text("scheduled_for").notNull(), // YYYY-MM-DD (ET-anchored)
+  kind: text("kind").notNull(), // "reminder_t4" | "feedback_t1" | "basic_upgrade_72h"
+  scheduledFor: text("scheduled_for").notNull(), // YYYY-MM-DD (ET); Basic follow-ups use exact UTC ISO timestamps
   recipientEmail: text("recipient_email").notNull(),
   status: text("status").notNull().default("pending"), // pending | sent | failed | skipped
   sentAt: timestamp("sent_at"),
