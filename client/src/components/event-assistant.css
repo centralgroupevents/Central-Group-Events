@@ -12,6 +12,9 @@
 .cge-assistant button:disabled { cursor: not-allowed; opacity: .55; }
 .cge-assistant-field { width: 100%; border: 1px solid hsl(var(--border)); border-radius: .75rem; background: hsl(var(--background)); padding: .75rem; font-size: .875rem; }
 .cge-assistant-enter { animation: cge-assistant-enter .35s ease-out both; }
+.cge-assistant-close { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: .375rem; min-height: 44px; padding: .5rem .625rem; border: 1px solid hsl(var(--accent) / .35); border-radius: .75rem; color: hsl(var(--accent)); font-size: .75rem; font-weight: 700; }
+.cge-assistant-close:hover { background: hsl(var(--accent) / .1); }
+.cge-assistant-reply { scroll-margin-top: calc(var(--assistant-nav-height) + 110px); }
 @keyframes cge-assistant-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
   .cge-assistant *, .cge-assistant *::before, .cge-assistant *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

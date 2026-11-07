@@ -17,8 +17,12 @@ export default function EventAssistant() {
   const [navHeight, setNavHeight] = useState(80);
   const [nudge, setNudge] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [open, setOpen] = useState(true);
   const slot = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
+  const replyInput = useRef<HTMLInputElement>(null);
+  const resumeButton = useRef<HTMLButtonElement>(null);
+  const openRef = useRef(true);
   const results = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestBusy = useRef(false);
@@ -55,31 +59,66 @@ export default function EventAssistant() {
 
   function revealResults() {
     requestAnimationFrame(() => {
-      if (!results.current) return;
+      if (!openRef.current || !results.current) return;
       const top = results.current.getBoundingClientRect().top + window.scrollY - navHeight - 96;
       window.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? "instant" : "smooth" });
     });
   }
 
-  async function search(raw: string) {
+  function reopen() {
+    openRef.current = true;
+    setOpen(true);
+  }
+  function closeChat() {
+    openRef.current = false;
+    setOpen(false);
+    setNudge(false);
+    if (timer.current) clearTimeout(timer.current);
+    requestAnimationFrame(() => resumeButton.current?.focus({ preventScroll: true }));
+  }
+  function resumeChat() {
+    reopen();
+    requestAnimationFrame(() => {
+      const target = mode === "find" ? replyInput.current || searchInput.current : results.current?.querySelector<HTMLInputElement>('input[name="title"]');
+      target?.focus({ preventScroll: true });
+      if (target === replyInput.current) target?.scrollIntoView({ block: "center", behavior: reducedMotion ? "instant" : "smooth" });
+      else revealResults();
+    });
+  }
+  async function search(raw: string, fromReply = false) {
     if (!raw.trim() || loading || requestBusy.current) return;
+    reopen();
     setMode("find");
     requestBusy.current = true;
-    revealResults();
+    if (!fromReply) revealResults();
     try {
       const success = await sendMessage(raw);
       if (mounted.current && success) setInput(current => current === raw ? "" : current);
-    } finally { requestBusy.current = false; }
+    } finally {
+      requestBusy.current = false;
+      if (fromReply && mounted.current && openRef.current) {
+        requestAnimationFrame(() => {
+          if (openRef.current && document.activeElement === document.body) replyInput.current?.focus({ preventScroll: true });
+        });
+      }
+    }
   }
   function onSubmit(event: FormEvent) { event.preventDefault(); void search(input); }
-  function openSubmission() { setMode("submit"); revealResults(); }
+  function openSubmission() {
+    reopen();
+    setMode("submit");
+    revealResults();
+    requestAnimationFrame(() => results.current?.querySelector<HTMLInputElement>('input[name="title"]')?.focus({ preventScroll: true }));
+  }
   function ticketNudge() {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => { if (mounted.current) setNudge(true); }, 3000);
+    timer.current = setTimeout(() => { if (mounted.current && openRef.current) setNudge(true); }, 3000);
   }
 
   return (
-    <div className="cge-assistant relative" style={{ "--assistant-nav-height": `${navHeight}px` } as CSSProperties}>
+    <div className="cge-assistant relative" onKeyDown={event => {
+      if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); closeChat(); }
+    }} style={{ "--assistant-nav-height": `${navHeight}px` } as CSSProperties}>
       <section aria-labelledby="cge-assistant-title" className="relative px-4 pb-9 pt-32 sm:px-6 md:pb-12 md:pt-40">
         <div aria-hidden="true" className="cge-assistant-hero-background pointer-events-none absolute inset-x-0 top-0 h-full border-b border-white/5" />
         <div className="relative mx-auto max-w-4xl">
@@ -91,23 +130,25 @@ export default function EventAssistant() {
           <h1 id="cge-assistant-title" className="max-w-3xl text-4xl font-black leading-[1.05] tracking-tighter sm:text-6xl md:text-7xl">Things to do in NJ.<br /><span className="text-accent">This weekend. Tonight.</span></h1>
           <p className="mb-8 mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">Tell us your city, your music, your kind of night. Let’s find you a plan worth leaving the group chat for.</p>
           <div ref={slot} className="h-[88px] sm:h-[100px]">
-            <div className={fixed ? "fixed inset-x-0 z-40 border-b border-white/10 bg-background/95 px-4 py-3 shadow-xl backdrop-blur-xl sm:px-6" : "relative"} style={fixed ? { top: navHeight } : undefined}>
+            <div data-testid="assistant-search-bar" className={fixed && open ? "fixed inset-x-0 z-40 border-b border-white/10 bg-background/95 px-4 py-3 shadow-xl backdrop-blur-xl sm:px-6" : "relative"} style={fixed && open ? { top: navHeight } : undefined}>
               <form role="search" aria-label="Find New Jersey events with CGE" onSubmit={onSubmit} className={`cge-assistant-search mx-auto flex max-w-4xl items-center gap-2 border border-accent/35 bg-secondary/40 p-2 focus-within:border-accent ${fixed ? "rounded-xl" : "rounded-2xl sm:p-3"}`}>
                 <Search aria-hidden="true" className="ml-2 hidden h-5 w-5 shrink-0 text-accent sm:block" />
                 <label htmlFor="cge-assistant-search" className="sr-only">Ask about New Jersey events</label>
-                <input ref={searchInput} id="cge-assistant-search" name="event-query" type="search" value={input} onChange={event => setInput(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} placeholder={placeholders[placeholder]} maxLength={1000} autoComplete="off" className={`min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 text-foreground placeholder:text-muted-foreground ${fixed ? "h-10 text-sm" : "h-12 text-sm sm:h-14 sm:text-lg"}`} aria-describedby="cge-assistant-catalog" />
+                <input ref={searchInput} id="cge-assistant-search" name="event-query" type="search" value={input} onChange={event => { setInput(event.target.value); reopen(); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} placeholder={placeholders[placeholder]} maxLength={1000} autoComplete="off" className={`min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 text-foreground placeholder:text-muted-foreground ${fixed && open ? "h-10 text-sm" : "h-12 text-sm sm:h-14 sm:text-lg"}`} aria-describedby="cge-assistant-catalog" />
                 <button type="submit" disabled={loading || !input.trim()} aria-label={loading ? "Finding events" : "Search events"} className={`flex shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-4 font-bold text-accent-foreground hover:bg-accent/90 ${fixed ? "h-10" : "h-12 sm:h-14 sm:px-6"}`}><span className="hidden sm:inline">{loading ? "Finding…" : "Let’s go"}</span><ArrowRight className="h-5 w-5" /></button>
+                {open && <button type="button" onClick={closeChat} className="cge-assistant-close" aria-controls="cge-assistant-results"><X aria-hidden="true" className="h-4 w-4 shrink-0" /><span>Close chat</span></button>}
               </form>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" disabled={loading} aria-pressed={mode === "find"} onClick={() => { setMode("find"); searchInput.current?.focus({ preventScroll: true }); }} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-secondary/40 px-4 text-sm font-semibold hover:border-accent/60"><Search className="h-4 w-4 text-accent" />Find events</button>
-            <button type="button" disabled={loading} aria-pressed={mode === "submit"} onClick={openSubmission} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 px-4 text-sm font-semibold hover:border-accent/60"><Plus className="h-4 w-4 text-accent" />Submit my event</button>
+            <button type="button" aria-pressed={open && mode === "find"} onClick={() => { reopen(); setMode("find"); searchInput.current?.focus({ preventScroll: true }); }} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-secondary/40 px-4 text-sm font-semibold hover:border-accent/60"><Search className="h-4 w-4 text-accent" />Find events</button>
+            <button type="button" aria-pressed={open && mode === "submit"} onClick={openSubmission} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 px-4 text-sm font-semibold hover:border-accent/60"><Plus className="h-4 w-4 text-accent" />Submit my event</button>
+            {!open && <button ref={resumeButton} type="button" onClick={resumeChat} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-accent/50 bg-accent/10 px-4 text-sm font-semibold text-accent" aria-controls="cge-assistant-results">Reopen chat<ArrowRight aria-hidden="true" className="h-4 w-4" /></button>}
             <p id="cge-assistant-catalog" className="w-full text-xs text-muted-foreground sm:ml-auto sm:w-auto">Searches the CGE catalog</p>
           </div>
         </div>
       </section>
-      <div ref={results} id="cge-assistant-results" className="mx-auto max-w-4xl px-4 sm:px-6" style={{ scrollMarginTop: navHeight + 96 }}>
+      <div ref={results} hidden={!open} id="cge-assistant-results" className="mx-auto max-w-4xl px-4 sm:px-6" style={{ scrollMarginTop: navHeight + 96 }}>
         {sessionWarning && <p role="status" className="mb-4 rounded-xl border border-accent/20 p-3 text-sm text-muted-foreground">{sessionWarning}</p>}
         {mode === "submit" ? <div className="pb-8"><AssistantSubmissionForm submitEvent={submitEvent} loading={loading} error={error} onClose={() => { setMode("find"); searchInput.current?.focus({ preventScroll: true }); }} /></div> :
           <div aria-label="Assistant conversation" aria-busy={loading}>
@@ -118,7 +159,15 @@ export default function EventAssistant() {
               {!!message.suggestedCriteria?.length && <div className="mt-4 flex flex-wrap gap-2" aria-label="Related searches">{message.suggestedCriteria.map(criteria => <button key={criteria} type="button" disabled={loading} onClick={() => { setInput(criteria); void search(criteria); }} className="min-h-10 rounded-full border border-accent/30 px-4 py-2 text-sm text-accent hover:bg-accent/10">{criteria}<span className="sr-only"> — search events</span></button>)}</div>}
             </div>)}
             {loading && <div role="status" className="mb-6 rounded-2xl border border-white/10 bg-secondary/20 p-5"><p className="mb-4 text-sm text-accent">Checking the CGE catalog for your next plan…</p><div aria-hidden="true" className="space-y-3 motion-safe:animate-pulse"><div className="h-3 w-3/4 rounded bg-secondary" /><div className="h-3 w-1/2 rounded bg-secondary" /><div className="h-24 rounded-xl bg-secondary/60" /></div></div>}
-            {error && <div role="alert" className="mb-6 rounded-xl border border-red-300/25 p-4"><p className="text-sm text-red-300">{error}</p><p className="mt-1 text-xs text-muted-foreground">Your message is still in the search field.</p><button type="button" disabled={loading || !input.trim()} onClick={() => void search(input)} className="mt-3 min-h-10 rounded-lg border border-white/20 px-4 text-sm font-semibold">Try again</button></div>}
+            {error && <div role="alert" className="mb-6 rounded-xl border border-red-300/25 p-4"><p className="text-sm text-red-300">{error}</p><p className="mt-1 text-xs text-muted-foreground">Your draft is still in the reply and search fields.</p><button type="button" disabled={loading || !input.trim()} onClick={() => void search(input, true)} className="mt-3 min-h-10 rounded-lg border border-white/20 px-4 text-sm font-semibold">Try again</button></div>}
+            {(messages.length > 0 || loading || error) && <form aria-label="Reply to CGE Assistant" onSubmit={event => { event.preventDefault(); void search(input, true); }} className="cge-assistant-reply mb-8 rounded-2xl border border-accent/30 bg-secondary/30 p-4 sm:p-5">
+              <label htmlFor="cge-assistant-reply" className="mb-1 block text-sm font-bold text-accent">Your reply</label>
+              <p id="cge-assistant-reply-help" className="mb-3 text-xs text-muted-foreground">Keep the plans going. Ask a follow-up or change the vibe.</p>
+              <div className="flex items-center gap-2">
+                <input ref={replyInput} id="cge-assistant-reply" name="assistant-reply" value={input} onChange={event => setInput(event.target.value)} disabled={loading} maxLength={1000} autoComplete="off" placeholder="What else should we know?" aria-describedby="cge-assistant-reply-help" className="cge-assistant-field min-w-0 flex-1" />
+                <button type="submit" disabled={loading || !input.trim()} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-bold text-accent-foreground hover:bg-accent/90">{loading ? "Sending…" : "Send reply"}<ArrowRight aria-hidden="true" className="h-4 w-4" /></button>
+              </div>
+            </form>}
           </div>}
       </div>
       {nudge && <div role="status" className="fixed bottom-4 left-4 right-4 z-40 mx-auto flex max-w-lg items-start gap-3 rounded-xl border border-accent/30 bg-background p-4 shadow-xl cge-assistant-enter"><p className="flex-1 text-sm">Next time just ask the assistant -- it’ll find this for you faster</p><button type="button" onClick={() => setNudge(false)} aria-label="Dismiss assistant tip" className="rounded p-1"><X className="h-4 w-4" /></button></div>}
