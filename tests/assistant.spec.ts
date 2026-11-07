@@ -65,7 +65,7 @@ test("desktop live Claude recommendations, sticky bar, ticket nudge, persistence
   await newTab.close();
 });
 
-test("mobile error retry, live off-topic guardrail and public event submission", async ({ page }) => {
+test("mobile error retry, live off-topic guardrail and homepage booking navigation", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -79,26 +79,8 @@ test("mobile error retry, live off-topic guardrail and public event submission",
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByText(/Yo, I’m only plugged into the NJ scene/)).toBeVisible({ timeout: 45000 });
   await page.getByRole("button", { name: "Submit my event", exact: true }).click();
-  await page.getByLabel("Event title", { exact: false }).fill("CGE Browser Submitted Fixture");
-  await page.getByLabel("Date", { exact: false }).fill(eventDate);
-  await page.getByLabel("Time (Eastern)").fill("20:00");
-  await page.getByLabel("Region *", { exact: true }).selectOption("Central NJ");
-  await page.getByLabel("City", { exact: false }).fill("New Brunswick");
-  await page.getByLabel("Venue", { exact: false }).fill("Browser Test Venue");
-  await page.getByLabel("Description (optional)").fill("Temporary test event");
-  await page.getByLabel("Organizer email", { exact: false }).fill("browser-fixture@example.com");
-  const saved = page.waitForResponse(response => response.url().endsWith("/api/assistant/submit-event") && response.request().method() === "POST");
-  await page.locator("form").getByRole("button", { name: "Submit my event", exact: true }).click();
-  const response = await saved;
-  expect(response.status()).toBe(201);
-  const json = await response.json();
-  submittedId = json.id;
-  await expect(page.getByRole("heading", { name: "Your event is in." })).toBeVisible();
-  const [contact] = await db.select().from(eventOrganizerContacts).where(eq(eventOrganizerContacts.eventId, submittedId!));
-  expect(contact.email).toBe("browser-fixture@example.com");
-  const publicResponse = await page.request.get("/api/events");
-  const publicEvent = (await publicResponse.json()).find((event: any) => event.id === submittedId);
-  expect(publicEvent.isFeatured).toBe(false);
-  expect(JSON.stringify(publicEvent)).not.toContain("browser-fixture@example.com");
-  expect(await page.evaluate(() => JSON.stringify(sessionStorage))).not.toContain("browser-fixture@example.com");
+  await expect(page).toHaveURL(/#book$/);
+  await expect(page.locator("#cge-assistant-results")).toBeHidden();
+  await expect(page.getByTestId("button-get-started")).toBeInViewport();
+  await expect(page.getByTestId("button-get-started")).toHaveAttribute("href", "/book");
 });

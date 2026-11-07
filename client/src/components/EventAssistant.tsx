@@ -105,10 +105,17 @@ export default function EventAssistant() {
   }
   function onSubmit(event: FormEvent) { event.preventDefault(); void search(input); }
   function openSubmission() {
-    reopen();
-    setMode("submit");
-    revealResults();
-    requestAnimationFrame(() => results.current?.querySelector<HTMLInputElement>('input[name="title"]')?.focus({ preventScroll: true }));
+    closeChat();
+    requestAnimationFrame(() => {
+      const booking = document.getElementById("book");
+      if (!booking) return;
+      window.history.replaceState(null, "", "#book");
+      window.scrollTo({
+        top: booking.getBoundingClientRect().top + window.scrollY - navHeight,
+        behavior: reducedMotion ? "instant" : "smooth",
+      });
+      booking.querySelector<HTMLAnchorElement>('a[href="/book"]')?.focus({ preventScroll: true });
+    });
   }
   function ticketNudge() {
     if (timer.current) clearTimeout(timer.current);

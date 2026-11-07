@@ -104,21 +104,19 @@ test("mobile sticky close remains available below the conversation", async ({ pa
   await expect(reply).toBeVisible();
 });
 
-test("submission can be closed with Escape and explicitly reopened", async ({ page }) => {
+test("submit my event goes to homepage booking and closes chat", async ({ page }) => {
   await page.route("**/api/assistant/chat", route => route.fulfill(chatResponse("Your chat is still here.")));
   await page.goto("/");
   await page.getByRole("searchbox", { name: "Ask about New Jersey events" }).fill("Newark tonight");
   await page.getByRole("button", { name: "Search events", exact: true }).click();
   await expect(page.getByText("Your chat is still here.")).toBeVisible();
   await page.getByRole("button", { name: "Submit my event", exact: true }).click();
-  const title = page.getByLabel("Event title", { exact: false });
-  await title.fill("Newark Late Set");
-  await title.press("Escape");
-  await expect(title).toBeHidden();
-  await page.getByRole("button", { name: "Reopen chat", exact: true }).click();
-  await expect(title).toHaveValue("Newark Late Set");
-  await expect(title).toBeFocused();
-  await page.getByRole("button", { name: "Close chat", exact: true }).click();
+  await expect(page).toHaveURL(/#book$/);
+  await expect(page.locator("#cge-assistant-results")).toBeHidden();
+  await expect(page.getByTestId("assistant-search-bar")).toHaveCSS("position", "relative");
+  await expect(page.getByTestId("button-get-started")).toBeInViewport();
+  await expect(page.getByTestId("button-get-started")).toBeFocused();
+  await expect(page.getByTestId("button-get-started")).toHaveAttribute("href", "/book");
   await page.getByRole("button", { name: "Find events", exact: true }).click();
   await expect(page.getByText("Your chat is still here.")).toBeVisible();
 });
