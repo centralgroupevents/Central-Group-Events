@@ -1,4 +1,12 @@
 .cge-assistant { --assistant-nav-height: 80px; }
+.cge-assistant-hero-background {
+  background:
+    radial-gradient(ellipse at 35% 43%, rgb(91 36 143 / .72) 0%, rgb(59 23 94 / .5) 37%, transparent 73%),
+    linear-gradient(180deg, hsl(var(--background)) 0%, #20102e 48%, hsl(var(--background)) 100%);
+}
+.cge-assistant-search {
+  box-shadow: 0 0 28px rgb(119 65 173 / .2), 0 8px 32px rgb(40 16 61 / .18);
+}
 .cge-assistant input, .cge-assistant textarea, .cge-assistant select { color-scheme: dark; }
 .cge-assistant :is(button, a, input, textarea, select):focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: 4px; }
 .cge-assistant button:disabled { cursor: not-allowed; opacity: .55; }

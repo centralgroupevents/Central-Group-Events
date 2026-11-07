@@ -81,7 +81,7 @@ export default function EventAssistant() {
   return (
     <div className="cge-assistant relative" style={{ "--assistant-nav-height": `${navHeight}px` } as CSSProperties}>
       <section aria-labelledby="cge-assistant-title" className="relative px-4 pb-9 pt-32 sm:px-6 md:pb-12 md:pt-40">
-        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-full border-b border-white/5 bg-gradient-to-b from-primary/10 via-background to-background" />
+        <div aria-hidden="true" className="cge-assistant-hero-background pointer-events-none absolute inset-x-0 top-0 h-full border-b border-white/5" />
         <div className="relative mx-auto max-w-4xl">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 text-xs font-semibold">
             <p className="flex items-center gap-2 uppercase tracking-[.16em] text-muted-foreground"><span className="h-1.5 w-1.5 rounded-full bg-accent" />North · Central · South NJ</p>
@@ -92,7 +92,7 @@ export default function EventAssistant() {
           <p className="mb-8 mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">Tell us your city, your music, your kind of night. Let’s find you a plan worth leaving the group chat for.</p>
           <div ref={slot} className="h-[88px] sm:h-[100px]">
             <div className={fixed ? "fixed inset-x-0 z-40 border-b border-white/10 bg-background/95 px-4 py-3 shadow-xl backdrop-blur-xl sm:px-6" : "relative"} style={fixed ? { top: navHeight } : undefined}>
-              <form role="search" aria-label="Find New Jersey events with CGE" onSubmit={onSubmit} className={`mx-auto flex max-w-4xl items-center gap-2 border border-accent/35 bg-secondary/40 p-2 focus-within:border-accent ${fixed ? "rounded-xl" : "rounded-2xl sm:p-3"}`}>
+              <form role="search" aria-label="Find New Jersey events with CGE" onSubmit={onSubmit} className={`cge-assistant-search mx-auto flex max-w-4xl items-center gap-2 border border-accent/35 bg-secondary/40 p-2 focus-within:border-accent ${fixed ? "rounded-xl" : "rounded-2xl sm:p-3"}`}>
                 <Search aria-hidden="true" className="ml-2 hidden h-5 w-5 shrink-0 text-accent sm:block" />
                 <label htmlFor="cge-assistant-search" className="sr-only">Ask about New Jersey events</label>
                 <input ref={searchInput} id="cge-assistant-search" name="event-query" type="search" value={input} onChange={event => setInput(event.target.value)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} placeholder={placeholders[placeholder]} maxLength={1000} autoComplete="off" className={`min-w-0 flex-1 rounded-lg border-0 bg-transparent px-2 text-foreground placeholder:text-muted-foreground ${fixed ? "h-10 text-sm" : "h-12 text-sm sm:h-14 sm:text-lg"}`} aria-describedby="cge-assistant-catalog" />
