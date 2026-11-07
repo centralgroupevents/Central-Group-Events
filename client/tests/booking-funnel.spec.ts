@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PACKAGES, getIncludedPackageFeatures } from "../src/lib/promotion-packages";
 import { ASSISTANT_SESSION_KEY } from "../src/lib/assistant-session";
+import { BOOKING_DRAFT_KEY, BOOKING_ATTEMPT_KEY, BOOKING_DRAFT_TTL } from "../src/lib/booking-draft";
 
 test.beforeEach(async ({ page }) => {
   // The preview proxy's banner is not application UI. Install on every document,
@@ -118,11 +119,29 @@ for (const pkg of PACKAGES) {
     await next.click();
     await page.getByTestId("input-contact-name").fill("Morgan Rivera");
     await page.getByTestId("input-email").fill("morgan@example.com");
+    await page.getByTestId("checkbox-booking-newsletter-opt-in").uncheck();
     await next.click();
     await page.getByTestId("input-phone").fill("2015550194");
     await page.getByTestId("input-instagram-handle").fill("rooftopsessionsnj");
     await next.click();
     await expect(page.getByTestId("promotion-package-summary")).toHaveCount(0);
+    await page.getByTestId("checkbox-terms").check();
+    // Recovery deliberately requires contacts and fresh acceptance of terms.
+    await page.reload();
+    await expect(page.getByTestId("input-contact-name")).toHaveValue("");
+    await expect(page.getByTestId("input-email")).toHaveValue("");
+    await expect(page.getByTestId("checkbox-booking-newsletter-opt-in")).not.toBeChecked();
+    const draft = await page.evaluate(key => sessionStorage.getItem(key), BOOKING_DRAFT_KEY);
+    expect(draft).not.toMatch(/Morgan|morgan@|2015550194|rooftopsessionsnj|agreedToTerms/);
+    await page.getByTestId("input-contact-name").fill("Morgan Rivera");
+    await page.getByTestId("input-email").fill("morgan@example.com");
+    await next.click();
+    await expect(page.getByTestId("input-phone")).toHaveValue("");
+    await expect(page.getByTestId("input-instagram-handle")).toHaveValue("");
+    await page.getByTestId("input-phone").fill("2015550194");
+    await page.getByTestId("input-instagram-handle").fill("rooftopsessionsnj");
+    await next.click();
+    await expect(page.getByTestId("checkbox-terms")).not.toBeChecked();
     await page.getByTestId("checkbox-terms").check();
     await next.click();
 
@@ -138,8 +157,12 @@ for (const pkg of PACKAGES) {
     expect(submissions).toHaveLength(1);
     expect(submissions[0]).toMatchObject({
       mode: pkg.id, budgetRange: pkg.price, eventName: "Garden State Rooftop Sessions",
-      email: "morgan@example.com", newsletterOptIn: true,
+      email: "morgan@example.com", newsletterOptIn: false,
     });
+    expect(await page.evaluate(key => sessionStorage.getItem(key), BOOKING_DRAFT_KEY)).toBeNull();
+    await page.reload();
+    await expect(page.getByText("Booking saved", { exact: true })).toBeVisible();
+    expect(submissions).toHaveLength(1);
     if (pkg.id === "Basic") {
       await expect(page.getByTestId("button-pay-now")).toHaveCount(0);
       await expect(page.getByText(/No payment is required for this Basic calendar listing/)).toBeVisible();
@@ -153,6 +176,211 @@ for (const pkg of PACKAGES) {
     await expect(page.getByTestId("input-event-name")).toHaveValue("Garden State Rooftop Sessions");
   });
 }
+
+test("draft survives event and logistics refreshes, stays in one tab, and can be discarded", async ({ page, context }) => {
+  await page.goto("/book?package=starter");
+  await page.getByTestId("button-next-step").click();
+  await page.getByTestId("input-event-name").fill("Unfinished concert");
+  await page.reload();
+  await expect(page.getByTestId("input-event-name")).toHaveValue("Unfinished concert");
+  await page.getByTestId("select-event-type").click();
+  await page.getByRole("option", { name: "Concert", exact: true }).click();
+  await page.getByTestId("button-next-step").click();
+  await page.getByTestId("input-event-date").fill("2027-07-24");
+  await page.getByTestId("input-event-time").fill("19:30");
+  await page.getByTestId("button-next-step").click();
+  await page.getByTestId("input-city").fill("Newark");
+  await page.reload();
+  await expect(page.getByTestId("input-city")).toHaveValue("Newark");
+  const other = await context.newPage();
+  await other.route("**/api/**", route => route.fulfill({ json: [] }));
+  await other.goto("/book");
+  await expect(other.getByTestId("button-next-step")).toBeDisabled();
+  expect(await other.evaluate(key => sessionStorage.getItem(key), BOOKING_DRAFT_KEY)).toBeNull();
+  await other.close();
+  page.once("dialog", dialog => dialog.dismiss());
+  await page.getByTestId("button-start-over").click();
+  await expect(page.getByTestId("input-city")).toHaveValue("Newark");
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByTestId("button-start-over").click();
+  await expect(page.getByTestId("button-next-step")).toBeDisabled();
+  expect(await page.evaluate(key => sessionStorage.getItem(key), BOOKING_DRAFT_KEY)).toBeNull();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Choose Your Package", exact: true })).toBeVisible();
+});
+
+const safeDraft = {
+  mode: "Basic", eventName: "Draft event", eventType: "Concert", eventTypeOther: "",
+  eventDate: "2027-07-24", eventTime: "19:30", venueName: "Hall", city: "Newark",
+  region: "North NJ", newsletterOptIn: false,
+};
+
+for (const invalid of ["malformed", "expired", "future", "version", "type", "step", "date", "oversized"]) {
+  test(`ignores ${invalid} draft without submitting`, async ({ page }) => {
+    let writes = 0;
+    await page.route("**/api/bookings", route => { writes++; return route.fulfill({ json: {} }); });
+    await page.goto("/book");
+    await page.evaluate(({ key, data, ttl, invalid }) => {
+      const envelope = { version: 1, expiresAt: Date.now() + ttl, data, position: 6 };
+      if (invalid === "expired") envelope.expiresAt = Date.now() - 1;
+      if (invalid === "future") envelope.expiresAt += ttl;
+      if (invalid === "version") envelope.version = 99;
+      if (invalid === "type") (envelope.data as any).newsletterOptIn = "true";
+      if (invalid === "step") envelope.position = 99;
+      if (invalid === "date") envelope.data.eventDate = "2027-02-31";
+      sessionStorage.setItem(key, invalid === "malformed" ? "{" : invalid === "oversized" ? "x".repeat(10001) : JSON.stringify(envelope));
+    }, { key: BOOKING_DRAFT_KEY, data: safeDraft, ttl: BOOKING_DRAFT_TTL, invalid });
+    await page.reload();
+    await expect(page.getByTestId("button-next-step")).toBeDisabled();
+    expect(writes).toBe(0);
+    expect(await page.evaluate(key => sessionStorage.getItem(key), BOOKING_DRAFT_KEY)).toBeNull();
+  });
+}
+
+test("pending submission recovery blocks replay and false confirmation", async ({ page }) => {
+  let submissions = 0;
+  await page.route("**/api/bookings", route => { submissions++; return route.fulfill({ json: {} }); });
+  await page.goto("/book");
+  await page.evaluate(({ key, data, ttl }) => {
+    sessionStorage.setItem(key, JSON.stringify({
+      version: 1, expiresAt: Date.now() + ttl, data: { ...data, mode: "Starter" }, position: 4, status: "pending",
+    }));
+  }, { key: BOOKING_ATTEMPT_KEY, data: safeDraft, ttl: BOOKING_DRAFT_TTL });
+  await page.reload();
+  await expect(page.getByRole("alert")).toContainText("cannot confirm");
+  await expect(page.getByTestId("button-view-confirmation")).toBeDisabled();
+  await expect(page.getByTestId("button-pay-now")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("alert")).toContainText("cannot confirm");
+  expect(submissions).toBe(0);
+});
+
+test("AI human-format time survives refresh and submits with refresh protection", async ({ page }) => {
+  let submissions = 0;
+  await page.route("**/api/ai/extract-event", route => route.fulfill({ json: {
+    extracted: { eventName: "AI Concert", eventDate: "2027-07-24", eventTime: "9:00 PM",
+      venue: "AI Hall", city: "Newark", instagramHandle: "privatehandle" },
+  } }));
+  await page.route("**/api/bookings", async route => {
+    submissions++;
+    expect(route.request().postDataJSON().eventTime).toBe("21:00");
+    const marker = await page.evaluate(key => sessionStorage.getItem(key), BOOKING_ATTEMPT_KEY);
+    expect(JSON.parse(marker!).status).toBe("pending");
+    await route.fulfill({ status: 201, json: { referenceId: "ai-test-booking" } });
+  });
+  await page.goto("/book?package=starter");
+  const next = page.getByTestId("button-next-step");
+  await next.click();
+  await page.getByTestId("ai-extract-file-input").setInputFiles({
+    name: "flyer.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"),
+  });
+  await expect(page.getByTestId("input-event-name")).toHaveValue("AI Concert");
+  await page.getByTestId("select-event-type").click();
+  await page.getByRole("option", { name: "Concert", exact: true }).click();
+  await next.click();
+  await page.reload();
+  await expect(page.getByTestId("input-event-date")).toHaveValue("2027-07-24");
+  await expect(page.getByTestId("input-event-time")).toHaveValue("21:00");
+  const draft = await page.evaluate(key => sessionStorage.getItem(key), BOOKING_DRAFT_KEY);
+  expect(draft).not.toMatch(/flyer|base64|blob:|privatehandle/);
+  await next.click();
+  await expect(page.getByTestId("input-venue-name")).toHaveValue("AI Hall");
+  await page.getByTestId("select-region").click();
+  await page.getByRole("option", { name: "North NJ", exact: true }).click();
+  await next.click();
+  await page.getByTestId("input-contact-name").fill("Test Contact");
+  await page.getByTestId("input-email").fill("test@example.com");
+  await next.click();
+  await page.getByTestId("input-instagram-handle").fill("testhandle");
+  await next.click();
+  await page.getByTestId("checkbox-terms").check();
+  await next.click();
+  await expect(page.getByText("Booking saved", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("button-pay-now")).toBeVisible();
+  expect(submissions).toBe(1);
+});
+
+for (const blockedRead of [true, false]) {
+test(`unavailable storage permits explicitly approved submission (blocked reads: ${blockedRead})`, async ({ page }) => {
+  let submissions = 0;
+  await page.route("**/api/bookings", route => {
+    submissions++;
+    return route.fulfill({ status: 201, json: { referenceId: "no-storage-booking" } });
+  });
+  await page.addInitScript(blockedRead => {
+    Storage.prototype.setItem = () => { throw new DOMException("Blocked", "SecurityError"); };
+    if (blockedRead) Storage.prototype.getItem = () => { throw new DOMException("Blocked", "SecurityError"); };
+  }, blockedRead);
+  await page.goto("/book?package=basic");
+  await expect(page.getByRole("status")).toContainText("cannot be recovered");
+  const next = page.getByTestId("button-next-step");
+  await next.click();
+  await page.getByTestId("input-event-name").fill("x".repeat(501));
+  await expect(page.getByTestId("input-event-name")).toHaveValue("x".repeat(500));
+  await page.getByTestId("input-event-name").fill("Still usable");
+  await page.getByTestId("select-event-type").click();
+  await page.getByRole("option", { name: "Concert", exact: true }).click();
+  await next.click();
+  await page.getByTestId("input-event-date").fill("2027-07-24");
+  await page.getByTestId("input-event-time").fill("19:30");
+  await next.click();
+  await page.getByTestId("input-venue-name").fill("Hall");
+  await page.getByTestId("input-city").fill("Newark");
+  await page.getByTestId("select-region").click();
+  await page.getByRole("option", { name: "North NJ", exact: true }).click();
+  await next.click();
+  await page.getByTestId("input-contact-name").fill("Test Contact");
+  await page.getByTestId("input-email").fill("test@example.com");
+  await next.click();
+  await page.getByTestId("input-instagram-handle").fill("testhandle");
+  await next.click();
+  await page.getByTestId("checkbox-terms").check();
+  page.once("dialog", async dialog => {
+    expect(dialog.message()).toContain("without refresh protection");
+    await dialog.dismiss();
+  });
+  await next.click();
+  await expect(page.getByTestId("checkbox-terms")).toBeVisible();
+  expect(submissions).toBe(0);
+  page.once("dialog", dialog => dialog.accept());
+  await next.click();
+  await expect(page.getByText("Booking saved", { exact: true })).toBeVisible();
+  expect(submissions).toBe(1);
+});
+}
+
+test("a lost submission response retains the draft and never retries on refresh", async ({ page }) => {
+  let submissions = 0;
+  await page.route("**/api/bookings", route => {
+    submissions++;
+    return route.abort("failed");
+  });
+  await page.goto("/book");
+  await page.evaluate(({ key, data, ttl }) => {
+    sessionStorage.setItem(key, JSON.stringify({
+      version: 1, expiresAt: Date.now() + ttl, data, position: 4,
+    }));
+  }, { key: BOOKING_DRAFT_KEY, data: safeDraft, ttl: BOOKING_DRAFT_TTL });
+  await page.reload();
+  await page.getByTestId("input-contact-name").fill("Test Contact");
+  await page.getByTestId("input-email").fill("test@example.com");
+  await page.getByTestId("button-next-step").click();
+  await page.getByTestId("input-instagram-handle").fill("testhandle");
+  await page.getByTestId("button-next-step").click();
+  await page.getByTestId("checkbox-terms").check();
+  await page.getByTestId("button-next-step").click();
+  await expect(page.getByText("Submission unconfirmed", { exact: true })).toBeVisible();
+  expect(submissions).toBe(1);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), BOOKING_DRAFT_KEY)).not.toBeNull();
+  const marker = await page.evaluate(key => sessionStorage.getItem(key), BOOKING_ATTEMPT_KEY);
+  expect(JSON.parse(marker!).status).toBe("pending");
+  expect(marker).not.toMatch(/Test Contact|test@example.com|testhandle/);
+  await page.reload();
+  await expect(page.getByText("Submission unconfirmed", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("button-view-confirmation")).toBeDisabled();
+  expect(submissions).toBe(1);
+});
 
 test("homepage removes the entire pricing section and keeps FAQ price facts with wizard guidance", async ({ page }) => {
   await page.goto("/");

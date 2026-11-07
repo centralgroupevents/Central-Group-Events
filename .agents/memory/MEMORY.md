@@ -1,2 +1,3 @@
 - [Assistant provider](assistant-provider.md) — approved Haiku 4.5 for event discovery; no Gemini for this feature.
 - [Booking destination](assistant-booking.md) — all promotion navigation actions should go directly to /book.
+- [Booking recovery](booking-recovery.md) — exclude contacts from drafts and avoid automatic retries when submission is unconfirmed.

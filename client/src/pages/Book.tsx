@@ -21,6 +21,7 @@ import { AiExtractCard } from "@/components/AiExtractCard";
 import { apiRequest } from "@/lib/queryClient";
 import { PACKAGES, getIncludedPackageFeatures } from "@/lib/promotion-packages";
 import { getNextPromotionWindow } from "@/lib/promotion-window";
+import { BOOKING_DRAFT_KEY, BOOKING_ATTEMPT_KEY, BOOKING_TEXT_LIMIT, normalizeBookingDate, normalizeBookingTime, readBookingRecovery, removeBookingStorage, writeBookingDraft, writeBookingAttempt } from "@/lib/booking-draft";
 import cgeLogo from "@assets/CGE_logo_2026.png";
 
 // ─── T&C content (verbatim from existing modal) ─────────────────────────────
@@ -154,16 +155,27 @@ function getPackageFromParam(): { mode: string; budgetRange: string } {
 export default function Book() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  const [stepState, setStepState] = useState<StepState>({ step: 0, subStep: "main" });
+  const [recovery] = useState(readBookingRecovery);
+  const [draftNotice, setDraftNotice] = useState(!!recovery);
+  const [storageAvailable, setStorageAvailable] = useState(true);
+  const [stepState, setStepState] = useState<StepState>(() => {
+    if (recovery?.attempt) return { step: 5, subStep: "main" };
+    const position = recovery?.position ?? 0;
+    return position < 2 ? { step: position, subStep: "main" }
+      : position < 4 ? { step: 2, subStep: position === 2 ? "a" : "b" }
+      : { step: 3, subStep: "a" };
+  });
   const [data, setData] = useState<WizardData>(() => ({
     ...INITIAL_DATA,
-    ...getPackageFromParam(),
+    ...(recovery?.data ?? getPackageFromParam()),
   }));
   const [errors, setErrors] = useState<Partial<Record<keyof WizardData, string>>>({});
   const [touched, setTouched] = useState<Set<keyof WizardData>>(new Set());
   const [direction, setDirection] = useState<1 | -1>(1);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const hasSavedRef = useRef(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">(
+    recovery?.attempt?.status === "saved" ? "saved" : recovery?.attempt ? "error" : "idle",
+  );
+  const hasSavedRef = useRef(!!recovery?.attempt);
   const sessionIdRef = useRef<string>(
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
@@ -171,6 +183,32 @@ export default function Book() {
   );
 
   const { step, subStep } = stepState;
+
+  useEffect(() => {
+    if (hasSavedRef.current || step === 5) return;
+    if (JSON.stringify(data) === JSON.stringify(INITIAL_DATA)) {
+      removeBookingStorage(BOOKING_DRAFT_KEY);
+      return;
+    }
+    setStorageAvailable(writeBookingDraft(data, stepToLogical(stepState)));
+  }, [data, stepState]);
+
+  function startOver() {
+    const warning = hasSavedRef.current
+      ? "A booking may already have been submitted. Starting over will not cancel it and submitting again may create another booking. Start a new booking?"
+      : "Discard this unfinished booking and start over?";
+    if (!window.confirm(warning)) return;
+    removeBookingStorage(BOOKING_DRAFT_KEY);
+    removeBookingStorage(BOOKING_ATTEMPT_KEY);
+    removeBookingStorage("cge_booking_summary");
+    hasSavedRef.current = false;
+    setData({ ...INITIAL_DATA });
+    setStepState({ step: 0, subStep: "main" });
+    setSaveStatus("idle");
+    setDraftNotice(false);
+    setErrors({});
+    setTouched(new Set());
+  }
 
   // Fire a funnel event whenever the user reaches a new top-level step.
   // Steps map to STEPS labels: 0=Package, 1=Event Details, 2=Logistics, 3=Contact Info, 4=Terms, 5=Payment.
@@ -325,6 +363,23 @@ export default function Book() {
     hasSavedRef.current = true;
     setSaveStatus("saving");
 
+    try {
+      writeBookingAttempt(data, "pending");
+    } catch {
+      setStorageAvailable(false);
+      const proceed = window.confirm(
+        "Tab storage is unavailable. You can still submit, but refreshing or reopening this page will lose your progress and duplicate-submission protection. If the response is lost, contact centralgroupevents@gmail.com before submitting again. Submit once without refresh protection?",
+      );
+      if (!proceed) {
+        hasSavedRef.current = false;
+        setSaveStatus("idle");
+        setStepState({ step: 4, subStep: "main" });
+        return;
+      }
+      // Clear any older draft where removal still works (e.g. quota exceeded).
+      removeBookingStorage(BOOKING_DRAFT_KEY);
+    }
+
     const payload = {
       bookingSource: "wizard",
       mode: data.mode,
@@ -346,13 +401,13 @@ export default function Book() {
 
     apiRequest("POST", "/api/bookings", payload)
       .then(async (res) => {
-        let referenceId: string | undefined;
-        try {
-          const json = await res.json();
-          referenceId = json.referenceId;
-        } catch {
-          // ignore parse errors
+        const json = await res.json();
+        const referenceId = json.referenceId;
+        if (typeof referenceId !== "string" || !referenceId || referenceId.length > 100) {
+          throw new Error("The booking response could not be confirmed. Please contact us before submitting again.");
         }
+        try { writeBookingAttempt(data, "saved", referenceId); } catch { /* Keep pending guard if storage is full. */ }
+        removeBookingStorage(BOOKING_DRAFT_KEY);
         // Persist summary so confirmation page can read it
         try {
           sessionStorage.setItem(
@@ -369,9 +424,6 @@ export default function Book() {
               venueName: data.venueName,
               city: data.city,
               region: data.region,
-              contactName: data.contactName,
-              email: data.email,
-              instagramHandle: data.instagramHandle,
             })
           );
         } catch {
@@ -398,7 +450,10 @@ export default function Book() {
   // ── Update & touch helpers ────────────────────────────────────────────────
 
   function set<K extends keyof WizardData>(key: K, value: WizardData[K]) {
-    setData((d) => ({ ...d, [key]: value }));
+    // Apply the same limit to typed and AI-extracted recoverable text.
+    const bounded = typeof value === "string" && ["eventName", "eventTypeOther", "venueName", "city"].includes(key)
+      ? value.slice(0, BOOKING_TEXT_LIMIT) : value;
+    setData((d) => ({ ...d, [key]: bounded }));
     setErrors((e) => {
       const next = { ...e };
       delete next[key];
@@ -480,6 +535,15 @@ export default function Book() {
             Fill out the wizard below — takes under 3 minutes.
           </p>
         </div>
+
+        {draftNotice && (
+          <p role="status" className="text-sm text-white/70 mb-3">
+            {recovery?.attempt
+              ? "This tab already attempted submission. Refreshing will not submit it again."
+              : "Your unfinished booking was restored. For privacy, re-enter contact details and accept the terms again."}
+          </p>
+        )}
+        {!storageAvailable && <p role="status" className="text-sm text-amber-300 mb-3">Tab storage is unavailable. Your progress cannot be recovered after a refresh.</p>}
 
         {/* Progress bar */}
         <div className={step === 0 ? "mb-3 sm:mb-4" : "mb-8"}>
@@ -599,8 +663,8 @@ export default function Book() {
                     label="Have a flyer or poster? Upload it and we'll auto-fill event name, date, time, venue, city, IG, and ticket URL."
                     onExtracted={(f) => {
                       if (f.eventName) set("eventName", f.eventName);
-                      if (f.eventDate) set("eventDate", f.eventDate);
-                      if (f.eventTime) set("eventTime", f.eventTime);
+                      if (f.eventDate) set("eventDate", normalizeBookingDate(f.eventDate));
+                      if (f.eventTime) set("eventTime", normalizeBookingTime(f.eventTime));
                       if (f.venue) set("venueName", f.venue);
                       if (f.city) set("city", f.city);
                       if (f.instagramHandle) set("instagramHandle", f.instagramHandle);
@@ -611,6 +675,7 @@ export default function Book() {
                     <Label htmlFor="eventName" className="text-white/80 mb-1.5 block">Event Name *</Label>
                     <Input
                       id="eventName"
+                      maxLength={BOOKING_TEXT_LIMIT}
                       data-testid="input-event-name"
                       className={inputClass}
                       placeholder="e.g. Summer Rooftop Bash"
@@ -641,6 +706,7 @@ export default function Book() {
                       <Label htmlFor="eventTypeOther" className="text-white/80 mb-1.5 block">Describe Your Event *</Label>
                       <Input
                         id="eventTypeOther"
+                        maxLength={BOOKING_TEXT_LIMIT}
                         data-testid="input-event-type-other"
                         className={inputClass}
                         placeholder="e.g. Charity Gala"
@@ -704,6 +770,7 @@ export default function Book() {
                     <Label htmlFor="venueName" className="text-white/80 mb-1.5 block">Venue Name *</Label>
                     <Input
                       id="venueName"
+                      maxLength={BOOKING_TEXT_LIMIT}
                       data-testid="input-venue-name"
                       className={inputClass}
                       placeholder="e.g. Club Luxe"
@@ -718,6 +785,7 @@ export default function Book() {
                     <Label htmlFor="city" className="text-white/80 mb-1.5 block">City *</Label>
                     <Input
                       id="city"
+                      maxLength={BOOKING_TEXT_LIMIT}
                       data-testid="input-city"
                       className={inputClass}
                       placeholder="e.g. Newark"
@@ -894,9 +962,16 @@ export default function Book() {
                       </span>
                     )}
                     {saveStatus === "error" && (
-                      <span className="text-xs text-red-400">Save failed — see email below</span>
+                      <span className="text-xs text-red-400">Submission unconfirmed</span>
                     )}
                   </div>
+
+                  {saveStatus === "error" && (
+                    <p role="alert" className="mb-6 text-sm text-amber-300">
+                      We cannot confirm whether your booking was received. To avoid duplicates, we will not send it again automatically.
+                      Please contact centralgroupevents@gmail.com before starting another booking or paying.
+                    </p>
+                  )}
 
                   {selectedPackage && (
                     <section aria-labelledby="promotion-package-heading" data-testid="promotion-package-summary" className="bg-primary/5 border border-primary/20 rounded-2xl p-5 mb-6">
@@ -945,6 +1020,8 @@ export default function Book() {
                           <p className="text-sm text-white/70">
                             No payment is required for this Basic calendar listing. We will review your submission and confirm shortly.
                           </p>
+                        ) : saveStatus !== "saved" ? (
+                          <p className="text-sm text-white/70">Payment is available after your booking is confirmed saved.</p>
                         ) : (
                           <>
                             <a
@@ -1045,7 +1122,7 @@ export default function Book() {
               </Button>
               <Button
                 onClick={() => navigate("/booking-confirmation")}
-                disabled={saveStatus === "saving"}
+                disabled={saveStatus !== "saved"}
                 data-testid="button-view-confirmation"
                 className="bg-primary hover:bg-primary/90 text-white font-semibold px-8 rounded-xl w-full sm:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
               >
@@ -1055,6 +1132,12 @@ export default function Book() {
               </Button>
             </div>
           )}
+        </div>
+        <div className="mt-3 text-center text-xs text-white/50">
+          <p>Event details and newsletter choice are saved in this tab for 24 hours. Contact details and uploads are not saved.</p>
+          <Button variant="ghost" onClick={startOver} disabled={saveStatus === "saving"} data-testid="button-start-over">
+            Discard / Start over
+          </Button>
         </div>
       </div>
     </div>
