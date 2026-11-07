@@ -1516,7 +1516,7 @@ ${blogList || "_No recent posts yet._"}
       if (req.body.newsletterOptIn === true) {
         storage.upsertSubscriber(
           input.email.toLowerCase().trim(),
-          "booking",
+          req.body.bookingSource === "wizard" || input.mode === "Wizard" ? "wizard" : "booking",
           input.contactName || undefined
         ).catch(() => {});
       }

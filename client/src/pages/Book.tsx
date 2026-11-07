@@ -326,6 +326,7 @@ export default function Book() {
     setSaveStatus("saving");
 
     const payload = {
+      bookingSource: "wizard",
       mode: data.mode,
       budgetRange: data.budgetRange,
       eventName: data.eventName,
