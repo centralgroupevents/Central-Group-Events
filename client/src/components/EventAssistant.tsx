@@ -10,6 +10,12 @@ import "./event-assistant.css";
 const placeholders = ["What’s the word this weekend?", "Find something to do in NJ", "Drop your event and let the people know"];
 
 export default function EventAssistant() {
+  const [location] = useLocation();
+  // Never mount conversation UI on the wizard, even with restored history.
+  return location === "/book" ? null : <HomepageAssistant />;
+}
+
+function HomepageAssistant() {
   const [, navigate] = useLocation();
   const { messages, loading, error, sessionWarning, sendMessage, submitEvent, clearMessages } = useEventAssistant();
   const [input, setInput] = useState("");
@@ -20,6 +26,8 @@ export default function EventAssistant() {
   const [nudge, setNudge] = useState(false);
   const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(true);
+  const [bookingVisible, setBookingVisible] = useState(false);
+  const bookingVisibleRef = useRef(false);
   const slot = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const replyInput = useRef<HTMLInputElement>(null);
@@ -41,6 +49,16 @@ export default function EventAssistant() {
     return () => window.clearInterval(interval);
   }, [reducedMotion, focused, input]);
   useEffect(() => {
+    const booking = document.getElementById("book");
+    if (!booking) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      bookingVisibleRef.current = entry.isIntersecting;
+      setBookingVisible(entry.isIntersecting);
+    }, { threshold: 0 });
+    observer.observe(booking);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
     const nav = document.querySelector("header");
     let frame = 0;
     const update = () => {
@@ -61,7 +79,7 @@ export default function EventAssistant() {
 
   function revealResults() {
     requestAnimationFrame(() => {
-      if (!openRef.current || !results.current) return;
+      if (!openRef.current || bookingVisibleRef.current || !results.current) return;
       const top = results.current.getBoundingClientRect().top + window.scrollY - navHeight - 96;
       window.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? "instant" : "smooth" });
     });
@@ -129,7 +147,7 @@ export default function EventAssistant() {
           <h1 id="cge-assistant-title" className="max-w-3xl text-4xl font-black leading-[1.05] tracking-tighter sm:text-6xl md:text-7xl">Things to do in NJ.<br /><span className="text-accent">This weekend. Tonight.</span></h1>
           <p className="mb-8 mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">Tell us your city, your music, your kind of night. Let’s find you a plan worth leaving the group chat for.</p>
           <div ref={slot} className="h-[88px] sm:h-[100px]">
-            <div data-testid="assistant-search-bar" className={fixed && open ? "fixed inset-x-0 z-40 border-b border-white/10 bg-background/95 px-4 py-3 shadow-xl backdrop-blur-xl sm:px-6" : "relative"} style={fixed && open ? { top: navHeight } : undefined}>
+            <div data-testid="assistant-search-bar" hidden={bookingVisible} className={fixed && open && !bookingVisible ? "fixed inset-x-0 z-40 border-b border-white/10 bg-background/95 px-4 py-3 shadow-xl backdrop-blur-xl sm:px-6" : "relative"} style={fixed && open && !bookingVisible ? { top: navHeight } : undefined}>
               <form role="search" aria-label="Find New Jersey events with CGE" onSubmit={onSubmit} className={`cge-assistant-search mx-auto flex max-w-4xl items-center gap-2 border border-accent/35 bg-secondary/40 p-2 focus-within:border-accent ${fixed ? "rounded-xl" : "rounded-2xl sm:p-3"}`}>
                 <Search aria-hidden="true" className="ml-2 hidden h-5 w-5 shrink-0 text-accent sm:block" />
                 <label htmlFor="cge-assistant-search" className="sr-only">Ask about New Jersey events</label>
@@ -169,7 +187,7 @@ export default function EventAssistant() {
             </form>}
           </div>}
       </div>
-      {nudge && <div role="status" className="fixed bottom-4 left-4 right-4 z-40 mx-auto flex max-w-lg items-start gap-3 rounded-xl border border-accent/30 bg-background p-4 shadow-xl cge-assistant-enter"><p className="flex-1 text-sm">Next time just ask the assistant -- it’ll find this for you faster</p><button type="button" onClick={() => setNudge(false)} aria-label="Dismiss assistant tip" className="rounded p-1"><X className="h-4 w-4" /></button></div>}
+      {nudge && !bookingVisible && <div role="status" className="fixed bottom-4 left-4 right-4 z-40 mx-auto flex max-w-lg items-start gap-3 rounded-xl border border-accent/30 bg-background p-4 shadow-xl cge-assistant-enter"><p className="flex-1 text-sm">Next time just ask the assistant -- it’ll find this for you faster</p><button type="button" onClick={() => setNudge(false)} aria-label="Dismiss assistant tip" className="rounded p-1"><X className="h-4 w-4" /></button></div>}
     </div>
   );
 }

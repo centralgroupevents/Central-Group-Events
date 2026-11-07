@@ -37,7 +37,7 @@ export function Navigation() {
     { name: "Blog", href: "/blog", type: "route" },
     { name: "Events", href: isHomePage ? "#events" : "/#events", type: "anchor" },
     { name: "Things to Do in NJ", href: "/things-to-do-in-nj", type: "route" },
-    { name: "Pricing", href: isHomePage ? "#pricing" : "/#pricing", type: "anchor" },
+    { name: "Packages", href: "/book", type: "route" },
     { name: "FAQ", href: "/faq", type: "route" },
   ];
 

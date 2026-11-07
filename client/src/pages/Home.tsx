@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight, Calendar, Megaphone, Video, MessageSquare,
-  Users, CheckCircle2, Ticket, Loader2, Instagram, Plus, X, BookOpen, Compass
+  Users, CheckCircle2, Ticket, Loader2, Instagram, Plus, BookOpen, Compass
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -45,11 +45,11 @@ const HOMEPAGE_FAQS = [
   },
   {
     q: "How do I submit my event or book promotion?",
-    a: "Pick a package on the Pricing section above and use the booking form, or visit /book directly. Packages range from a free calendar listing (Basic) through Starter ($70), Growth ($150 with reels + SMS blast), and Custom ($300+ with influencer reposts). Submit at least 7 days before your event so we have time to schedule slots.",
+    a: "Visit /book to compare Packages and submit your event in the booking wizard. Packages range from a free calendar listing (Basic) through Starter ($70), Growth ($150 with reels + SMS blast), and Custom ($300+ with influencer reposts). Submit at least 7 days before your event so we have time to schedule slots.",
   },
   {
     q: "How much does event promotion in NJ cost?",
-    a: "Four tiers: Basic (free calendar listing), Starter ($70 per event), Growth ($150 per event with Instagram reel, premium newsletter placement, and SMS blast), and Custom ($300+ per event with influencer reposts, strategy call, and dedicated campaign timeline). Detailed breakdown on the Pricing section above.",
+    a: "Four tiers: Basic (free calendar listing), Starter ($70 per event), Growth ($150 per event with Instagram reel, premium newsletter placement, and SMS blast), and Custom ($300+ per event with influencer reposts, strategy call, and dedicated campaign timeline). Compare Packages in the booking wizard at /book.",
   },
   {
     q: "How fast will my event get posted after I book?",
@@ -365,202 +365,6 @@ export default function Home() {
                 </form>
               </Form>
             )}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* PRICING SECTION */}
-      <section id="pricing" className="py-24 bg-black/50 border-t border-white/5 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-1/3 h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none" />
-        
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <motion.div {...fadeIn} className="text-center mb-16">
-            <h2 className="text-sm font-bold text-primary tracking-widest uppercase mb-3">Pricing</h2>
-            <h3 className="text-3xl md:text-5xl font-black">Pick Your Package</h3>
-          </motion.div>
-
-          {/* Comparison table */}
-          <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
-            <div className="bg-secondary/40 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px]">
-                  {/* Column headers */}
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="text-left px-6 py-6 w-[30%]">
-                        <span className="text-muted-foreground text-sm font-medium uppercase tracking-wider">Feature</span>
-                      </th>
-                      {/* Basic */}
-                      <th className="px-4 pt-10 pb-6 text-center">
-                        <div className="text-white font-black text-lg">Basic</div>
-                        <div className="text-3xl font-black text-white mt-1">FREE</div>
-                      </th>
-                      {/* Starter */}
-                      <th className="px-4 pt-10 pb-6 text-center">
-                        <div className="text-white font-black text-lg">Starter</div>
-                        <div className="text-3xl font-black text-white mt-1">$70<span className="text-sm text-muted-foreground font-normal"> / event</span></div>
-                      </th>
-                      {/* Growth */}
-                      <th className="relative px-4 pt-10 pb-6 text-center bg-primary/10 border-x border-primary/20">
-                        <div className="absolute inset-x-0 top-3 flex justify-center pointer-events-none">
-                          <div className="inline-flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold tracking-widest uppercase px-3 py-0.5 shadow-lg">
-                            Most Popular
-                          </div>
-                        </div>
-                        <div className="text-primary font-black text-lg">Growth</div>
-                        <div className="text-3xl font-black text-white mt-1">$150<span className="text-sm text-white/50 font-normal"> / event</span></div>
-                      </th>
-                      {/* Custom */}
-                      <th className="px-4 pt-10 pb-6 text-center">
-                        <div className="text-white font-black text-lg">Custom</div>
-                        <div className="text-3xl font-black text-white mt-1">$300+<span className="text-sm text-muted-foreground font-normal"> / event</span></div>
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {/* Event Calendar */}
-                    <tr className="border-b border-white/5 bg-white/[0.02]">
-                      <td className="px-6 py-4 text-sm text-white/80">Event Calendar</td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* Social Media Post */}
-                    <tr className="border-b border-white/5">
-                      <td className="px-6 py-4 text-sm text-white/80">Social Media Post <span className="text-muted-foreground text-xs">(IG, FB, TT)</span></td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* Stories */}
-                    <tr className="border-b border-white/5 bg-white/[0.02]">
-                      <td className="px-6 py-4 text-sm text-white/80">Stories <span className="text-muted-foreground text-xs">(Instagram, FB, TT)</span></td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* Email Marketing */}
-                    <tr className="border-b border-white/5">
-                      <td className="px-6 py-4 text-sm text-white/80">Email Marketing</td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* SMS Marketing */}
-                    <tr className="border-b border-white/5 bg-white/[0.02]">
-                      <td className="px-6 py-4 text-sm text-white/80">SMS Marketing</td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* Consultation */}
-                    <tr className="border-b border-white/5">
-                      <td className="px-6 py-4 text-sm text-white/80">Consultation</td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* Newsletter */}
-                    <tr className="border-b border-white/5 bg-white/[0.02]">
-                      <td className="px-6 py-4 text-sm text-white/80">Newsletter</td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><span className="text-xs text-muted-foreground font-medium">Regular</span></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
-                      <td className="px-4 py-4 text-center"><span className="text-xs text-amber-400 font-semibold">Premium*</span></td>
-                    </tr>
-
-                    {/* Influencer Reach */}
-                    <tr className="border-b border-white/5 bg-white/[0.02]">
-                      <td className="px-6 py-4 text-sm text-white/80">Influencer Reach</td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><CheckCircle2 className="w-5 h-5 text-primary mx-auto" /></td>
-                    </tr>
-
-                    {/* Ad Credit */}
-                    <tr>
-                      <td className="px-6 py-4 text-sm text-white/80">Ad Credit</td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center bg-primary/5 border-x border-primary/20"><X className="w-4 h-4 text-muted-foreground mx-auto" /></td>
-                      <td className="px-4 py-4 text-center"><span className="text-sm font-bold text-white">$100</span></td>
-                    </tr>
-                  </tbody>
-
-                  {/* Button row — lives inside the table so column widths match exactly */}
-                  <tfoot>
-                    <tr className="border-t border-white/10">
-                      {/* Empty feature-label cell */}
-                      <td className="px-6 py-5" />
-
-                      {/* Basic */}
-                      <td className="px-4 py-5 text-center">
-                        <a
-                          href="/book?package=basic"
-                          className="inline-flex items-center justify-center w-full h-10 rounded-xl px-3 text-sm font-semibold text-white bg-primary hover:bg-primary/90 transition-colors"
-                          data-testid="button-get-started-basic"
-                        >
-                          Get Started
-                        </a>
-                      </td>
-
-                      {/* Starter */}
-                      <td className="px-4 py-5 text-center">
-                        <a
-                          href="/book?package=starter"
-                          className="inline-flex items-center justify-center w-full h-11 rounded-xl px-4 text-sm font-semibold text-white bg-primary hover:bg-primary/90 transition-colors"
-                          data-testid="button-get-started-starter"
-                        >
-                          Get Started
-                        </a>
-                      </td>
-
-                      {/* Growth */}
-                      <td className="px-4 py-5 text-center bg-primary/5 border-x border-primary/20">
-                        <a
-                          href="/book?package=growth"
-                          className="inline-flex items-center justify-center w-full h-12 rounded-xl px-5 text-base font-bold text-white bg-primary hover:bg-primary/90 transition-colors"
-                          data-testid="button-get-started-growth"
-                        >
-                          Get Started
-                        </a>
-                      </td>
-
-                      {/* Custom */}
-                      <td className="px-4 py-5 text-center">
-                        <a
-                          href="/book?package=custom"
-                          className="inline-flex items-center justify-center w-full h-12 rounded-xl px-6 text-base font-semibold text-white bg-primary hover:bg-primary/90 transition-colors"
-                          data-testid="button-get-started-custom"
-                        >
-                          Get Started
-                        </a>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Footnote + Stripe */}
-              <div className="px-6 pt-3 pb-4 text-left space-y-1 border-t border-white/5">
-                <p className="text-xs text-muted-foreground">* Premium Placement</p>
-                <p className="text-xs text-muted-foreground">💳 Stripe payments coming soon</p>
-              </div>
-            </div>
           </motion.div>
         </div>
       </section>

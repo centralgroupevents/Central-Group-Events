@@ -470,18 +470,18 @@ export default function Book() {
       />
       <Navigation />
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-12 pb-24">
+      <div className={`${step === 0 ? "max-w-5xl pt-[88px] sm:pt-24 pb-8" : "max-w-2xl py-12 pb-24"} mx-auto px-4 sm:px-6`}>
         {/* Header */}
-        <div className="text-center mb-10">
-          <img src={cgeLogo} alt="CGE" className="h-12 w-auto mx-auto mb-6 object-contain" />
-          <h1 className="text-3xl md:text-4xl font-black mb-2">Let's Promote Your Event</h1>
-          <p className="text-muted-foreground text-lg">
+        <div className={`text-center ${step === 0 ? "mb-3 sm:mb-4" : "mb-10"}`}>
+          {step !== 0 && <img src={cgeLogo} alt="CGE" className="h-12 w-auto mx-auto mb-6 object-contain" />}
+          <h1 className={`${step === 0 ? "text-2xl md:text-3xl" : "text-3xl md:text-4xl"} font-black mb-2`}>Let's Promote Your Event</h1>
+          <p className={`text-muted-foreground ${step === 0 ? "text-sm" : "text-lg"}`}>
             Fill out the wizard below — takes under 3 minutes.
           </p>
         </div>
 
         {/* Progress bar */}
-        <div className="mb-8">
+        <div className={step === 0 ? "mb-3 sm:mb-4" : "mb-8"}>
           <div className="flex items-center justify-between relative">
             <div className="absolute left-0 right-0 top-5 h-0.5 bg-white/10 z-0" />
             {STEPS.map((label, i) => {
@@ -533,14 +533,14 @@ export default function Book() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: direction * -60, opacity: 0 }}
               transition={{ duration: 0.25, ease: "easeInOut" }}
-              className="p-6 md:p-10"
+              className={step === 0 ? "p-3 sm:p-5 md:p-6" : "p-6 md:p-10"}
             >
               {/* ── Step 1: Package ─────────────────────────────────────────── */}
               {step === 0 && (
                 <div>
-                  <h2 className="text-2xl font-black mb-1">Choose Your Package</h2>
-                  <p className="text-muted-foreground text-sm mb-6">Select the plan that fits your event size and budget.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <h2 className="text-xl md:text-2xl font-black mb-1">Choose Your Package</h2>
+                  <p className="text-muted-foreground text-sm mb-4 sm:mb-5">Select the level of promotion that fits your event.</p>
+                  <div data-testid="package-options" className="grid grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-4 sm:gap-x-4 mb-3">
                     {PACKAGES.map((pkg) => (
                       <button
                         key={pkg.id}
@@ -550,7 +550,7 @@ export default function Book() {
                           set("budgetRange", pkg.price);
                         }}
                         className={[
-                          "flex flex-col h-full justify-start text-left border-2 rounded-2xl p-5 cursor-pointer transition-all duration-200 relative",
+                          "flex flex-col h-full min-w-0 justify-start text-left border-2 rounded-2xl p-2 sm:p-4 cursor-pointer transition-all duration-200 relative",
                           data.mode === pkg.id
                             ? "border-primary shadow-[0_0_20px_rgba(139,47,201,0.3)] bg-primary/5"
                             : "border-white/10 hover:border-primary/50 bg-black/20",
@@ -561,10 +561,10 @@ export default function Book() {
                             {pkg.badge}
                           </span>
                         )}
-                        <p className="font-bold text-lg mb-1">{pkg.label}</p>
+                        <p className="font-bold text-lg mb-1 pr-4">{pkg.label}</p>
                         <ul className="space-y-1">
                           {pkg.features.map((f) => (
-                            <li key={f} className="text-xs text-white/60 flex items-start gap-1.5">
+                            <li key={f} className="text-xs leading-4 text-white/75 flex items-start gap-1">
                               <CheckCircle2 className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
                               {f}
                             </li>
@@ -578,7 +578,7 @@ export default function Book() {
                       </button>
                     ))}
                   </div>
-                  <div className="space-y-1 text-xs text-muted-foreground">
+                  <div data-testid="promotion-availability" className="space-y-1 text-xs leading-4 text-muted-foreground">
                     <p>We run promotions on a weekly cycle. Slots for the current week fill up by Tuesday.</p>
                     <p>Next available promotion window: {getNextPromotionWindow()}</p>
                   </div>
@@ -1007,7 +1007,7 @@ export default function Book() {
 
           {/* Navigation buttons */}
           {step < 5 && (
-            <div className={`px-6 md:px-10 pb-8 flex ${step === 0 ? "justify-end" : "justify-between"} gap-4`}>
+            <div className={`flex gap-4 ${step === 0 ? "justify-end px-3 sm:px-5 md:px-6 pb-4" : "justify-between px-6 md:px-10 pb-8"}`}>
               {step > 0 && (
                 <Button
                   variant="ghost"
