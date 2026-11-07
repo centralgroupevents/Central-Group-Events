@@ -79,6 +79,17 @@ export function InvoicesTab() {
   const [busyId, setBusyId] = useState<number | null>(null);
   const [markingPaidIds, setMarkingPaidIds] = useState<Set<number>>(new Set());
 
+  const summary = useMemo(() => {
+    const result = { outstandingCents: 0, paidCents: 0, drafts: 0 };
+    for (const invoice of invoices) {
+      const status = markingPaidIds.has(invoice.id) ? "paid" : invoice.status;
+      if (status === "sent") result.outstandingCents += invoice.totalCents;
+      if (status === "paid") result.paidCents += invoice.totalCents;
+      if (status === "draft") result.drafts++;
+    }
+    return result;
+  }, [invoices, markingPaidIds]);
+
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
@@ -275,6 +286,20 @@ export function InvoicesTab() {
             {formOpen ? <><X className="w-4 h-4 mr-2" />Close</> : <><Plus className="w-4 h-4 mr-2" />New invoice</>}
           </Button>
         </div>
+        <dl className="flex flex-wrap gap-3 mt-5" aria-label="Invoice summary" aria-busy={isLoading}>
+          {[
+            { label: "Outstanding", value: money(summary.outstandingCents), id: "outstanding" },
+            { label: "Paid", value: money(summary.paidCents), id: "paid" },
+            { label: "Drafts", value: summary.drafts.toLocaleString("en-US"), id: "drafts" },
+          ].map(({ label, value, id }) => (
+            <div key={id} className="inline-flex items-center gap-3 bg-secondary/30 border border-white/10 rounded-full px-4 py-2">
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd className="text-sm font-bold text-white tabular-nums" data-testid={`stat-invoice-${id}`}>
+                {isLoading ? "—" : value}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
 
       {formOpen && (

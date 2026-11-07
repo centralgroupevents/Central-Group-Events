@@ -49,6 +49,9 @@ for (const [id, status] of [[1, "draft"], [2, "sent"]] as const) {
     await button.click();
     await expect(row.locator("td").nth(4)).toHaveText("paid");
     await expect(button).toHaveCount(0);
+    await expect(page.getByTestId("stat-invoice-outstanding")).toHaveText("$0.00");
+    await expect(page.getByTestId("stat-invoice-paid")).toHaveText("$150.00");
+    await expect(page.getByTestId("stat-invoice-drafts")).toHaveText("0");
     await expect(page.getByTestId(`button-send-invoice-${id}`)).toBeDisabled();
     await expect(page.getByTestId(`button-delete-invoice-${id}`)).toBeDisabled();
     expect(calls).toBe(1);
@@ -81,4 +84,38 @@ test("failed saves restore the original status and allow retry; paid and void ha
   await expect(status).toHaveText("sent");
   await expect(page.getByTestId("button-paid-invoice-2")).toBeEnabled();
   await expect(page.getByTestId("button-send-invoice-2")).toBeEnabled();
+  await expect(page.getByTestId("stat-invoice-outstanding")).toHaveText("$150.00");
+  await expect(page.getByTestId("stat-invoice-paid")).toHaveText("$150.00");
+  await expect(page.getByTestId("stat-invoice-drafts")).toHaveText("1");
+});
+
+test("summary sums sent and paid cents, counts drafts, and excludes void invoices", async ({ page }) => {
+  await page.route("**/api/admin/invoices", async (route) => {
+    await route.fulfill({ json: [
+      { id: 1, status: "sent", totalCents: 12345 },
+      { id: 2, status: "sent", totalCents: 100 },
+      { id: 3, status: "paid", totalCents: 56789 },
+      { id: 4, status: "paid", totalCents: 11 },
+      { id: 5, status: "draft", totalCents: 99999 },
+      { id: 6, status: "draft", totalCents: 0 },
+      { id: 7, status: "void", totalCents: 999999 },
+    ].map((invoice) => ({
+      invoiceNumber: `TEST-${invoice.id}`, clientName: "Test Client",
+      clientEmail: "client@example.test", publicUrl: "/invoice/test", ...invoice,
+    })) });
+  });
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Invoices", exact: true }).click();
+  await expect(page.getByTestId("stat-invoice-outstanding")).toHaveText("$124.45");
+  await expect(page.getByTestId("stat-invoice-paid")).toHaveText("$568.00");
+  await expect(page.getByTestId("stat-invoice-drafts")).toHaveText("2");
+});
+
+test("empty invoice list shows zero summaries", async ({ page }) => {
+  await page.route("**/api/admin/invoices", (route) => route.fulfill({ json: [] }));
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Invoices", exact: true }).click();
+  await expect(page.getByTestId("stat-invoice-outstanding")).toHaveText("$0.00");
+  await expect(page.getByTestId("stat-invoice-paid")).toHaveText("$0.00");
+  await expect(page.getByTestId("stat-invoice-drafts")).toHaveText("0");
 });
