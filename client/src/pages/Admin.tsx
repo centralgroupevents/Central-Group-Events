@@ -3993,6 +3993,22 @@ function normalizeEventDate(input: string): string {
 type SortDirection = "asc" | "desc";
 interface SortState { field: string; direction: SortDirection }
 
+interface SortState { field: string; direction: SortDirection }
+
+interface SortState { field: string; direction: SortDirection }
+
+interface SortState { field: string; direction: SortDirection }
+
+interface SortState { field: string; direction: SortDirection }
+
+interface SortState { field: string; direction: SortDirection }
+
+interface SortState { field: string; direction: SortDirection }
+
+interface SortState { field: string; direction: SortDirection }
+
+interface SortState { field: string; direction: SortDirection }
+
 function sortRows<T extends Record<string, any>>(rows: T[], field: string, dir: SortDirection): T[] {
   const arr = [...rows];
   arr.sort((a, b) => {
@@ -6595,6 +6611,8 @@ export default function Admin() {
 
   const [bookingStatusFilter, setBookingStatusFilter] = useState<string>("All");
   const [bookingSearch, setBookingSearch] = useState<string>("");
+  const [bookingDateFrom, setBookingDateFrom] = useState<string>("");
+  const [bookingDateTo, setBookingDateTo] = useState<string>("");
   // Booking-list sort now handled by useSortableTable in the tab render;
   // this legacy state was only wired to a single Submitted-column button.
   const [selectedBookingIds, setSelectedBookingIds] = useState<Set<number>>(new Set());
@@ -6642,8 +6660,17 @@ export default function Admin() {
           b.city, b.region, b.instagramHandle, b.mode, b.referenceId,
         ].map((v) => (v || "").toLowerCase()).join(" ");
         return searchTerms.every((t) => hay.includes(t));
+      })
+      .filter((b) => {
+        if (!bookingDateFrom && !bookingDateTo) return true;
+        const submitted = b.createdAt ? new Date(b.createdAt) : null;
+        if (!submitted || Number.isNaN(submitted.getTime())) return false;
+        const submittedDate = submitted.toISOString().slice(0, 10);
+        if (bookingDateFrom && submittedDate < bookingDateFrom) return false;
+        if (bookingDateTo && submittedDate > bookingDateTo) return false;
+        return true;
       });
-  }, [bookings, bookingSearch, bookingStatusFilter]);
+  }, [bookings, bookingSearch, bookingStatusFilter, bookingDateFrom, bookingDateTo]);
   const { sorted: filteredBookings, sortKey: bookingSortKey, sortDir: bookingSortDirNext, toggleSort: toggleBookingSort } = useSortableTable(
     preFilteredBookings,
     {
@@ -7952,12 +7979,45 @@ export default function Admin() {
                 </div>
               </div>
 
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-muted-foreground font-medium">Submitted:</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={bookingDateFrom}
+                    onChange={(e) => setBookingDateFrom(e.target.value)}
+                    className="h-8 px-2 rounded-md text-xs bg-secondary/40 border border-white/10 text-white [color-scheme:dark] w-36"
+                    data-testid="input-booking-date-from"
+                    aria-label="From date"
+                  />
+                  <span className="text-xs text-muted-foreground">to</span>
+                  <input
+                    type="date"
+                    value={bookingDateTo}
+                    onChange={(e) => setBookingDateTo(e.target.value)}
+                    min={bookingDateFrom || undefined}
+                    className="h-8 px-2 rounded-md text-xs bg-secondary/40 border border-white/10 text-white [color-scheme:dark] w-36"
+                    data-testid="input-booking-date-to"
+                    aria-label="To date"
+                  />
+                  {(bookingDateFrom || bookingDateTo) && (
+                    <button
+                      onClick={() => { setBookingDateFrom(""); setBookingDateTo(""); }}
+                      className="text-xs text-muted-foreground hover:text-white transition-colors underline underline-offset-2"
+                      data-testid="button-clear-date-filter"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
                 <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between gap-3">
                   <h2 className="font-bold text-white">
                     All Submissions
                     <span className="text-muted-foreground font-normal text-sm ml-2">
-                      ({filteredBookings.length}{bookingStatusFilter !== "All" || bookingSearch ? " matching" : ""} of {bookings.length} total)
+                      ({filteredBookings.length}{bookingStatusFilter !== "All" || bookingSearch || bookingDateFrom || bookingDateTo ? " matching" : ""} of {bookings.length} total)
                     </span>
                   </h2>
                   <div className="flex items-center gap-2">

@@ -387,6 +387,7 @@ export default function Book() {
         } catch {
           // ignore parse errors
         }
+        // Persist summary so confirmation page can read it
         try {
           sessionStorage.setItem(
             "cge_booking_summary",
