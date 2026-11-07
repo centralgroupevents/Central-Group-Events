@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ExternalLink, Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2, Plus, Send, Trash2, X } from "lucide-react";
 
 type InvoiceRow = {
   id: number;
@@ -77,6 +77,7 @@ export function InvoicesTab() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [markingPaidIds, setMarkingPaidIds] = useState<Set<number>>(new Set());
 
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
@@ -219,16 +220,27 @@ export function InvoicesTab() {
     }
   }
 
-  async function setStatus(inv: InvoiceRow, status: string) {
-    setBusyId(inv.id);
+  async function markPaid(inv: InvoiceRow) {
+    if (markingPaidIds.has(inv.id) || (inv.status !== "draft" && inv.status !== "sent")) return;
+    // Keep pending status local so background refetches and other rows' saves
+    // cannot overwrite the optimistic badge or its rollback state.
+    setMarkingPaidIds((ids) => new Set(ids).add(inv.id));
     try {
-      await apiRequest("POST", `/api/admin/invoices/${inv.id}/status`, { status });
-      toast({ title: `Invoice ${inv.invoiceNumber} marked ${status}` });
-      qc.invalidateQueries({ queryKey: ["/api/admin/invoices"] });
+      const res = await apiRequest("POST", `/api/admin/invoices/${inv.id}/status`, { status: "paid" });
+      const updated: InvoiceRow = await res.json();
+      qc.setQueryData<InvoiceRow[]>(["/api/admin/invoices"], (rows) =>
+        rows?.map((row) => row.id === inv.id ? updated : row),
+      );
+      toast({ title: `Invoice ${inv.invoiceNumber} marked Paid` });
+      await qc.invalidateQueries({ queryKey: ["/api/admin/invoices"] });
     } catch (err) {
       toast({ title: "Update failed", description: String((err as Error).message), variant: "destructive" });
     } finally {
-      setBusyId(null);
+      setMarkingPaidIds((ids) => {
+        const next = new Set(ids);
+        next.delete(inv.id);
+        return next;
+      });
     }
   }
 
@@ -406,7 +418,10 @@ export function InvoicesTab() {
               </tr>
             </thead>
             <tbody>
-              {invoices.map((inv, i) => (
+              {invoices.map((row, i) => {
+                const markingPaid = markingPaidIds.has(row.id);
+                const inv = markingPaid ? { ...row, status: "paid" } : row;
+                return (
                 <tr key={inv.id} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`} data-testid={`row-invoice-${inv.id}`}>
                   <td className="px-4 py-3 font-medium text-white whitespace-nowrap">{inv.invoiceNumber}</td>
                   <td className="px-4 py-3">
@@ -416,7 +431,8 @@ export function InvoicesTab() {
                   <td className="px-4 py-3 text-muted-foreground">{inv.eventName || "—"}</td>
                   <td className="px-4 py-3 text-right text-white font-medium whitespace-nowrap">{money(inv.totalCents)}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[inv.status] || STATUS_STYLES.draft}`}>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[inv.status] || STATUS_STYLES.draft}`}>
+                      {inv.status === "paid" && <CheckCircle2 className="w-3 h-3" aria-hidden="true" />}
                       {inv.status}
                     </span>
                   </td>
@@ -435,21 +451,21 @@ export function InvoicesTab() {
                       {inv.status !== "void" && (
                         <button
                           onClick={() => sendInvoice(inv)}
-                          disabled={busyId === inv.id}
+                          disabled={busyId === inv.id || markingPaid}
                           className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/20"
                           data-testid={`button-send-invoice-${inv.id}`}
                         >
                           <Send className="w-3 h-3" /> {inv.status === "draft" ? "Send" : "Resend"}
                         </button>
                       )}
-                      {inv.status !== "paid" && inv.status !== "void" && (
+                      {(inv.status === "draft" || inv.status === "sent") && (
                         <button
-                          onClick={() => setStatus(inv, "paid")}
+                          onClick={() => markPaid(inv)}
                           disabled={busyId === inv.id}
-                          className="inline-flex items-center rounded-md border border-green-500/40 bg-green-500/10 px-2.5 py-1 text-xs text-green-400 hover:bg-green-500/20"
+                          className="inline-flex items-center gap-1 rounded-md border border-green-500/40 bg-green-500/10 px-2.5 py-1 text-xs text-green-400 hover:bg-green-500/20"
                           data-testid={`button-paid-invoice-${inv.id}`}
                         >
-                          Mark paid
+                          <CheckCircle2 className="w-3 h-3" aria-hidden="true" /> Mark Paid
                         </button>
                       )}
                       {inv.status !== "paid" && (
@@ -463,7 +479,7 @@ export function InvoicesTab() {
                       )}
                       <button
                         onClick={() => remove(inv)}
-                        disabled={busyId === inv.id}
+                        disabled={busyId === inv.id || markingPaid}
                         className="inline-flex items-center rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/60 hover:text-red-400 hover:bg-white/10"
                         data-testid={`button-delete-invoice-${inv.id}`}
                       >
@@ -472,7 +488,8 @@ export function InvoicesTab() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
