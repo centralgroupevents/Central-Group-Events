@@ -3,6 +3,7 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { buildBookingsCsv } from "@/lib/booking-export";
 import { useSortableTable, SortableHeader } from "@/hooks/use-sortable-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7918,22 +7919,7 @@ export default function Admin() {
           // Admin so the hook is called unconditionally. Just consume the
           // results here.
           const handleExportCSV = () => {
-            const escape = (val: string | null | undefined) => {
-              const s = val ?? "";
-              return `"${s.replace(/"/g, '""')}"`;
-            };
-            const headers = ["Submitted", "Contact Name", "Email", "Package", "Event Name", "Event Date", "City/Region", "Status"];
-            const rows = filteredBookings.map((b) => [
-              escape(b.createdAt ? new Date(b.createdAt).toLocaleDateString("en-US") : ""),
-              escape(b.contactName),
-              escape(b.email),
-              escape(b.mode || "Standard"),
-              escape(b.eventName),
-              escape(b.eventDate ? new Date(b.eventDate + "T00:00:00").toLocaleDateString("en-US") : ""),
-              escape(b.city ? `${b.city}, ${b.region}` : b.region),
-              escape(b.status || "New"),
-            ]);
-            const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+            const csv = buildBookingsCsv(filteredBookings);
             const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
