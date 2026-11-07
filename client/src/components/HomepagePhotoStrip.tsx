@@ -7,21 +7,21 @@ import "./homepage-photos.css";
 // Original slots live here; the second sequence is only a looping duplicate.
 const EVENT_PHOTOS = [
   /* REPLACE: upload real event photo to Cloudinary and swap src here */
-  "/images/homepage/event-01.svg",
+  "event-01",
   /* REPLACE: upload real event photo to Cloudinary and swap src here */
-  "/images/homepage/event-02.svg",
+  "event-02",
   /* REPLACE: upload real event photo to Cloudinary and swap src here */
-  "/images/homepage/event-03.svg",
+  "event-03",
   /* REPLACE: upload real event photo to Cloudinary and swap src here */
-  "/images/homepage/event-04.svg",
+  "event-04",
   /* REPLACE: upload real event photo to Cloudinary and swap src here */
-  "/images/homepage/event-05.svg",
+  "event-05",
   /* REPLACE: upload real event photo to Cloudinary and swap src here */
-  "/images/homepage/event-06.svg",
+  "event-06",
   /* REPLACE: upload real event photo to Cloudinary and swap src here */
-  "/images/homepage/event-07.svg",
+  "event-07",
   /* REPLACE: upload real event photo to Cloudinary and swap src here */
-  "/images/homepage/event-08.svg",
+  "event-08",
 ];
 
 export function HomepagePhotoStrip() {
@@ -29,7 +29,7 @@ export function HomepagePhotoStrip() {
   const reducedMotion = useReducedMotion();
 
   return (
-    <section aria-label="CGE event photo strip" data-testid="homepage-photo-strip" className="pb-6">
+    <section aria-label="CGE event photo strip" data-testid="homepage-photo-strip" className="pb-6 cge-photo-section">
       <div
         id="cge-photo-strip"
         className="cge-photo-strip"
@@ -40,18 +40,20 @@ export function HomepagePhotoStrip() {
       >
         <div className="cge-photo-track" data-testid="photo-strip-track">
           {[false, true].map(duplicate => (
-            <div className="cge-photo-sequence" key={String(duplicate)} aria-hidden={duplicate || undefined}>
-              {EVENT_PHOTOS.map((src, index) => (
-                <img
-                  key={src}
-                  src={src}
-                  width={400}
-                  height={500}
-                  loading="lazy"
-                  decoding="async"
-                  alt={duplicate ? "" : `CGE event photo placeholder ${index + 1}`}
-                  data-testid={duplicate ? undefined : `photo-strip-image-${index + 1}`}
-                />
+            <div
+              className="cge-photo-sequence"
+              key={String(duplicate)}
+              aria-hidden={duplicate || undefined}
+              data-testid={duplicate ? "photo-strip-duplicate" : "photo-strip-originals"}
+            >
+              {EVENT_PHOTOS.map((id, index) => (
+                <div
+                  key={id}
+                  className="cge-photo-placeholder"
+                  data-testid={duplicate ? undefined : `photo-strip-slot-${index + 1}`}
+                >
+                  CGE EVENT PHOTO
+                </div>
               ))}
             </div>
           ))}

@@ -382,11 +382,8 @@ export default function Home() {
       {/* WHAT WE DO SECTION */}
       <section
         id="services"
-        className="py-24 relative cge-crowd-background"
-        style={{
-          /* REPLACE: upload real event crowd photo to Cloudinary and swap background-image src here */
-          backgroundImage: 'url("/images/homepage/services-crowd.svg")',
-        }}
+        data-testid="homepage-services"
+        className="py-24 relative cge-services-background"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeIn} className="text-center max-w-3xl mx-auto mb-16">
@@ -489,12 +486,8 @@ export default function Home() {
 
       {/* PROCESS SECTION */}
       <section
-        className="py-24 border-y border-white/5 relative cge-crowd-background"
+        className="py-24 border-y border-white/5 relative cge-process-background"
         data-testid="homepage-process"
-        style={{
-          /* REPLACE: upload real event crowd photo to Cloudinary and swap background-image src here */
-          backgroundImage: 'url("/images/homepage/process-crowd.svg")',
-        }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div {...fadeIn} className="text-center mb-16">
