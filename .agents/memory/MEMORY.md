@@ -1,0 +1,1 @@
+- [Assistant provider](assistant-provider.md) — approved Haiku 4.5 for event discovery; no Gemini for this feature.
