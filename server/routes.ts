@@ -691,8 +691,8 @@ ${blogList || "_No recent posts yet._"}
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({
-          message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
+          message: err.issues[0].message,
+          field: err.issues[0].path.join('.'),
         });
       }
       // PostgreSQL unique-constraint violation on email column
@@ -810,7 +810,7 @@ ${blogList || "_No recent posts yet._"}
       }
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+        return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join(".") });
       }
       // Unique-index race: two submits of the same email at once.
       if ((err as { code?: string }).code === "23505") {
@@ -1761,8 +1761,8 @@ ${blogList || "_No recent posts yet._"}
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({
-          message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
+          message: err.issues[0].message,
+          field: err.issues[0].path.join('.'),
         });
       }
       res.status(500).json({ message: "Internal server error" });
@@ -2162,7 +2162,7 @@ Return every field you can confidently determine. Set null for any field the ima
       res.status(201).json(event);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       res.status(500).json({ message: "Internal server error" });
     }
@@ -2304,7 +2304,7 @@ Return every field you can confidently determine. Set null for any field the ima
           });
           validRows.push(parsed);
         } catch (err) {
-          const reason = err instanceof z.ZodError ? err.errors[0].message : "Could not validate row";
+          const reason = err instanceof z.ZodError ? err.issues[0].message : "Could not validate row";
           invalid.push({ rowIndex: i, title, reason });
         }
       }
@@ -2644,7 +2644,7 @@ Return every field you can confidently determine. Set null for any field the ima
       res.status(201).json({ id: created.id, status: created.status });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0]?.message || "Invalid submission" });
+        return res.status(400).json({ message: err.issues[0]?.message || "Invalid submission" });
       }
       console.error("[landing-submit] error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -2783,7 +2783,7 @@ Return every field you can confidently determine. Set null for any field the ima
           });
           imported++;
         } catch (err) {
-          const reason = err instanceof z.ZodError ? err.errors[0]?.message || "Validation failed" : "Unknown error";
+          const reason = err instanceof z.ZodError ? err.issues[0]?.message || "Validation failed" : "Unknown error";
           invalid.push({ rowIndex: i, reason });
         }
       }
@@ -4328,7 +4328,7 @@ Return every field you can confidently determine. Set null for any field the ima
       res.status(201).json({ ...created, publicUrl: invoicePublicUrl(created.invoiceNumber) });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+        return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join(".") });
       }
       console.error("[invoices] create error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -4362,7 +4362,7 @@ Return every field you can confidently determine. Set null for any field the ima
       res.json({ ...updated, publicUrl: invoicePublicUrl(existing.invoiceNumber) });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+        return res.status(400).json({ message: err.issues[0].message, field: err.issues[0].path.join(".") });
       }
       console.error("[invoices] update error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -4630,7 +4630,7 @@ Return every field you can confidently determine. Set null for any field the ima
       res.status(201).json({ id: created.id, status: created.status });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0]?.message || "Invalid submission" });
+        return res.status(400).json({ message: err.issues[0]?.message || "Invalid submission" });
       }
       console.error("[world-cup-submissions] create error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -4778,7 +4778,7 @@ Return every field you can confidently determine. Set null for any field the ima
             reviewedAt: new Date(),
           });
         } catch (err) {
-          const reason = err instanceof z.ZodError ? err.errors[0]?.message || "Validation failed" : "Unknown error";
+          const reason = err instanceof z.ZodError ? err.issues[0]?.message || "Validation failed" : "Unknown error";
           invalid.push({ rowIndex: i, reason });
         }
       }
@@ -4905,7 +4905,7 @@ Return every field you can confidently determine. Set null for any field the ima
       res.status(201).json({ id: created.id, status: created.status });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0]?.message || "Invalid submission" });
+        return res.status(400).json({ message: err.issues[0]?.message || "Invalid submission" });
       }
       console.error("[nba-submissions] create error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -5035,7 +5035,7 @@ Return every field you can confidently determine. Set null for any field the ima
             reviewedAt: new Date(),
           });
         } catch (err) {
-          const reason = err instanceof z.ZodError ? err.errors[0]?.message || "Validation failed" : "Unknown error";
+          const reason = err instanceof z.ZodError ? err.issues[0]?.message || "Validation failed" : "Unknown error";
           invalid.push({ rowIndex: i, reason });
         }
       }
