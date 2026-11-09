@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { format } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -270,6 +271,8 @@ export function InvoicesTab() {
   }
 
   const inputClass = "bg-black/40 border-white/10 h-10";
+  // Due dates are YYYY-MM-DD calendar dates, not UTC instants.
+  const today = format(new Date(), "yyyy-MM-dd");
 
   return (
     <div className="space-y-6">
@@ -446,6 +449,7 @@ export function InvoicesTab() {
               {invoices.map((row, i) => {
                 const markingPaid = markingPaidIds.has(row.id);
                 const inv = markingPaid ? { ...row, status: "paid" } : row;
+                const overdue = inv.status === "sent" && !!inv.dueDate && inv.dueDate < today;
                 return (
                 <tr key={inv.id} className={`border-b border-white/5 hover:bg-white/5 ${i % 2 !== 0 ? "bg-white/[0.02]" : ""}`} data-testid={`row-invoice-${inv.id}`}>
                   <td className="px-4 py-3 font-medium text-white whitespace-nowrap">{inv.invoiceNumber}</td>
@@ -461,7 +465,14 @@ export function InvoicesTab() {
                       {inv.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{inv.dueDate || "—"}</td>
+                  <td className={`px-4 py-3 whitespace-nowrap ${overdue ? "text-amber-400" : "text-muted-foreground"}`}>
+                    {inv.dueDate || "—"}
+                    {overdue && (
+                      <span className="ml-2 inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold" data-testid={`badge-overdue-invoice-${inv.id}`}>
+                        Overdue
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1.5 flex-wrap">
                       <a
