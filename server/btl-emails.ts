@@ -457,6 +457,100 @@ Build to Last Vol. 2 is already in motion, and you'll be one of the first calls.
 — Anthony
 Founder, Central Group Events`,
   },
+  // ── Panel / venue emails — manual sends ("Send to…" → pick people),
+  //    never by the cadence. {{speaker_cards}} adds each panelist's photo. ──
+  {
+    key: "venue_info",
+    label: "Venue — panelists, sponsor & about CGE",
+    placeholders: ["name", "first_name", "venue_name", "speaker_cards"],
+    subject: "Built to Last (Nov 12): panelists, sponsor, and about CGE",
+    body: `Hi {{name}},
+
+Ahead of Built to Last on Thursday, November 12 at {{venue_name}}, here is the information on our panelists and our sponsor, along with a short description of Central Group Events.
+
+✦ ABOUT CENTRAL GROUP EVENTS
+
+Central Group Events (CGE) is a New Jersey-based digital media and event promotion platform connecting the region’s most established curators and event professionals. Over three years of promoting events across the state, we’ve built deep insight into the unique needs of NJ’s townships, businesses, and event-goers; we’ve grown to 6,100+ social media followers. Now, we’re taking a more intentional approach: producing curated, invite-only experiences designed to bring the right people together, build a connected ecosystem, and move the NJ event industry forward. Our upcoming event, Built to Last, brings together industry leaders for a panel discussion and networking evening at Equal Space in Newark on November 12, 2026.
+
+✦ ABOUT THE EVENING
+
+Built to Last is an invite-only evening with the area's most established event professionals: a panel discussion and networking experience built for the people already doing the work. It is hosted by Central Group Events and takes place at {{venue_name}} in Newark. The panel covers real estate, automation, and policy.
+
+✦ THE PANELISTS
+
+{{speaker_cards}}
+
+Moderator: Abrahim Kenneh, Co-Founder, Central Group Events
+
+✦ OUR SPONSOR: AISLEGO
+
+AisleGo is our Executive Sponsor for the evening. Its Founder & CEO, TC Cuthbertson, is one of our panelists. AisleGo is credited as Executive Sponsor on the Built to Last RSVP page and on the closing slide of the panel presentation. You can find them at [aislego.co](https://aislego.co).
+
+If AisleGo's logo or a small sign can be displayed near the bar or check-in, please let us know what works for the space. I will also send our guest list and the final run of show separately.
+
+Thank you again for hosting us.
+
+— Anthony
+Founder, Central Group Events`,
+  },
+  {
+    key: "panelist_brief",
+    label: "Panelists — the panel, the details & about CGE",
+    placeholders: ["name", "first_name", "venue_name", "venue_address", "doors_time", "program_start_time", "speaker_cards"],
+    subject: "Built to Last (Nov 12): your panel and the details",
+    body: `Hi {{first_name}},
+
+Thank you again for joining us. Here is the full panel for Built to Last on Thursday, November 12 at {{venue_name}}, so you know who you'll be sharing the room with.
+
+✦ THE PANEL — REAL ESTATE, AUTOMATION, AND POLICY
+
+{{speaker_cards}}
+
+Moderator: Abrahim Kenneh, Co-Founder, Central Group Events
+
+✦ THE DETAILS
+
+- {{venue_address}}
+- Doors at {{doors_time}}
+- Programming starts at {{program_start_time}}
+- Executive Sponsor: AisleGo
+
+✦ ABOUT CENTRAL GROUP EVENTS
+
+Central Group Events (CGE) is a New Jersey-based digital media and event promotion platform connecting the region’s most established curators and event professionals. Over three years of promoting events across the state, we’ve built deep insight into the unique needs of NJ’s townships, businesses, and event-goers; we’ve grown to 6,100+ social media followers. Now, we’re taking a more intentional approach: producing curated, invite-only experiences designed to bring the right people together, build a connected ecosystem, and move the NJ event industry forward. Our upcoming event, Built to Last, brings together industry leaders for a panel discussion and networking evening at Equal Space in Newark on November 12, 2026.
+
+If anything changes on your end, just reply to this email.
+
+— Anthony
+Founder, Central Group Events`,
+  },
+  {
+    key: "guest_panel_info",
+    label: "Guests — panel info + updated times",
+    placeholders: ["name", "first_name", "venue_name", "doors_time", "program_start_time", "speaker_cards"],
+    subject: "Built to Last (Nov 12): the panel and updated times",
+    body: `Hey {{name}},
+
+A quick update on Built to Last on Thursday, November 12 at {{venue_name}}: who's on the panel, and the updated times.
+
+✦ UPDATED TIMES
+
+- Doors at {{doors_time}}
+- Panel and conversation at {{program_start_time}}
+
+✦ ON THE PANEL — REAL ESTATE, AUTOMATION, AND POLICY
+
+{{speaker_cards}}
+
+Moderator: Abrahim Kenneh, Co-Founder, Central Group Events. Our Executive Sponsor is AisleGo.
+
+If there's a question you'd like the panel to take on, hit reply and tell me.
+
+See you Thursday.
+
+— Anthony
+Founder, Central Group Events`,
+  },
 ];
 
 export function btlTemplateDef(key: string): BtlTemplateDef | undefined {

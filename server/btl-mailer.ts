@@ -203,7 +203,8 @@ export async function getBtlSettings(): Promise<BtlSettings> {
   if (speakersRaw) {
     try {
       const parsed = JSON.parse(speakersRaw);
-      if (Array.isArray(parsed)) { out.speakers = parsed; out.speakersSaved = true; }
+      // An empty saved list (Settings saved with no speakers) keeps the pre-filled panel.
+      if (Array.isArray(parsed) && parsed.length > 0) { out.speakers = parsed; out.speakersSaved = true; }
     } catch { /* keep default */ }
   }
   return out;

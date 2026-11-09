@@ -197,6 +197,7 @@ export interface IStorage {
   unsubscribeBtlEmail(eventSlug: string, email: string): Promise<void>;
   recordBtlEmailSend(row: { eventSlug: string; rsvpId?: number | null; inviteeId?: number | null; recipientEmail: string; templateKey: string; status: string; errorMessage?: string | null }): Promise<void>;
   hasBtlEmailSend(eventSlug: string, recipientEmail: string, templateKey: string): Promise<boolean>;
+  listBtlEmailSentRecipients(eventSlug: string, templateKey: string): Promise<string[]>;
   listBtlEmailSends(eventSlug: string): Promise<Array<{ templateKey: string; status: string; count: number }>>;
   listBtlEmailFailures(eventSlug: string, limit: number): Promise<Array<{ id: number; recipientEmail: string; templateKey: string; errorMessage: string | null; sentAt: Date | null }>>;
   upsertBtlInvitees(eventSlug: string, rows: Array<{ name: string; email: string; instagramHandle?: string | null; category?: string | null; priorityTier?: number }>): Promise<{ imported: number; skipped: number }>;
@@ -1251,6 +1252,17 @@ export class DatabaseStorage implements IStorage {
       ))
       .limit(1);
     return !!row;
+  }
+
+  // Every address this template has already been SENT to (picker badge).
+  async listBtlEmailSentRecipients(eventSlug: string, templateKey: string): Promise<string[]> {
+    const rows = await db.selectDistinct({ email: eventEmailSends.recipientEmail }).from(eventEmailSends)
+      .where(and(
+        eq(eventEmailSends.eventSlug, eventSlug),
+        eq(eventEmailSends.templateKey, templateKey),
+        eq(eventEmailSends.status, "sent"),
+      ));
+    return rows.map((r) => r.email);
   }
 
   async listBtlEmailSends(eventSlug: string): Promise<Array<{ templateKey: string; status: string; count: number }>> {
