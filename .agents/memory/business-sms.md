@@ -9,6 +9,8 @@ The user confirmed every text will identify Central Group Events as the sender, 
 
 The user confirmed Marketing as the intended SMS campaign category.
 
+The user confirmed some promoted events are 21+, and some linked event pages or flyers will advertise alcohol or drink specials, even though CGE does not intend to promote alcohol directly in text copy. Do not describe this as an alcohol-free campaign based solely on message wording; age-gating and provider eligibility still need confirmation.
+
 The user committed to a maximum of 10 marketing texts per subscriber per month, including CGE updates and client-event promotions. Frequency disclosure: “Message frequency varies, up to 10 messages per month.”
 
 The user selected a website signup form as the planned SMS opt-in method. This is a planned flow, not proof that an SMS form is live.
