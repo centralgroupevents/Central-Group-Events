@@ -15,6 +15,8 @@ The user committed to a maximum of 10 marketing texts per subscriber per month, 
 
 The user selected a website signup form as the planned SMS opt-in method. This is a planned flow, not proof that an SMS form is live.
 
+The user approved collecting date of birth on that form to block enrollment for entered ages under 21, separately from SMS consent. This is planned self-reported age screening; provider acceptance remains unverified.
+
 During registration preparation, the user stated: “no texts yet. only email”. Do not represent an existing SMS program or treat existing email subscribers as SMS opt-ins.
 
 **Why:** The user supplied these facts for A2P registration; do not invent registration answers or treat the website's older general-partnership wording as authoritative.
