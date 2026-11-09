@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConsentNotice } from "@/components/ConsentNotice";
-import cgeLogo from "@assets/CGE_logo_2026.png";
+const cgeLogo = "/cge-logo.png";
 
 interface SubscribeModalProps {
   open: boolean;

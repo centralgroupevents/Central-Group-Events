@@ -22,7 +22,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { PACKAGES, getIncludedPackageFeatures } from "@/lib/promotion-packages";
 import { getNextPromotionWindow } from "@/lib/promotion-window";
 import { BOOKING_DRAFT_KEY, BOOKING_ATTEMPT_KEY, BOOKING_TEXT_LIMIT, normalizeBookingDate, normalizeBookingTime, readBookingRecovery, removeBookingStorage, writeBookingDraft, writeBookingAttempt } from "@/lib/booking-draft";
-import cgeLogo from "@assets/CGE_logo_2026.png";
+const cgeLogo = "/cge-logo.png";
 
 // ─── T&C content (verbatim from existing modal) ─────────────────────────────
 

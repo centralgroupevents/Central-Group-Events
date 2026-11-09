@@ -27,7 +27,7 @@ import { SubscribeModal } from "@/components/SubscribeModal";
 import { HomepagePhotoStrip } from "@/components/HomepagePhotoStrip";
 import { InstagramFeed } from "@/components/InstagramFeed";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import cgeLogo from "@assets/CGE_logo_2026.png";
+const cgeLogo = "/cge-logo.png";
 
 // FAQ items for the homepage. Doubles as data for the FAQPage JSON-LD (rich
 // snippets in Google) AND the visible accordion. Wording targets the most

@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
 import { BTL_PAGE_DEFAULTS } from "@shared/btl-page";
 import { SEO } from "@/components/SEO";
-import aisleGoLogo from "@assets/aislego-logo.png";
+const aisleGoLogo = "/aislego-logo.png";
 
 // Build to Last Vol. 1 — standalone RSVP page. Deliberately NOT in the CGE
 // purple system: near-black + cream + gold, serif display. Personal, spare,
