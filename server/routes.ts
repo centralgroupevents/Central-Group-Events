@@ -1289,7 +1289,8 @@ ${blogList || "_No recent posts yet._"}
         const speakers = (body.speakers as Record<string, unknown>[])
           .map((sp) => ({
             name: String(sp.name ?? "").trim(),
-            credential: String(sp.credential ?? "").trim(),
+            // Keep line breaks: a role can sit on two lines on the speaker cards.
+            credential: String(sp.credential ?? "").replace(/\r\n/g, "\n").trim(),
             topic: String(sp.topic ?? "").trim(),
           }))
           .filter((sp) => sp.name);
