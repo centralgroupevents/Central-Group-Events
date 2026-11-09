@@ -35,6 +35,12 @@ function esc(s: string): string {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
+/** A role/position can be split over several lines: a new line or a "|"
+ *  starts the next line ("Founder & CEO | AisleGo"). */
+export function creditLines(credential: string): string[] {
+  return credential.split(/\r?\n|\|/).map((l) => l.trim()).filter(Boolean);
+}
+
 /** "Tammy Holloway, CIGI" → "tammy-holloway" (credentials after a comma dropped). */
 export function speakerSlug(name: string): string {
   return name
@@ -171,7 +177,7 @@ export function speakerCardsHtml(speakers: Array<{ name: string; credential: str
         <td width="86" valign="middle" style="padding:0 0 14px">${photo}</td>
         <td valign="middle" style="padding:0 0 14px">
           <div style="font-size:17px;font-weight:bold;line-height:1.3;color:#262118">${esc(s.name)}</div>
-          <div style="font-size:14px;line-height:1.4;color:#4a4130">${esc(s.credential)}</div>
+          <div style="font-size:14px;line-height:1.4;color:#4a4130">${creditLines(s.credential).map(esc).join("<br>")}</div>
           ${topic}${link}
         </td>
       </tr>`;

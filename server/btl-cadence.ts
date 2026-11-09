@@ -9,7 +9,7 @@
 
 import { storage } from "./storage";
 import { BTL_SLUG, btlTemplateDef, renderBtlText, paras } from "./btl-emails";
-import { speakerCardsHtml } from "./btl-brand";
+import { speakerCardsHtml, creditLines } from "./btl-brand";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
 import { deliverBtlEmail, btlRsvpUrl, btlSendPause, getBtlSettings, type BtlSettings } from "./btl-mailer";
 import { signToken, encodeEmail } from "./email-compliance";
@@ -139,7 +139,7 @@ export function buildBtlVars(
     ? `Attendee contact sheet (those who opted in): ${s.contactSheetUrl}`
     : "";
   const speakerLineup = s.speakers
-    .map((sp) => `- ${sp.name}, ${sp.credential}${sp.topic?.trim() ? ` — on ${sp.topic.trim()}` : ""}`)
+    .map((sp) => `- ${sp.name}, ${creditLines(sp.credential).join(", ")}${sp.topic?.trim() ? ` — on ${sp.topic.trim()}` : ""}`)
     .join("\n");
   return {
     name: recipient.name,
