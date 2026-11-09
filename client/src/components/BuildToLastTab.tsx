@@ -1107,6 +1107,114 @@ type BtlTemplate = {
   defaultBody: string;
 };
 
+type BtlRecipient = { name: string; email: string; invited: boolean; rsvped: boolean; unsubscribed: boolean; alreadySent: boolean; category: string | null };
+
+/** "Name <a@b.com>", "Name, a@b.com" or "a@b.com" per line → recipients. */
+function parseExtraRecipients(text: string): Array<{ name: string; email: string }> {
+  const out: Array<{ name: string; email: string }> = [];
+  for (const line of text.split(/\n|;/)) {
+    const l = line.trim();
+    if (!l) continue;
+    const m = /([^\s<>,]+@[^\s<>,]+\.[^\s<>,]+)/.exec(l);
+    if (!m) continue;
+    const email = m[1].toLowerCase();
+    const name = l.replace(m[1], "").replace(/[<>,]/g, " ").replace(/\s+/g, " ").trim() || email.split("@")[0];
+    out.push({ name, email });
+  }
+  return out;
+}
+
+/** Tick the people a template should go to — invitees and RSVPs in one list. */
+function RecipientPicker({ templateKey, sel, setSel, extra, setExtra }: {
+  templateKey: string;
+  sel: Record<string, string>;
+  setSel: (v: Record<string, string>) => void;
+  extra: string;
+  setExtra: (v: string) => void;
+}) {
+  const { data: people = [], isLoading } = useQuery<BtlRecipient[]>({ queryKey: [`/api/admin/btl/templates/${templateKey}/recipients`] });
+  const [filter, setFilter] = useState<"all" | "rsvped" | "invited" | "unsent">("all");
+  const [q, setQ] = useState("");
+  const shown = people.filter((p) => {
+    if (filter === "rsvped" && !p.rsvped) return false;
+    if (filter === "invited" && !p.invited) return false;
+    if (filter === "unsent" && p.alreadySent) return false;
+    const t = q.trim().toLowerCase();
+    return !t || p.name.toLowerCase().includes(t) || p.email.includes(t);
+  });
+  const pickable = shown.filter((p) => !p.unsubscribed);
+  const allShownPicked = pickable.length > 0 && pickable.every((p) => sel[p.email] !== undefined);
+  function toggle(p: BtlRecipient) {
+    const next = { ...sel };
+    if (next[p.email] !== undefined) delete next[p.email];
+    else next[p.email] = p.name;
+    setSel(next);
+  }
+  function toggleShown() {
+    const next = { ...sel };
+    if (allShownPicked) pickable.forEach((p) => delete next[p.email]);
+    else pickable.forEach((p) => { next[p.email] = p.name; });
+    setSel(next);
+  }
+  const chip = (id: typeof filter, label: string) => (
+    <button
+      type="button"
+      onClick={() => setFilter(id)}
+      className={`px-2.5 py-1 rounded-full text-xs border ${filter === id ? "bg-primary/20 border-primary/50 text-primary" : "border-white/15 text-white/60 hover:bg-white/5"}`}
+      data-testid={`chip-btl-pick-${id}`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {chip("all", "Everyone")}
+        {chip("rsvped", "RSVP'd")}
+        {chip("invited", "Invited")}
+        {chip("unsent", "Not sent this yet")}
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or email" className="bg-black/40 border-white/10 h-8 w-48 ml-auto" data-testid="input-btl-pick-search" />
+      </div>
+      <div className="flex items-center gap-3 text-xs text-white/60">
+        <button type="button" onClick={toggleShown} className="text-primary hover:underline" data-testid="button-btl-pick-all">
+          {allShownPicked ? "Clear these" : `Select all ${pickable.length} shown`}
+        </button>
+        {Object.keys(sel).length > 0 && (
+          <button type="button" onClick={() => setSel({})} className="hover:underline">Clear all</button>
+        )}
+        <span className="ml-auto">{Object.keys(sel).length} selected</span>
+      </div>
+      <div className="max-h-64 overflow-y-auto rounded-lg border border-white/10 divide-y divide-white/5">
+        {isLoading ? (
+          <div className="p-4 flex justify-center"><Loader2 className="w-4 h-4 animate-spin text-primary" /></div>
+        ) : shown.length === 0 ? (
+          <p className="p-4 text-xs text-muted-foreground">No one matches. Add people below, or import invitees in the Invites view.</p>
+        ) : (
+          shown.map((p) => (
+            <label key={p.email} className={`flex items-center gap-3 px-3 py-2 text-sm ${p.unsubscribed ? "opacity-40" : "cursor-pointer hover:bg-white/5"}`}>
+              <Checkbox checked={sel[p.email] !== undefined} disabled={p.unsubscribed} onCheckedChange={() => toggle(p)} data-testid={`checkbox-btl-pick-${p.email}`} />
+              <span className="min-w-0 flex-1">
+                <span className="text-white">{p.name}</span>
+                <span className="text-muted-foreground"> · {p.email}</span>
+              </span>
+              <span className="flex gap-1.5 shrink-0">
+                {p.rsvped && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">RSVP'd</span>}
+                {p.invited && !p.rsvped && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">invited</span>}
+                {p.alreadySent && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">already sent</span>}
+                {p.unsubscribed && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300">unsubscribed</span>}
+              </span>
+            </label>
+          ))
+        )}
+      </div>
+      <div className="space-y-1">
+        <Label className="text-white/70 text-xs">Add others (one per line: <span className="text-white/90">Name, email</span> or just an email)</Label>
+        <Textarea value={extra} onChange={(e) => setExtra(e.target.value)} rows={3} placeholder={"Equal Space team, hello@equalspace.com\nalnazir@example.com"} className="bg-black/40 border-white/10 text-sm" data-testid="textarea-btl-pick-extra" />
+      </div>
+    </div>
+  );
+}
+
 function TemplatesView() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1123,6 +1231,10 @@ function TemplatesView() {
   const [sendEmail, setSendEmail] = useState("");
   const [sendCc, setSendCc] = useState("");
   const [sendWhen, setSendWhen] = useState(""); // "" = now, else ET datetime-local
+  // "Pick people" mode: tick several recipients from invitees + RSVPs.
+  const [sendMode, setSendMode] = useState<"one" | "pick">("one");
+  const [pickSel, setPickSel] = useState<Record<string, string>>({});
+  const [pickExtra, setPickExtra] = useState("");
 
   async function sendToPerson() {
     if (!selected) return;
@@ -1151,6 +1263,49 @@ function TemplatesView() {
       setSendName("");
       setSendEmail("");
       setSendCc("");
+      setSendWhen("");
+    } catch (err) {
+      toast({ title: scheduling ? "Couldn't schedule" : "Send failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function sendToMany() {
+    if (!selected) return;
+    if (dirty) {
+      toast({ title: "Save the template first", description: "Sends use the saved version — hit Save template, then send.", variant: "destructive" });
+      return;
+    }
+    const merged = new Map<string, string>();
+    for (const [email, name] of Object.entries(pickSel)) merged.set(email, name);
+    for (const r of parseExtraRecipients(pickExtra)) if (!merged.has(r.email)) merged.set(r.email, r.name);
+    const recipients = Array.from(merged, ([email, name]) => ({ name, email }));
+    if (recipients.length === 0) {
+      toast({ title: "Pick at least one person", variant: "destructive" });
+      return;
+    }
+    const scheduling = sendWhen !== "";
+    const ccPart = sendCc.trim() ? ` (cc: ${sendCc.trim()})` : "";
+    const confirmMsg = scheduling
+      ? `Schedule "${selected.label}" to ${recipients.length} ${recipients.length === 1 ? "person" : "people"}${ccPart} for ${sendWhen.replace("T", " ")} ET? You can cancel each one from the Cadence view until it fires.`
+      : `Send "${selected.label}" to ${recipients.length} ${recipients.length === 1 ? "person" : "people"}${ccPart} now? Each gets their own email from centralgroupevents@gmail.com as Anthony.`;
+    if (!window.confirm(confirmMsg)) return;
+    setBusy("send");
+    try {
+      const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send-many`, { recipients, cc: sendCc.trim(), sendAtEt: sendWhen || undefined });
+      const body = await res.json();
+      const skipNote = body.skipped?.length ? ` · skipped ${body.skipped.length} (${body.skipped.map((x: { email: string; reason: string }) => `${x.email}: ${x.reason}`).join(", ")})` : "";
+      if (scheduling) {
+        toast({ title: `Scheduled ${body.scheduled}`, description: `Fires ${sendWhen.replace("T", " ")} ET — see the Cadence view to cancel.${skipNote}` });
+        qc.invalidateQueries({ queryKey: ["/api/admin/btl/scheduled"] });
+      } else {
+        const failNote = body.failed?.length ? ` · ${body.failed.length} failed (${body.failed.map((x: { email: string; error: string }) => `${x.email}: ${x.error}`).join("; ")})` : "";
+        toast({ title: `Sent to ${body.sent}`, description: `${failNote}${skipNote}`.replace(/^ · /, "") || undefined, variant: body.failed?.length ? "destructive" : "default" });
+        qc.invalidateQueries({ queryKey: [`/api/admin/btl/templates/${selected.key}/recipients`] });
+      }
+      setPickSel({});
+      setPickExtra("");
       setSendWhen("");
     } catch (err) {
       toast({ title: scheduling ? "Couldn't schedule" : "Send failed", description: String((err as Error).message), variant: "destructive" });
@@ -1296,6 +1451,45 @@ function TemplatesView() {
 
         {sendOpen && (
           <div className="bg-black/30 border border-primary/25 rounded-xl p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSendMode("one")}
+                className={`px-3 py-1.5 rounded-full text-xs border ${sendMode === "one" ? "bg-primary/20 border-primary/50 text-primary" : "border-white/15 text-white/60 hover:bg-white/5"}`}
+                data-testid="button-btl-sendmode-one"
+              >
+                One person
+              </button>
+              <button
+                type="button"
+                onClick={() => setSendMode("pick")}
+                className={`px-3 py-1.5 rounded-full text-xs border ${sendMode === "pick" ? "bg-primary/20 border-primary/50 text-primary" : "border-white/15 text-white/60 hover:bg-white/5"}`}
+                data-testid="button-btl-sendmode-pick"
+              >
+                Pick people
+              </button>
+            </div>
+            {sendMode === "pick" ? (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Tick who should get this email — each person gets their own copy with their name filled in. Unsubscribed people can't be picked.
+                  Immediate sends are limited to 40 at a time; choose a send time below to schedule up to 100.
+                </p>
+                <RecipientPicker templateKey={selected.key} sel={pickSel} setSel={setPickSel} extra={pickExtra} setExtra={setPickExtra} />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-white/70 text-xs">CC (optional)</Label>
+                    <Input value={sendCc} onChange={(e) => setSendCc(e.target.value)} placeholder="manager@…, team@…" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-pick-cc" />
+                  </div>
+                  <Button size="sm" onClick={sendToMany} disabled={busy !== "" || (Object.keys(pickSel).length === 0 && parseExtraRecipients(pickExtra).length === 0)} className="bg-primary hover:bg-primary/90 h-9" data-testid="button-btl-pick-send">
+                    {busy === "send" ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Send className="w-3.5 h-3.5 mr-1.5" />}
+                    {sendWhen ? "Schedule send" : `Send to ${Object.keys(pickSel).length + parseExtraRecipients(pickExtra).filter((r) => pickSel[r.email] === undefined).length || ""}`.trim()}
+                  </Button>
+                </div>
+                <WhenPicker value={sendWhen} onChange={setSendWhen} />
+              </>
+            ) : (
+              <>
             <p className="text-xs text-muted-foreground">
               Sends this template to one person (CC anyone who should see it, separated by commas) — their name fills {"{{name}}"} / {"{{first_name}}"}. Real send, no [TEST] tag.
               Made for the speaker emails, but any template works.
@@ -1319,6 +1513,8 @@ function TemplatesView() {
               </Button>
             </div>
             <WhenPicker value={sendWhen} onChange={setSendWhen} />
+              </>
+            )}
           </div>
         )}
 

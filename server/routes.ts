@@ -1397,6 +1397,108 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // ── Pick-who-to-send-to ────────────────────────────────────────────────
+  // People the admin can choose from for a template: invitees + RSVPs,
+  // de-duplicated by email, with flags for unsubscribed and "already sent
+  // this template" so nobody gets the same email twice by accident.
+  app.get("/api/admin/btl/templates/:key/recipients", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { BTL_SLUG: slug, btlTemplateDef } = await import("./btl-emails");
+      const key = String(req.params.key);
+      if (!btlTemplateDef(key)) return res.status(404).json({ message: `Unknown template "${key}"` });
+      const [invitees, rsvps, sent] = await Promise.all([
+        storage.listBtlInvitees(slug),
+        storage.listBtlRsvps(slug),
+        storage.listBtlEmailSentRecipients(slug, key),
+      ]);
+      const sentSet = new Set(sent);
+      const byEmail = new Map<string, { name: string; email: string; invited: boolean; rsvped: boolean; unsubscribed: boolean; alreadySent: boolean; category: string | null }>();
+      for (const i of invitees) {
+        const email = i.email.toLowerCase().trim();
+        byEmail.set(email, { name: i.name, email, invited: true, rsvped: false, unsubscribed: !!i.unsubscribed, alreadySent: sentSet.has(email), category: i.category ?? null });
+      }
+      for (const r of rsvps) {
+        const email = r.email.toLowerCase().trim();
+        const cur = byEmail.get(email);
+        if (cur) { cur.rsvped = true; cur.unsubscribed = cur.unsubscribed || !!r.unsubscribed; }
+        else byEmail.set(email, { name: r.name, email, invited: false, rsvped: true, unsubscribed: !!r.unsubscribed, alreadySent: sentSet.has(email), category: r.adminCategory ?? null });
+      }
+      res.json(Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (err) {
+      console.error("[btl/template recipients] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Send (or schedule) one template to a chosen list of people. Each person
+  // gets their own email with their own name filled in; unsubscribed
+  // addresses are skipped. Immediate sends are capped so the request stays
+  // short — use a send time for bigger lists.
+  app.post("/api/admin/btl/templates/:key/send-many", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { sendTemplateToPerson, parseCcList, EMAIL_RE } = await import("./btl-scheduled");
+      const { BTL_SLUG: slug, btlTemplateDef } = await import("./btl-emails");
+      const { btlSendPause } = await import("./btl-mailer");
+      const { etToUtc } = await import("./btl-cadence");
+      const key = String(req.params.key);
+      if (!btlTemplateDef(key)) return res.status(404).json({ message: `Unknown template "${key}"` });
+      const b = (req.body ?? {}) as { recipients?: Array<{ name?: string; email?: string }>; cc?: string; sendAtEt?: string };
+      if (!Array.isArray(b.recipients) || b.recipients.length === 0) return res.status(400).json({ message: "Pick at least one person" });
+      let ccList: string[];
+      try { ccList = parseCcList(b.cc); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+
+      // Clean + de-duplicate, then drop anyone who unsubscribed.
+      const seen = new Set<string>();
+      const people: Array<{ name: string; email: string }> = [];
+      const skipped: Array<{ email: string; reason: string }> = [];
+      for (const r of b.recipients) {
+        const email = String(r?.email || "").trim().toLowerCase();
+        const name = String(r?.name || "").trim() || email.split("@")[0];
+        if (!EMAIL_RE.test(email)) { skipped.push({ email: email || "(blank)", reason: "invalid email" }); continue; }
+        if (seen.has(email)) continue;
+        seen.add(email);
+        people.push({ name, email });
+      }
+      const [invitees, rsvps] = await Promise.all([storage.listBtlInvitees(slug), storage.listBtlRsvps(slug)]);
+      const unsub = new Set<string>([
+        ...invitees.filter((i) => i.unsubscribed).map((i) => i.email.toLowerCase().trim()),
+        ...rsvps.filter((r) => r.unsubscribed).map((r) => r.email.toLowerCase().trim()),
+      ]);
+      const targets = people.filter((p) => {
+        if (unsub.has(p.email)) { skipped.push({ email: p.email, reason: "unsubscribed" }); return false; }
+        return true;
+      });
+      if (targets.length === 0) return res.status(400).json({ message: "No one left to send to (everyone selected is unsubscribed or invalid)", skipped });
+
+      if (b.sendAtEt) {
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(b.sendAtEt))) return res.status(400).json({ message: "Pick a send date and time" });
+        const sendAt = etToUtc(String(b.sendAtEt));
+        if (Number.isNaN(sendAt.getTime())) return res.status(400).json({ message: "Invalid send time" });
+        if (sendAt.getTime() < Date.now() - 60_000) return res.status(400).json({ message: "That time has already passed — pick a future time" });
+        if (sendAt.getTime() > Date.now() + 366 * 24 * 3600_000) return res.status(400).json({ message: "Pick a time within the next year" });
+        if (targets.length > 100) return res.status(400).json({ message: "Schedule up to 100 people at a time" });
+        for (const t of targets) {
+          await storage.createBtlScheduledSend({ kind: "person", templateKey: key, recipientName: t.name, recipientEmail: t.email, cc: ccList.join(", ") || null, inviteeIds: null, sendAt });
+        }
+        return res.status(201).json({ scheduled: targets.length, skipped });
+      }
+
+      if (targets.length > 40) return res.status(400).json({ message: "Send up to 40 people at once, or pick a send time to schedule more" });
+      let sent = 0;
+      const failed: Array<{ email: string; error: string }> = [];
+      for (const t of targets) {
+        const r = await sendTemplateToPerson(key, t.name, t.email, ccList);
+        if (r.ok) { sent++; await btlSendPause(); }
+        else failed.push({ email: t.email, error: r.error });
+      }
+      res.json({ sent, failed, skipped });
+    } catch (err) {
+      console.error("[btl/template send-many] error:", err);
+      const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
+      res.status(500).json({ message: `Send failed: ${detail}` });
+    }
+  });
+
   // ── Scheduled sends ────────────────────────────────────────────────────
   // Queue a speaker/one-off template send or the initial invites for later.
   // sendAtEt is a datetime-local string ("YYYY-MM-DDTHH:mm") read as
