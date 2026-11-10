@@ -704,6 +704,15 @@ export const btlRsvpInputSchema = z.object({
 });
 export type BtlRsvpInput = z.infer<typeof btlRsvpInputSchema>;
 
+/** "@name", "name", "instagram.com/name/" or a full profile URL → "@name",
+ *  or null when it isn't a valid Instagram handle (letters, digits, "." "_", ≤30). */
+export function normalizeInstagramHandle(raw: string | null | undefined): string | null {
+  let h = String(raw ?? "").trim();
+  if (!h) return null;
+  h = h.replace(/^https?:\/\//i, "").replace(/^(www\.)?instagram\.com\//i, "").split(/[/?#]/)[0].replace(/^@+/, "").trim().toLowerCase();
+  return /^[a-z0-9._]{1,30}$/.test(h) ? `@${h}` : null;
+}
+
 // Build to Last sends queued for later. Processed by the hourly cron tick:
 // kind "person" = one template to one name/email (+ optional CC, e.g. a
 // speaker email); kind "invitees" = the initial invite to a snapshot of

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { Loader2 } from "lucide-react";
-import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
+import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS, normalizeInstagramHandle } from "@shared/schema";
 import { BTL_PAGE_DEFAULTS } from "@shared/btl-page";
 import { SEO } from "@/components/SEO";
 const aisleGoLogo = "/aislego-logo.png";
@@ -122,6 +122,7 @@ export default function BuildToLast() {
   const [interests, setInterests] = useState<Set<string>>(new Set());
   const [otherChecked, setOtherChecked] = useState(false);
   const [otherText, setOtherText] = useState("");
+  const [instagram, setInstagram] = useState("");
 
   function toggleInterest(key: string) {
     const next = new Set(interests);
@@ -158,7 +159,7 @@ export default function BuildToLast() {
           name: effectiveName,
           email: email.trim().toLowerCase(),
           role: "",
-          companyOrHandle: null,
+          companyOrHandle: normalizeInstagramHandle(instagram),
           workingOnNow: "",
           keyQuestion: "",
           topicInterests: Array.from(interests),
@@ -293,6 +294,18 @@ export default function BuildToLast() {
                   </Field>
                 </>
               )}
+              <Field label="Instagram (optional)" helper="Your @handle, so we can connect with you after the night.">
+                <input
+                  style={inputStyle}
+                  value={instagram}
+                  onChange={(e) => setInstagram(e.target.value)}
+                  placeholder="@yourhandle"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-testid="input-btl-instagram"
+                />
+              </Field>
               <Field
                 label="What are you most looking to walk away with? *"
                 helper="Pick as many as apply — it helps us set the room and the conversations."
