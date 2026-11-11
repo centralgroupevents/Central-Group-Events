@@ -163,6 +163,8 @@ export interface BtlSettings {
   venueAddress: string;
   doorsTime: string;
   programStartTime: string;
+  /** When the night wraps (the "Night cap" line on the page and in emails). */
+  nightCapTime: string;
   questionThemes: string;
   speakers: Array<{ name: string; credential: string; topic: string }>;
   /** True once the admin has saved speakers in Settings (the built-in panel
@@ -180,6 +182,7 @@ const BTL_DEFAULTS: BtlSettings = {
   venueAddress: "Equal Space, Newark, NJ",
   doorsTime: "6:00 PM",
   programStartTime: "7:00 PM",
+  nightCapTime: "8:30 PM",
   questionThemes: "",
   speakers: BTL_SPEAKER_DEFAULTS,
   speakersSaved: false,
@@ -192,7 +195,7 @@ const BTL_DEFAULTS: BtlSettings = {
 export async function getBtlSettings(): Promise<BtlSettings> {
   const out: BtlSettings = { ...BTL_DEFAULTS };
   const stringKeys: Array<keyof BtlSettings> = [
-    "rsvpUrl", "venueName", "venueAddress", "doorsTime", "programStartTime",
+    "rsvpUrl", "venueName", "venueAddress", "doorsTime", "programStartTime", "nightCapTime",
     "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl",
   ];
   for (const key of stringKeys) {

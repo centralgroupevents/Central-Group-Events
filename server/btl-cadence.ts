@@ -161,6 +161,7 @@ export function buildBtlVars(
     venue_address: s.venueAddress,
     doors_time: s.doorsTime,
     program_start_time: s.programStartTime,
+    night_cap_time: s.nightCapTime,
     confirmed_count: String(ctx.confirmedCount),
     question_themes: s.questionThemes,
     category_breakdown: ctx.breakdown,

@@ -1132,7 +1132,16 @@ ${blogList || "_No recent posts yet._"}
 
   app.get("/api/build-to-last/content", async (_req: Request, res: Response) => {
     try {
-      res.json(await loadBtlPageContent());
+      // The public page fills {{doors_time}} etc. from the event Settings;
+      // the admin editor (below) gets the raw text with the tokens intact.
+      const copy = await loadBtlPageContent();
+      const { getBtlSettings } = await import("./btl-mailer");
+      const { renderBtlText } = await import("./btl-emails");
+      const st = await getBtlSettings();
+      const vars = { doors_time: st.doorsTime, program_start_time: st.programStartTime, night_cap_time: st.nightCapTime, venue_name: st.venueName };
+      for (const k of Object.keys(copy)) copy[k] = renderBtlText(copy[k], vars);
+      res.setHeader("Cache-Control", "no-store");
+      res.json(copy);
     } catch (err) {
       console.error("[btl/page content] error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -1296,7 +1305,7 @@ ${blogList || "_No recent posts yet._"}
   app.put("/api/admin/btl/settings", requireAuth(), async (req: Request, res: Response) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const stringKeys = ["rsvpUrl", "venueName", "venueAddress", "doorsTime", "programStartTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
+      const stringKeys = ["rsvpUrl", "venueName", "venueAddress", "doorsTime", "programStartTime", "nightCapTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
       for (const key of stringKeys) {
         if (typeof body[key] === "string") await storage.setSetting(`btl.${key}`, String(body[key]).slice(0, 4000));
       }

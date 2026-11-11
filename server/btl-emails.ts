@@ -139,7 +139,7 @@ Founder, Central Group Events`,
   {
     key: "initial_invite",
     label: "Initial invites",
-    placeholders: ["name", "first_name", "rsvp_url", "venue_name", "doors_time", "program_start_time", "speaker_cards"],
+    placeholders: ["name", "first_name", "rsvp_url", "venue_name", "doors_time", "program_start_time", "speaker_cards", "night_cap_time"],
     subject: "You're invited — Build to Last, Nov 12 in Newark",
     body: `Hey {{name}},
 
@@ -168,7 +168,7 @@ Promoting events across this state, we've come across so many influential, hardw
 
 {{doors_time}} — Doors open. Introductions and open bar.
 {{program_start_time}} — Moderated conversations centered around event planning, spaces, and brand building in NJ
-8:30 PM — Night cap
+{{night_cap_time}} — Night cap
 
 ✦ THE DETAILS
 
@@ -185,7 +185,7 @@ Founder, Central Group Events`,
   {
     key: "nudge_1d",
     label: "RSVP nudge (24h, no response)",
-    placeholders: ["name", "first_name", "rsvp_url", "venue_name", "doors_time"],
+    placeholders: ["name", "first_name", "rsvp_url", "venue_name", "doors_time", "night_cap_time"],
     subject: "Can I count you in? — Build to Last, Nov 12",
     body: `Hey {{name}},
 
@@ -193,7 +193,7 @@ Anthony from Central Group Events — floating my invite back to the top of your
 
 In about three weeks, we're hosting Build to Last — an invite-only mixer for the planners, venue owners, and creators we've met promoting events across New Jersey. People who curate spaces and places here, and believe this state is only going to open up more for people like us.
 
-Thursday, November 12 · {{doors_time}}–8:30 PM · {{venue_name}}, Newark. Open bar, small bites, a photographer on site, and moderated conversations mid-evening on event planning, spaces, and brand building in NJ.
+Thursday, November 12 · {{doors_time}}–{{night_cap_time}} · {{venue_name}}, Newark. Open bar, small bites, a photographer on site, and moderated conversations mid-evening on event planning, spaces, and brand building in NJ.
 
 It's free, and the room is set by invitation. I'd love to have you — can I count you in?
 
@@ -375,7 +375,7 @@ The centerpiece of the evening is a series of moderated conversations on event p
 ✦ THE DETAILS
 
 ✔ Thursday, November 12 · {{venue_name}}, Newark
-✔ Doors at {{doors_time}} with an open bar · conversations begin at {{program_start_time}} · the evening closes at 8:30 PM
+✔ Doors at {{doors_time}} with an open bar · conversations begin at {{program_start_time}} · the evening closes at {{night_cap_time}}
 ✔ Your role: a moderated conversation — no slides or prepared remarks required, simply your perspective in an engaged room
 ✔ The night is professionally photographed; you will receive the full set of edited photos, free to share
 
@@ -391,7 +391,7 @@ Founder, Central Group Events`,
   {
     key: "speaker_confirm",
     label: "Speaker — confirmed + what I need",
-    placeholders: ["name", "first_name", "venue_name", "doors_time", "program_start_time"],
+    placeholders: ["name", "first_name", "venue_name", "doors_time", "program_start_time", "night_cap_time"],
     subject: "You're on — Build to Last, Nov 12",
     body: `Hey {{first_name}},
 

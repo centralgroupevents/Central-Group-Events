@@ -75,6 +75,7 @@ type BtlSettings = {
   venueAddress: string;
   doorsTime: string;
   programStartTime: string;
+  nightCapTime: string;
   questionThemes: string;
   speakers: Array<{ name: string; credential: string; topic: string }>;
   speakersSaved?: boolean;
@@ -1840,7 +1841,7 @@ function SettingsView() {
   return (
     <div className="space-y-5 max-w-3xl">
       <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-4">
-        <h3 className="font-bold text-white">Venue & times (fill into every email)</h3>
+        <h3 className="font-bold text-white">Venue & times (fill into every email and the RSVP page)</h3>
         <div>
           <Label className="text-white/70 text-xs">Sign-up link (sponsor/AisleGo) — every RSVP button in the emails points here; leave blank to use /build-to-last</Label>
           <Input value={s.rsvpUrl ?? ""} onChange={(e) => set("rsvpUrl", e.target.value)} placeholder="https://www.aislego.com/…" className={inputCls} data-testid="input-btl-rsvp-url" />
@@ -1850,6 +1851,7 @@ function SettingsView() {
           <div><Label className="text-white/70 text-xs">Venue address (shown in logistics + "Tomorrow" email)</Label><Input value={s.venueAddress} onChange={(e) => set("venueAddress", e.target.value)} className={inputCls} data-testid="input-btl-venue-address" /></div>
           <div><Label className="text-white/70 text-xs">Doors time</Label><Input value={s.doorsTime} onChange={(e) => set("doorsTime", e.target.value)} className={inputCls} /></div>
           <div><Label className="text-white/70 text-xs">Programming starts</Label><Input value={s.programStartTime} onChange={(e) => set("programStartTime", e.target.value)} className={inputCls} /></div>
+          <div><Label className="text-white/70 text-xs">Night cap / end time</Label><Input value={s.nightCapTime ?? ""} onChange={(e) => set("nightCapTime", e.target.value)} className={inputCls} data-testid="input-btl-night-cap-time" /></div>
         </div>
       </div>
 
