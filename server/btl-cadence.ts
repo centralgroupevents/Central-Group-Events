@@ -9,7 +9,7 @@
 
 import { storage } from "./storage";
 import { BTL_SLUG, btlTemplateDef, renderBtlText, paras } from "./btl-emails";
-import { speakerCardsHtml, creditLines } from "./btl-brand";
+import { speakerCardsHtml, creditLines, aislegoCardHtml, equalSpaceCardHtml, founderCardHtml } from "./btl-brand";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
 import { deliverBtlEmail, btlRsvpUrl, btlSendPause, getBtlSettings, type BtlSettings } from "./btl-mailer";
 import { signToken, encodeEmail } from "./email-compliance";
@@ -169,6 +169,9 @@ export function buildBtlVars(
     // Swapped for the photo cards after the text is rendered (see
     // renderBtlFromTexts) — the cards are HTML, the templates are text.
     speaker_cards: SPEAKER_CARDS_MARK,
+    aislego_card: "[[aislego_card]]",
+    equal_space_card: "[[equal_space_card]]",
+    founder_card: "[[founder_card]]",
     photo_gallery_url: s.photoGalleryUrl,
     recap_video_url: s.recapVideoUrl,
     field_notes_url: s.fieldNotesUrl,
@@ -189,10 +192,11 @@ export function renderBtlFromTexts(
   return {
     subject: renderBtlText(texts.subject, vars),
     // The marker sits alone in its own paragraph; replace that whole <p>.
-    body: paras(renderBtlText(texts.body, vars)).replace(
-      /<p[^>]*>\[\[speaker_cards\]\]<\/p>/g,
-      () => cards,
-    ),
+    body: paras(renderBtlText(texts.body, vars))
+      .replace(/<p[^>]*>\[\[speaker_cards\]\]<\/p>/g, () => cards)
+      .replace(/<p[^>]*>\[\[aislego_card\]\]<\/p>/g, () => aislegoCardHtml())
+      .replace(/<p[^>]*>\[\[equal_space_card\]\]<\/p>/g, () => equalSpaceCardHtml())
+      .replace(/<p[^>]*>\[\[founder_card\]\]<\/p>/g, () => founderCardHtml()),
   };
 }
 
