@@ -377,6 +377,104 @@ function etLabel(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET";
 }
 
+type NameFix = { kind: "invitee" | "rsvp"; id: number; before: string; after: string; brand: boolean };
+
+/** Preview → apply standard capitalization to invitee and RSVP names. */
+function NameCleanup({ onDone }: { onDone: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [fixes, setFixes] = useState<NameFix[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const keyOf = (f: NameFix) => `${f.kind}:${f.id}`;
+
+  async function openIt() {
+    setOpen(true);
+    setFixes(null);
+    try {
+      const res = await apiRequest("GET", "/api/admin/btl/names/preview");
+      const rows: NameFix[] = await res.json();
+      setFixes(rows);
+      // Brand-like names ("brwnbox") start unticked — they may be intentional.
+      setPicked(new Set(rows.filter((r) => !r.brand).map(keyOf)));
+    } catch (err) {
+      toast({ title: "Couldn't load names", description: String((err as Error).message), variant: "destructive" });
+      setOpen(false);
+    }
+  }
+
+  async function apply() {
+    if (!fixes) return;
+    setBusy(true);
+    try {
+      const items = fixes.filter((f) => picked.has(keyOf(f))).map((f) => ({ kind: f.kind, id: f.id }));
+      const res = await apiRequest("POST", "/api/admin/btl/names/apply", { items });
+      const body = await res.json();
+      toast({ title: `Cleaned ${body.invitees + body.rsvps} names`, description: `${body.invitees} on the invite list, ${body.rsvps} RSVPs.` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/invitees"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/rsvps"] });
+      setOpen(false);
+      onDone();
+    } catch (err) {
+      toast({ title: "Couldn't apply", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button variant="outline" onClick={openIt} className="border-white/20 text-white/80" data-testid="button-btl-clean-names">
+        <Pencil className="w-4 h-4 mr-1.5" /> Clean up names
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl bg-secondary border-white/10" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="text-white">Clean up names</DialogTitle>
+          </DialogHeader>
+          {fixes === null ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : fixes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">Every name already has standard capitalization.</p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Tick the changes to make. Names that look like a brand or handle (one lowercase word) start unticked. Names already in mixed case, like McKay or DeShawn, are never touched.
+              </p>
+              <div className="flex items-center gap-3 text-xs">
+                <button type="button" className="text-primary hover:underline" onClick={() => setPicked(new Set(fixes.map(keyOf)))}>Select all</button>
+                <button type="button" className="text-white/60 hover:underline" onClick={() => setPicked(new Set())}>Clear</button>
+                <span className="ml-auto text-white/60">{picked.size} of {fixes.length} selected</span>
+              </div>
+              <div className="max-h-80 overflow-y-auto rounded-lg border border-white/10 divide-y divide-white/5">
+                {fixes.map((f) => (
+                  <label key={keyOf(f)} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-white/5">
+                    <Checkbox
+                      checked={picked.has(keyOf(f))}
+                      onCheckedChange={() => { const n = new Set(picked); if (n.has(keyOf(f))) n.delete(keyOf(f)); else n.add(keyOf(f)); setPicked(n); }}
+                      data-testid={`checkbox-btl-namefix-${keyOf(f)}`}
+                    />
+                    <span className="text-white/50 line-through">{f.before}</span>
+                    <span className="text-white">→ {f.after}</span>
+                    <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">{f.kind === "rsvp" ? "RSVP" : "invite list"}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={apply} disabled={busy || picked.size === 0} className="bg-primary hover:bg-primary/90" data-testid="button-btl-apply-names">
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Check className="w-4 h-4 mr-1.5" />}
+                  Apply {picked.size} {picked.size === 1 ? "change" : "changes"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function InvitesView() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -540,6 +638,7 @@ function InvitesView() {
             <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={busy !== ""} className="border-white/20 text-white/80">
               <Upload className="w-4 h-4 mr-1.5" /> Import CSV
             </Button>
+            <NameCleanup onDone={() => qc.invalidateQueries({ queryKey: ["/api/admin/btl/invitees"] })} />
             <Button onClick={sendInitial} disabled={busy !== "" || (selected.size === 0 && pendingInitial === 0)} className="bg-primary hover:bg-primary/90" data-testid="button-btl-send-initial">
               {busy === "initial" ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
               {selected.size > 0 ? `Send Invite to Selected (${selected.size})` : `Send Initial Invites (${pendingInitial})`}

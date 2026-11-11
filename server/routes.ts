@@ -713,6 +713,9 @@ ${blogList || "_No recent posts yet._"}
     try {
       const { btlRsvpInputSchema } = await import("@shared/schema");
       const input = btlRsvpInputSchema.parse(req.body);
+      // Standard capitalization for names typed in lowercase / ALL CAPS.
+      const { normalizePersonName } = await import("@shared/btl-names");
+      input.name = normalizePersonName(input.name);
       // Personalized links (from the thank-you email) carry a signed
       // identity: e = base64url email, t = HMAC. A valid pair overrides the
       // typed email and allows re-submitting to update earlier answers.
@@ -1422,6 +1425,52 @@ ${blogList || "_No recent posts yet._"}
       console.error("[btl/template send] error:", err);
       const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
       res.status(500).json({ message: `Send failed: ${detail}` });
+    }
+  });
+
+  // ── Name clean-up ──────────────────────────────────────────────────────
+  // Standard capitalization for the guest list. Preview first (nothing is
+  // changed), then apply the rows the admin ticked; the server recomputes
+  // each new name itself rather than trusting the browser.
+  async function btlNameFixes() {
+    const { BTL_SLUG: slug } = await import("./btl-emails");
+    const { normalizePersonName, looksLikeBrandOrHandle } = await import("@shared/btl-names");
+    const [invitees, rsvps] = await Promise.all([storage.listBtlInvitees(slug), storage.listBtlRsvps(slug)]);
+    const out: Array<{ kind: "invitee" | "rsvp"; id: number; before: string; after: string; brand: boolean }> = [];
+    for (const i of invitees) {
+      const after = normalizePersonName(i.name);
+      if (after !== i.name) out.push({ kind: "invitee", id: i.id, before: i.name, after, brand: looksLikeBrandOrHandle(i.name) });
+    }
+    for (const r of rsvps) {
+      const after = normalizePersonName(r.name);
+      if (after !== r.name) out.push({ kind: "rsvp", id: r.id, before: r.name, after, brand: looksLikeBrandOrHandle(r.name) });
+    }
+    return out;
+  }
+
+  app.get("/api/admin/btl/names/preview", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      res.json(await btlNameFixes());
+    } catch (err) {
+      console.error("[btl/names preview] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/btl/names/apply", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const items = Array.isArray((req.body as { items?: unknown[] })?.items) ? ((req.body as { items: Array<{ kind?: string; id?: number }> }).items) : [];
+      const wanted = new Set(items.map((i) => `${i.kind}:${Number(i.id)}`));
+      let invitees = 0, rsvps = 0;
+      for (const f of await btlNameFixes()) {
+        if (!wanted.has(`${f.kind}:${f.id}`)) continue;
+        if (f.kind === "invitee") { await storage.updateBtlInvitee(f.id, { name: f.after }); invitees++; }
+        else { await storage.updateBtlRsvp(f.id, { name: f.after }); rsvps++; }
+      }
+      res.json({ invitees, rsvps });
+    } catch (err) {
+      console.error("[btl/names apply] error:", err);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
