@@ -123,6 +123,7 @@ export default function BuildToLast() {
   const [otherChecked, setOtherChecked] = useState(false);
   const [otherText, setOtherText] = useState("");
   const [instagram, setInstagram] = useState("");
+  const [position, setPosition] = useState("");
 
   function toggleInterest(key: string) {
     const next = new Set(interests);
@@ -142,6 +143,14 @@ export default function BuildToLast() {
       setError("Please fill in your name and email.");
       return;
     }
+    if (!position.trim()) {
+      setError("Please add your position — like Event planner or Venue owner.");
+      return;
+    }
+    if (!normalizeInstagramHandle(instagram)) {
+      setError("Please add your Instagram handle — like @yourhandle.");
+      return;
+    }
     const other = otherChecked ? otherText.trim() : "";
     if (interests.size === 0 && !other) {
       setError("Pick at least one — it helps us set the room.");
@@ -158,7 +167,7 @@ export default function BuildToLast() {
         body: JSON.stringify({
           name: effectiveName,
           email: email.trim().toLowerCase(),
-          role: "",
+          role: position.trim(),
           companyOrHandle: normalizeInstagramHandle(instagram),
           workingOnNow: "",
           keyQuestion: "",
@@ -294,7 +303,18 @@ export default function BuildToLast() {
                   </Field>
                 </>
               )}
-              <Field label="Instagram (optional)" helper="Your @handle, so we can connect with you after the night.">
+              <Field label="Your position *" helper="Your role or what you do — like Event planner, Venue owner, DJ, Creator.">
+                <input
+                  style={inputStyle}
+                  value={position}
+                  onChange={(e) => setPosition(e.target.value)}
+                  maxLength={200}
+                  placeholder="e.g. Event planner"
+                  required
+                  data-testid="input-btl-position"
+                />
+              </Field>
+              <Field label="Instagram *" helper="Your @handle, so we can connect with you after the night.">
                 <input
                   style={inputStyle}
                   value={instagram}
@@ -303,6 +323,7 @@ export default function BuildToLast() {
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
+                  required
                   data-testid="input-btl-instagram"
                 />
               </Field>
