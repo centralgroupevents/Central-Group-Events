@@ -193,12 +193,40 @@ export function speakerCardsHtml(speakers: Array<{ name: string; credential: str
  * text so the credit is never lost.
  */
 export function partnersFooterHtml(): string {
-  const cell = (cid: string, file: string, alt: string, label: string, w: number) =>
+  const cell = (cid: string, file: string, alt: string, label: string, h: number) =>
     hasAsset(file)
-      ? `<td align="center" valign="middle" style="padding:0 18px"><img src="cid:${cid}" alt="${alt}" height="44" style="display:block;height:44px;width:auto;max-width:${w}px;margin:0 auto 6px;border:0" /><div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#9a917f">${label}</div></td>`
+      ? `<td align="center" valign="middle" style="padding:0 18px"><img src="cid:${cid}" alt="${alt}" height="${h}" style="display:block;height:${h}px;width:auto;margin:0 auto 6px;border:0" /><div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#9a917f">${label}</div></td>`
       : `<td align="center" valign="middle" style="padding:0 18px"><div style="font-size:15px;font-weight:bold;color:#262118">${alt}</div><div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#9a917f">${label}</div></td>`;
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:34px auto 0;border-top:1px solid #e6dcc6;padding-top:22px"><tr>
-    ${cell(AISLEGO_LOGO_CID, "aislego-logo.png", "AisleGo", "Executive Sponsor", 90)}
-    ${cell(EQUAL_SPACE_LOGO_CID, "equal-space-logo.png", "Equal Space", "Venue partner", 150)}
+    ${cell(AISLEGO_LOGO_CID, "aislego-logo.png", "AisleGo", "Executive Sponsor", 44)}
+    ${cell(EQUAL_SPACE_LOGO_CID, "equal-space-logo.png", "Equal Space", "Venue partner", 36)}
   </tr></table>`;
+}
+
+const CARD = "border:1px solid #e6dcc6;border-radius:6px;background:#ffffff;margin:6px 0 22px";
+const CARD_LABEL = "font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:#9a917f";
+
+/** Centered AisleGo card for {{aislego_card}}: logo, name, "Executive Sponsor". */
+export function aislegoCardHtml(): string {
+  const logo = hasAsset("aislego-logo.png")
+    ? `<img src="cid:${AISLEGO_LOGO_CID}" alt="AisleGo" width="84" height="84" style="display:block;width:84px;height:84px;margin:0 auto 8px;border:0" />`
+    : "";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${CARD}"><tr><td align="center" style="padding:22px 16px">
+    ${logo}<div style="font-size:22px;font-weight:bold;line-height:1.2;color:#262118">AisleGo</div>
+    <div style="${CARD_LABEL};margin-top:4px">Executive Sponsor</div></td></tr></table>`;
+}
+
+/** Centered Equal Space card for {{equal_space_card}}: logo, name, location. */
+export function equalSpaceCardHtml(): string {
+  const logo = hasAsset("equal-space-logo.png")
+    ? `<img src="cid:${EQUAL_SPACE_LOGO_CID}" alt="Equal Space" width="170" style="display:block;width:170px;height:auto;margin:0 auto 10px;border:0;border-radius:6px" />`
+    : "";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${CARD}"><tr><td align="center" style="padding:22px 16px">
+    ${logo}<div style="font-size:22px;font-weight:bold;line-height:1.2;color:#262118">Equal Space</div>
+    <div style="${CARD_LABEL};margin-top:4px">Newark, NJ · Venue partner</div></td></tr></table>`;
+}
+
+/** TC Cuthbertson's photo card for {{founder_card}} (same look as the panel cards). */
+export function founderCardHtml(): string {
+  return speakerCardsHtml([{ name: "TC Cuthbertson", credential: "Founder & CEO, AisleGo\nOn Thursday's panel" }]);
 }

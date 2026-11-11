@@ -551,6 +551,76 @@ See you Thursday.
 — Anthony
 Founder, Central Group Events`,
   },
+  {
+    key: "sponsor_aislego",
+    label: "Meet our Executive Sponsor — AisleGo",
+    placeholders: ["name", "first_name", "aislego_card", "founder_card"],
+    subject: "Our biggest thank-you: meet AisleGo, our Executive Sponsor",
+    body: `Hey {{name}},
+
+✦ OUR BIGGEST THANK-YOU
+
+Built to Last is happening because of one partner above all: our Executive Sponsor, AisleGo. Their support is what makes Thursday possible, and the whole Central Group Events team couldn't be more grateful.
+
+{{aislego_card}}
+
+✦ WHO THEY ARE
+
+AisleGo is a booking platform for group experiences and events. Hosts can search for vendors, see pricing and availability, message them, and book and pay, all in one app. Vendors get their own storefront to list services and prices, manage leads, schedule tours and calls, and get paid through the platform.
+
+✦ HOW LONG THEY'VE BEEN AT IT
+
+AisleGo has been going since 2017. It grew out of EventRoostr, the events company founder TC Cuthbertson built through hands-on work in the business, including managing venues right here in New Jersey.
+
+✦ THE FOUNDER
+
+{{founder_card}}
+
+TC's path is a lesson in adapting. He started with TripRoostr, a trip-planning platform. When the market shifted, with the launch of Airbnb Experiences, he scrapped it and rebuilt around events. He then ran venues in New Jersey and Pennsylvania, and turned what he learned on the ground into software that helps small event businesses get found, priced and paid online.
+
+In an economy where the way people discover, book and pay keeps changing, that willingness to adapt is exactly what Built to Last is about.
+
+✦ MEET HIM THURSDAY
+
+Please stop by and meet TC in person. Ask him about the perks AisleGo offers hosts and vendors, and where the platform is headed next, including the gaps in the ticketing industry they plan to address.
+
+[Visit AisleGo](https://aislego.co)
+
+Thank you again, TC and the whole AisleGo team, for believing in this room and making Thursday happen.
+
+— The Central Group Events team`,
+  },
+  {
+    key: "sponsor_equal_space",
+    label: "Welcome + thanks — Equal Space",
+    placeholders: ["name", "first_name", "equal_space_card"],
+    subject: "Welcome to Equal Space, and thank you",
+    body: `Hey {{name}},
+
+✦ WELCOME, AND THANK YOU
+
+Thursday night we're guests at Equal Space in Newark. A warm welcome to everyone coming, and a big thank-you from the Central Group Events team to the Equal Space team for opening their doors to Built to Last.
+
+{{equal_space_card}}
+
+✦ WHO THEY ARE
+
+Equal Space is a Newark coworking and community campus built for entrepreneurs, creatives and builders, with a mission of helping local entrepreneurs and small businesses, largely led by women, people of color and members of the LGBTQ+ community, succeed. Members get meeting rooms, a podcast studio, event space and access to mentors, investors and partners.
+
+✦ HOW LONG THEY'VE BEEN AT IT
+
+Equal Space was co-founded in 2014 by Citi Medina and Ralphie Roman. Medina moved to Newark from Brooklyn, saw that no co-working space served people of color, and built one. It began with ES89 at 89 Market Street, a social justice and creative campus. In May 2024 it opened ES550, a 50,000-square-foot tech and innovation campus at 550 Broad Street, supported by a $2 million grant from the New Jersey Economic Development Authority.
+
+✦ WHY IT MATTERS
+
+As work gets more independent and flexible, Equal Space gives Newark's small businesses and creatives a place to work, to meet, and to grow, and it shows what building the local economy from the inside looks like. That is the spirit of this evening.
+
+✦ COME SAY HELLO
+
+Arrive a little early, look around, and say thank you to the team. We're proud to be in their room.
+
+— The Central Group Events team`,
+  },
 ];
 
 export function btlTemplateDef(key: string): BtlTemplateDef | undefined {
