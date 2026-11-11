@@ -1,6 +1,10 @@
 // Build to Last — editable page copy. Every block of prose on /build-to-last
 // lives here as a default; the admin can override any field from the
 // Build to Last → Page view (stored in app_settings as "btl.page.<key>").
+// Times and the venue name can be written as {{doors_time}},
+// {{program_start_time}}, {{night_cap_time}} and {{venue_name}}; the public page
+// fills them from Admin → Build to Last → Settings, so one edit updates
+// the page and the emails together.
 // An override left blank falls back to the default below, so clearing a
 // field in the editor restores the original copy.
 
@@ -19,7 +23,7 @@ export const BTL_PAGE_FIELDS: BtlPageField[] = [
   { key: "expect", label: "What to Expect", help: "One bullet per line. Text before \" — \" renders bold.", multiline: true },
   { key: "walkAway", label: "You'll Walk Away With", help: "One bullet per line.", multiline: true },
   { key: "essentials", label: "The Essentials", help: "One bullet per line.", multiline: true },
-  { key: "flow", label: "Event Flow", help: "One line per slot. The time before \" — \" renders bold.", multiline: true },
+  { key: "flow", label: "Event Flow", help: "One line per slot. The time before \" — \" renders bold. Use {{doors_time}}, {{program_start_time}} and {{night_cap_time}} to follow the times in Settings — or type times directly.", multiline: true },
   { key: "dressCode", label: "Dress code + venue line", help: "Shown under the event flow, after the gold DRESS CODE label.", multiline: true },
   { key: "rsvpFootnote", label: "RSVP footnote", help: "The small line under the RSVP button.", multiline: true },
 ];
@@ -44,10 +48,28 @@ export const BTL_PAGE_DEFAULTS: Record<string, string> = {
   ].join("\n"),
   essentials: ["Open bar", "Small bites", "Programming + networking", "Free · RSVP required"].join("\n"),
   flow: [
-    "6:00 PM — Doors open. Introductions and open bar.",
-    "7:00 PM — Moderated conversations centered around event planning, spaces, and brand building in NJ",
-    "8:30 PM — Night cap",
+    "{{doors_time}} — Doors open. Introductions and open bar.",
+    "{{program_start_time}} — Moderated conversations centered around event planning, spaces, and brand building in NJ",
+    "{{night_cap_time}} — Night cap",
   ].join("\n"),
-  dressCode: "Come as yourself — we know plenty of you are coming straight from work. Business casual is perfect. · Equal Space, Newark",
+  dressCode: "Come as yourself — we know plenty of you are coming straight from work. Business casual is perfect. · {{venue_name}}, Newark",
   rsvpFootnote: "Free · RSVP required · You'll get event updates by email from Anthony; every email has a one-click unsubscribe.",
 };
+
+/** Fills {{token}}s in page copy. Unknown tokens are left as written. */
+export function fillBtlPageTokens(text: string, vars: Record<string, string>): string {
+  return text.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (m, k: string) => vars[k.toLowerCase()] ?? m);
+}
+
+/** What the tokens mean before the saved Settings load (and if they never do). */
+export const BTL_PAGE_FALLBACK_VARS: Record<string, string> = {
+  doors_time: "6:00 PM",
+  program_start_time: "7:00 PM",
+  night_cap_time: "8:30 PM",
+  venue_name: "Equal Space",
+};
+
+/** Default copy with the fallback times filled in — the page's first paint. */
+export const BTL_PAGE_FIRST_PAINT: Record<string, string> = Object.fromEntries(
+  Object.entries(BTL_PAGE_DEFAULTS).map(([k, v]) => [k, fillBtlPageTokens(v, BTL_PAGE_FALLBACK_VARS)]),
+);

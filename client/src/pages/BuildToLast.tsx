@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { Loader2 } from "lucide-react";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS, normalizeInstagramHandle } from "@shared/schema";
-import { BTL_PAGE_DEFAULTS } from "@shared/btl-page";
+import { BTL_PAGE_FIRST_PAINT } from "@shared/btl-page";
 import { SEO } from "@/components/SEO";
 const aisleGoLogo = "/aislego-logo.png";
 
@@ -99,9 +99,9 @@ function readIdentityFromUrl(): { e: string; t: string; name: string; email: str
 export default function BuildToLast() {
   // Page copy — admin-editable (Build to Last → Page). Defaults render
   // immediately; any saved overrides swap in when the fetch lands.
-  const { data: copy = BTL_PAGE_DEFAULTS } = useQuery<Record<string, string>>({
+  const { data: copy = BTL_PAGE_FIRST_PAINT } = useQuery<Record<string, string>>({
     queryKey: ["/api/build-to-last/content"],
-    placeholderData: BTL_PAGE_DEFAULTS,
+    placeholderData: BTL_PAGE_FIRST_PAINT,
     staleTime: 60_000,
   });
   const [identity] = useState(readIdentityFromUrl);
