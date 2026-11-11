@@ -193,12 +193,12 @@ export function speakerCardsHtml(speakers: Array<{ name: string; credential: str
  * text so the credit is never lost.
  */
 export function partnersFooterHtml(): string {
-  const cell = (cid: string, file: string, alt: string, label: string, w: number) =>
+  const cell = (cid: string, file: string, alt: string, label: string, h: number) =>
     hasAsset(file)
-      ? `<td align="center" valign="middle" style="padding:0 18px"><img src="cid:${cid}" alt="${alt}" height="44" style="display:block;height:44px;width:auto;max-width:${w}px;margin:0 auto 6px;border:0" /><div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#9a917f">${label}</div></td>`
+      ? `<td align="center" valign="middle" style="padding:0 18px"><img src="cid:${cid}" alt="${alt}" height="${h}" style="display:block;height:${h}px;width:auto;margin:0 auto 6px;border:0" /><div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#9a917f">${label}</div></td>`
       : `<td align="center" valign="middle" style="padding:0 18px"><div style="font-size:15px;font-weight:bold;color:#262118">${alt}</div><div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#9a917f">${label}</div></td>`;
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:34px auto 0;border-top:1px solid #e6dcc6;padding-top:22px"><tr>
-    ${cell(AISLEGO_LOGO_CID, "aislego-logo.png", "AisleGo", "Executive Sponsor", 90)}
-    ${cell(EQUAL_SPACE_LOGO_CID, "equal-space-logo.png", "Equal Space", "Venue partner", 150)}
+    ${cell(AISLEGO_LOGO_CID, "aislego-logo.png", "AisleGo", "Executive Sponsor", 44)}
+    ${cell(EQUAL_SPACE_LOGO_CID, "equal-space-logo.png", "Equal Space", "Venue partner", 36)}
   </tr></table>`;
 }
