@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { Loader2 } from "lucide-react";
-import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
+import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS, normalizeInstagramHandle } from "@shared/schema";
 import { BTL_PAGE_DEFAULTS } from "@shared/btl-page";
 import { SEO } from "@/components/SEO";
 const aisleGoLogo = "/aislego-logo.png";
@@ -122,6 +122,8 @@ export default function BuildToLast() {
   const [interests, setInterests] = useState<Set<string>>(new Set());
   const [otherChecked, setOtherChecked] = useState(false);
   const [otherText, setOtherText] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [position, setPosition] = useState("");
 
   function toggleInterest(key: string) {
     const next = new Set(interests);
@@ -141,6 +143,14 @@ export default function BuildToLast() {
       setError("Please fill in your name and email.");
       return;
     }
+    if (!position.trim()) {
+      setError("Please add your position — like Event planner or Venue owner.");
+      return;
+    }
+    if (!normalizeInstagramHandle(instagram)) {
+      setError("Please add your Instagram handle — like @yourhandle.");
+      return;
+    }
     const other = otherChecked ? otherText.trim() : "";
     if (interests.size === 0 && !other) {
       setError("Pick at least one — it helps us set the room.");
@@ -157,8 +167,8 @@ export default function BuildToLast() {
         body: JSON.stringify({
           name: effectiveName,
           email: email.trim().toLowerCase(),
-          role: "",
-          companyOrHandle: null,
+          role: position.trim(),
+          companyOrHandle: normalizeInstagramHandle(instagram),
           workingOnNow: "",
           keyQuestion: "",
           topicInterests: Array.from(interests),
@@ -293,6 +303,30 @@ export default function BuildToLast() {
                   </Field>
                 </>
               )}
+              <Field label="Your position *" helper="Your role or what you do — like Event planner, Venue owner, DJ, Creator.">
+                <input
+                  style={inputStyle}
+                  value={position}
+                  onChange={(e) => setPosition(e.target.value)}
+                  maxLength={200}
+                  placeholder="e.g. Event planner"
+                  required
+                  data-testid="input-btl-position"
+                />
+              </Field>
+              <Field label="Instagram *" helper="Your @handle, so we can connect with you after the night.">
+                <input
+                  style={inputStyle}
+                  value={instagram}
+                  onChange={(e) => setInstagram(e.target.value)}
+                  placeholder="@yourhandle"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                  data-testid="input-btl-instagram"
+                />
+              </Field>
               <Field
                 label="What are you most looking to walk away with? *"
                 helper="Pick as many as apply — it helps us set the room and the conversations."

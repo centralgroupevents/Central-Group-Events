@@ -195,7 +195,7 @@ function RsvpsView({ rsvps, isLoading }: { rsvps: BtlRsvp[]; isLoading: boolean 
 
   function exportCsv() {
     const rows = [
-      ["Name", "Email", "Role", "Company/Handle", "Category", "Working on", "Key question", "Topics", "Contact sheet", "Source", "RSVP'd at", "Checked in"],
+      ["Name", "Email", "Position", "Instagram", "Category", "Working on", "Key question", "Topics", "Contact sheet", "Source", "RSVP'd at", "Checked in"],
       ...rsvps.map((r) => [
         r.name, r.email, r.role, r.companyOrHandle ?? "", r.adminCategory ?? "",
         r.workingOnNow, r.keyQuestion, topicsOf(r).join("; "),
@@ -219,7 +219,7 @@ function RsvpsView({ rsvps, isLoading }: { rsvps: BtlRsvp[]; isLoading: boolean 
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search RSVPs — name, email, role, question…"
+          placeholder="Search RSVPs — name, email, position, Instagram, question…"
           className="bg-secondary/30 border-white/10 h-10 flex-1 min-w-[240px]"
           data-testid="input-btl-search"
         />
@@ -240,7 +240,8 @@ function RsvpsView({ rsvps, isLoading }: { rsvps: BtlRsvp[]; isLoading: boolean 
             <thead>
               <tr className="text-left text-muted-foreground border-b border-white/10 bg-white/[0.02]">
                 <th className="px-4 py-3 font-medium">Who</th>
-                <th className="px-4 py-3 font-medium">Role</th>
+                <th className="px-4 py-3 font-medium">Position</th>
+                <th className="px-4 py-3 font-medium">Instagram</th>
                 <th className="px-4 py-3 font-medium">Category</th>
                 <th className="px-4 py-3 font-medium">Topics</th>
                 <th className="px-4 py-3 font-medium">Sheet</th>
@@ -261,9 +262,24 @@ function RsvpsView({ rsvps, isLoading }: { rsvps: BtlRsvp[]; isLoading: boolean 
                         {r.name}
                         {r.unsubscribed && <span className="ml-2 text-xs text-red-400">(unsubscribed)</span>}
                       </p>
-                      <p className="text-xs text-muted-foreground">{r.email}{r.companyOrHandle ? ` · ${r.companyOrHandle}` : ""}</p>
+                      <p className="text-xs text-muted-foreground">{r.email}</p>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{r.role}</td>
+                    <td className="px-4 py-3 text-muted-foreground" data-testid={`text-btl-rsvp-position-${r.id}`}>{r.role || "—"}</td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      {r.companyOrHandle ? (
+                        <a
+                          href={`https://instagram.com/${r.companyOrHandle.replace(/^@/, "")}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                          data-testid={`link-btl-rsvp-instagram-${r.id}`}
+                        >
+                          {r.companyOrHandle}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <Select value={r.adminCategory ?? ""} onValueChange={(v) => setCategory(r.id, v)}>
                         <SelectTrigger className="h-8 w-36 bg-black/30 border-white/10 text-xs" data-testid={`select-btl-category-${r.id}`}>
@@ -288,7 +304,7 @@ function RsvpsView({ rsvps, isLoading }: { rsvps: BtlRsvp[]; isLoading: boolean 
                   </tr>
                   {expandedId === r.id && (
                     <tr key={`${r.id}-detail`} className="border-b border-white/5 bg-black/20">
-                      <td colSpan={6} className="px-4 py-4">
+                      <td colSpan={7} className="px-4 py-4">
                         <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Working on now (guest book line)</p>
                         <p className="text-white/90 mb-3">{r.workingOnNow}</p>
                         <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Their question for the room</p>
@@ -1756,7 +1772,7 @@ function CheckinView({ rsvps }: { rsvps: BtlRsvp[] }) {
           >
             <span>
               <span className="block text-white font-semibold text-base">{r.name}</span>
-              <span className="block text-xs text-muted-foreground">{r.role}</span>
+              <span className="block text-xs text-muted-foreground">{[r.role, r.companyOrHandle].filter(Boolean).join(" · ")}</span>
             </span>
             {busyId === r.id
               ? <Loader2 className="w-5 h-5 animate-spin text-white/50" />

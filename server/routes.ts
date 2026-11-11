@@ -727,6 +727,17 @@ ${blogList || "_No recent posts yet._"}
         verifiedEmail = dec;
       }
       const email = (verifiedEmail || input.email).toLowerCase().trim();
+      // Instagram handle from the form: tolerant of "@name" / a profile URL;
+      // anything that isn't a valid handle is dropped rather than rejected.
+      const { normalizeInstagramHandle } = await import("@shared/schema");
+      const instagram = normalizeInstagramHandle(input.companyOrHandle);
+      // Both are required on the form; enforce on the server too.
+      if (!instagram) {
+        return res.status(400).json({ message: "Add your Instagram handle (like @yourhandle).", field: "companyOrHandle" });
+      }
+      if (!input.role.trim()) {
+        return res.status(400).json({ message: "Add your position (like Event planner or Venue owner).", field: "role" });
+      }
       const { BTL_SLUG: slug } = await import("./btl-emails");
       // Canonical interest keys + the free-text "Other" in one array; the
       // breakdown/filters ignore non-key entries, the admin chips show them.
@@ -744,6 +755,8 @@ ${blogList || "_No recent posts yet._"}
             keyQuestion: input.keyQuestion,
             contactSheetOptin: input.contactSheetOptin,
             topicInterests: interestsJson,
+            role: input.role,
+            companyOrHandle: instagram,
           });
           // Keep the invite row's mirror of their answer current too.
           try {
@@ -768,7 +781,7 @@ ${blogList || "_No recent posts yet._"}
         name: input.name,
         email,
         role: input.role,
-        companyOrHandle: input.companyOrHandle || null,
+        companyOrHandle: instagram,
         workingOnNow: input.workingOnNow,
         keyQuestion: input.keyQuestion,
         topicInterests: interestsJson,
@@ -788,6 +801,8 @@ ${blogList || "_No recent posts yet._"}
             // Mirror their "walk away with" answer onto the invite row so the
             // admin sees it inline.
             interests: interestsJson,
+            // Fill in their Instagram on the invite row if we didn't have it.
+            ...(instagram && !match.instagramHandle ? { instagramHandle: instagram } : {}),
           });
         }
       } catch (err) {
