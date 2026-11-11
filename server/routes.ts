@@ -1428,6 +1428,82 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // ── Name cards ─────────────────────────────────────────────────────────
+  // Everyone on the invite list or RSVP list (RSVP'd or not) with what a card
+  // needs: name, title, Instagram, and a conversation question. Per-person
+  // edits (title override, question) are kept in app_settings "btl.cards";
+  // anyone without a saved question gets one picked from the pool by role.
+  const CARD_CATEGORY_LABELS: Record<string, string> = {
+    venue_owner: "Venue Owner", planner: "Event Planner", dj: "DJ", influencer: "Creator", institutional: "Community Partner", other: "",
+  };
+  async function loadCardGuests() {
+    const { BTL_SLUG: slug } = await import("./btl-emails");
+    const { normalizeInstagramHandle } = await import("@shared/schema");
+    const { assignQuestions } = await import("@shared/btl-card-questions");
+    const [invitees, rsvps, rawSaved] = await Promise.all([storage.listBtlInvitees(slug), storage.listBtlRsvps(slug), storage.getSetting("btl.cards")]);
+    let saved: Record<string, { title?: string; question?: string }> = {};
+    try { const j = JSON.parse(rawSaved || "{}"); if (j && typeof j === "object") saved = j; } catch { /* ignore bad JSON */ }
+    type G = { key: string; name: string; email: string; position: string; category: string | null; ig: string | null; rsvped: boolean; invited: boolean; unsubscribed: boolean; notes: string | null };
+    const byEmail = new Map<string, G>();
+    for (const i of invitees) {
+      const key = i.email.toLowerCase().trim();
+      byEmail.set(key, { key, name: i.name, email: key, position: "", category: i.category ?? null, ig: normalizeInstagramHandle(i.instagramHandle), rsvped: i.rsvpStatus === "confirmed", invited: true, unsubscribed: !!i.unsubscribed, notes: i.notes ?? null });
+    }
+    for (const r of rsvps) {
+      const key = r.email.toLowerCase().trim();
+      const cur = byEmail.get(key);
+      const ig = normalizeInstagramHandle(r.companyOrHandle);
+      if (cur) {
+        cur.rsvped = true; cur.name = r.name || cur.name; cur.position = (r.role || "").trim(); cur.ig = ig || cur.ig;
+        cur.category = r.adminCategory || cur.category; cur.unsubscribed = cur.unsubscribed || !!r.unsubscribed;
+      } else {
+        byEmail.set(key, { key, name: r.name, email: key, position: (r.role || "").trim(), category: r.adminCategory ?? null, ig, rsvped: true, invited: false, unsubscribed: !!r.unsubscribed, notes: null });
+      }
+    }
+    const guests = Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const savedQ: Record<string, string> = {};
+    for (const g of guests) if (saved[g.key]?.question?.trim()) savedQ[g.key] = saved[g.key].question!.trim();
+    const auto = assignQuestions(
+      guests.map((g) => ({ key: g.key, name: g.name, position: saved[g.key]?.title?.trim() || g.position, category: g.category })),
+      savedQ,
+    );
+    return guests.map((g) => {
+      const o = saved[g.key] ?? {};
+      const title = (o.title ?? "").trim() || g.position || (g.category ? CARD_CATEGORY_LABELS[g.category] ?? "" : "");
+      return { ...g, title, titleSaved: !!(o.title ?? "").trim(), question: savedQ[g.key] ?? auto[g.key] ?? "", questionSaved: !!savedQ[g.key] };
+    });
+  }
+
+  app.get("/api/admin/btl/cards", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      res.json(await loadCardGuests());
+    } catch (err) {
+      console.error("[btl/cards] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/btl/cards", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const incoming = ((req.body ?? {}) as { cards?: Record<string, { title?: unknown; question?: unknown }> }).cards ?? {};
+      const raw = await storage.getSetting("btl.cards");
+      let cur: Record<string, { title?: string; question?: string }> = {};
+      try { const j = JSON.parse(raw || "{}"); if (j && typeof j === "object") cur = j; } catch { /* start fresh */ }
+      for (const [email, v] of Object.entries(incoming)) {
+        const key = email.toLowerCase().trim();
+        const title = String(v?.title ?? "").trim().slice(0, 120);
+        const question = String(v?.question ?? "").trim().slice(0, 300);
+        if (!title && !question) delete cur[key];
+        else cur[key] = { ...(title ? { title } : {}), ...(question ? { question } : {}) };
+      }
+      await storage.setSetting("btl.cards", JSON.stringify(cur));
+      res.json({ saved: Object.keys(incoming).length });
+    } catch (err) {
+      console.error("[btl/cards save] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // ── Name clean-up ──────────────────────────────────────────────────────
   // Standard capitalization for the guest list. Preview first (nothing is
   // changed), then apply the rows the admin ticked; the server recomputes
