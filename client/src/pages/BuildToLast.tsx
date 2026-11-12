@@ -271,7 +271,12 @@ export default function BuildToLast() {
         {/* RSVP form */}
         <section id="rsvp" style={{ padding: "56px 0 96px" }}>
           <SectionTitle>RSVP</SectionTitle>
-          {submitted ? (
+          {copy.rsvpClosed === "true" && !submitted ? (
+            <div style={{ border: `1px solid ${LINE}`, padding: "36px 28px", textAlign: "center" }} data-testid="text-btl-closed">
+              <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 28, margin: "0 0 10px" }}>RSVPs are closed</p>
+              <p style={{ color: CREAM_DIM, margin: 0, fontSize: 16, lineHeight: 1.6 }}>{copy.closedMessage}</p>
+            </div>
+          ) : submitted ? (
             <div style={{ border: `1px solid ${GOLD}`, padding: "36px 28px", textAlign: "center" }} data-testid="text-btl-success">
               <p style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 28, margin: "0 0 10px" }}>You're in.</p>
               <p style={{ color: CREAM_DIM, margin: 0, fontSize: 16 }}>Check your email for confirmation. — Anthony</p>

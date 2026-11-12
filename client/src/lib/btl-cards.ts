@@ -1,8 +1,10 @@
 // Build to Last name cards — business-card shaped (3.5 × 2 in), 10 per US
 // Letter sheet in a 2 × 5 grid, which is the most cards per sheet and fits
 // standard 10-up perforated card stock. Two formats:
-//   one-sided  front: name, title, Instagram + a QR code beside them
-//   two-sided  front: name, title, Instagram · back: QR code + a question
+//   one-sided  front: name, title, Instagram on the left and the QR code on
+//              the right, with one question underneath both
+//   two-sided  front: name, title, Instagram · back: QR code with two
+//              questions next to it
 // The QR goes to the guest's Instagram, or to @centralgroupevents when we
 // don't have one. Rendered as HTML so it previews in the admin and prints
 // (or saves as PDF) straight from the browser.
@@ -19,7 +21,10 @@ export interface CardGuest {
   title: string;
   /** "@handle" or null */
   ig: string | null;
-  question: string;
+  /** First question (the only one on a one-sided card) */
+  ask: string;
+  /** Second question (two-sided backs only) */
+  share: string;
 }
 
 const esc = (s: string) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -64,7 +69,8 @@ function footer(logo: string, right: string): string {
   return `<div class="bc-ft"><img src="${logo}" alt="CGE"><span>${esc(right)}</span></div>`;
 }
 
-const BLANK_QUESTION = "What brought you here tonight, and who are you hoping to meet?";
+const BLANK_ASK = "What brought you here tonight, and who are you hoping to meet?";
+const BLANK_SHARE = "What's one thing you've learned this year that you'd pass on?";
 
 export function cardFront(g: CardGuest | null, format: CardFormat, logo: string): string {
   const name = g ? esc(g.name) : '<span class="bc-blank">Name</span>';
@@ -75,7 +81,10 @@ export function cardFront(g: CardGuest | null, format: CardFormat, logo: string)
   if (format === "one") {
     const qrUrl = cardQrUrl(g ?? { ig: null });
     const cap = g?.ig ? `Scan to follow ${g.ig}` : `Scan to follow @${CGE_INSTAGRAM}`;
-    return `<div class="bc">${pattern(0.085)}<div class="bc-in1"><div class="bc-l">${nm}${title}${ig}</div><div class="bc-r">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div></div>${foot}</div>`;
+    const q = (g ? g.ask.trim() : "") || (g ? "" : BLANK_ASK);
+    const qSize = q.length > 120 ? "7.2pt" : q.length > 85 ? "7.8pt" : "8.6pt";
+    const question = q ? `<div class="bc-q1"><p style="font-size:${qSize}">${esc(q)}</p></div>` : "";
+    return `<div class="bc bc-one">${pattern(0.085)}<div class="bc-top"><div class="bc-l">${nm}${title}${ig}</div><div class="bc-r">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div></div>${question}${foot}</div>`;
   }
   return `<div class="bc">${pattern(0.085)}<div class="bc-in2">${nm}${title}${ig}</div>${foot}</div>`;
 }
@@ -83,8 +92,13 @@ export function cardFront(g: CardGuest | null, format: CardFormat, logo: string)
 export function cardBack(g: CardGuest | null, logo: string): string {
   const qrUrl = cardQrUrl(g ?? { ig: null });
   const cap = g?.ig ? `Scan to follow ${g.ig}` : `Scan to follow @${CGE_INSTAGRAM}`;
-  const q = g?.question?.trim() || BLANK_QUESTION;
-  return `<div class="bc">${pattern(0.055)}<div class="bc-in3"><div class="bc-qw">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div><div class="bc-q"><div class="bc-k">Conversation starter</div><p style="font-size:${q.length > 120 ? "8.4pt" : "9.6pt"}">${esc(q)}</p></div></div>${footer(logo, "centralgroupevents.com")}</div>`;
+  let q1 = g?.ask?.trim() ?? "";
+  let q2 = g?.share?.trim() ?? "";
+  if (!q1 && !q2) { q1 = BLANK_ASK; q2 = BLANK_SHARE; }
+  const total = q1.length + q2.length;
+  const size = q1 && q2 ? (total > 210 ? "6.9pt" : total > 160 ? "7.4pt" : "8pt") : (total > 120 ? "8.6pt" : "9.6pt");
+  const one = (t: string) => (t ? `<p style="font-size:${size}">${esc(t)}</p>` : "");
+  return `<div class="bc">${pattern(0.055)}<div class="bc-in3"><div class="bc-qw">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div><div class="bc-q">${one(q1)}${q1 && q2 ? '<i class="bc-div"></i>' : ""}${one(q2)}</div></div>${footer(logo, "centralgroupevents.com")}</div>`;
 }
 
 export const CARD_CSS = `
@@ -92,7 +106,9 @@ export const CARD_CSS = `
 .bc *{box-sizing:border-box}
 .bc-pat{position:absolute;inset:0;overflow:hidden;color:#f0a31a;font:900 .34in/.255in Inter,Arial,sans-serif;white-space:nowrap;pointer-events:none}
 .bc-prow{height:.255in;display:flex;margin-left:-.12in}.bc-prow span{display:block;width:.30in;text-align:center;height:.255in}
-.bc-in1{position:absolute;left:.2in;right:.18in;top:.2in;bottom:.42in;display:flex;justify-content:space-between;align-items:flex-start}
+.bc-top{position:absolute;left:.2in;right:.18in;top:.14in;height:.98in;display:flex;justify-content:space-between;align-items:flex-start}
+.bc-one .bc-r{width:.86in;height:auto}.bc-one .bc-qr{width:.74in;height:.74in;padding:.04in}.bc-one .bc-cap{font-size:4.4pt;max-width:.9in;margin-top:.03in}
+.bc-q1{position:absolute;left:.2in;right:.2in;top:1.16in;height:.5in;display:flex;align-items:center}.bc-q1 p{margin:0;font-weight:600;line-height:1.28;color:#f3ecdd;border-left:2px solid #f0a31a;padding-left:.09in}
 .bc-l{flex:1;min-width:0;padding-right:.1in;display:flex;flex-direction:column;justify-content:center;height:100%}
 .bc-nm{font-weight:800;line-height:1.05;color:#fff;letter-spacing:-.2px;overflow-wrap:anywhere}
 .bc-rl{margin-top:.07in;font-weight:700;font-size:6.6pt;letter-spacing:1.6px;text-transform:uppercase;color:#f0a31a;line-height:1.25}
@@ -105,11 +121,11 @@ export const CARD_CSS = `
 .bc-ft img{height:.13in}.bc-ft span{font-weight:600;font-size:5.2pt;letter-spacing:1.4px;text-transform:uppercase;color:#bdb39b}
 .bc-in2{position:absolute;left:.25in;right:.25in;top:.2in;bottom:.42in;display:flex;flex-direction:column;justify-content:center}
 .bc-in2 .bc-ig{font-size:11pt}.bc-in2 .bc-rl{font-size:7.6pt}
-.bc-in3{position:absolute;left:.2in;right:.2in;top:.2in;bottom:.42in;display:flex;gap:.17in;align-items:center}
-.bc-qw{width:1.05in;display:flex;flex-direction:column;align-items:center;flex:none}
-.bc-qw .bc-qr{width:1in;height:1in}.bc-qw .bc-cap{font-size:5pt}
-.bc-k{font-weight:700;font-size:6.6pt;letter-spacing:1.6px;text-transform:uppercase;color:#f0a31a;margin-bottom:.05in}
-.bc-q p{margin:0;font-weight:600;line-height:1.35;color:#f3ecdd}
+.bc-in3{position:absolute;left:.2in;right:.2in;top:.18in;bottom:.4in;display:flex;gap:.14in;align-items:center}
+.bc-qw{width:.92in;display:flex;flex-direction:column;align-items:center;flex:none}
+.bc-qw .bc-qr{width:.88in;height:.88in}.bc-qw .bc-cap{font-size:4.8pt}
+.bc-div{display:block;width:.4in;height:1.2px;background:#f0a31a;margin:.075in 0}
+.bc-q{min-width:0;flex:1}.bc-q p{margin:0;font-weight:600;line-height:1.28;color:#f3ecdd}
 `;
 
 /** Full printable document: Letter pages, 2 × 5 cards, light cut guides. */

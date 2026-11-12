@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
+import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS, normalizeInstagramHandle } from "@shared/schema";
 import { BTL_PAGE_FIELDS, BTL_PAGE_DEFAULTS } from "@shared/btl-page";
 import { CARD_CSS, cardFront, cardBack, cardsDocument, type CardFormat, type CardPageOrder } from "@/lib/btl-cards";
 import { Download, Loader2, Plus, Send, Upload, Eye, Check, Printer, Pencil, Trash2, X } from "lucide-react";
@@ -74,6 +74,7 @@ type BtlSettings = {
   rsvpUrl: string;
   venueName: string;
   venueAddress: string;
+  venueEmail: string;
   doorsTime: string;
   programStartTime: string;
   nightCapTime: string;
@@ -118,7 +119,40 @@ type View = (typeof VIEWS)[number];
 
 export function BuildToLastTab() {
   const [view, setView] = useState<View>("RSVPs");
-  const { data: rsvps = [], isLoading } = useQuery<BtlRsvp[]>({ queryKey: ["/api/admin/btl/rsvps"] });
+  const { data: rawRsvps = [], isLoading } = useQuery<BtlRsvp[]>({ queryKey: ["/api/admin/btl/rsvps"] });
+  // Guest profiles merge the RSVP with the invite list: standard-capitalized
+  // names, Instagram from the invite list when the RSVP has none, and the
+  // position (the guest's own, an edit, an AI suggestion, or their category).
+  // Edits made in Name Cards flow into the RSVP list, guest book and cards.
+  const { data: cardGuests = [] } = useQuery<CardGuestRow[]>({ queryKey: ["/api/admin/btl/cards"] });
+  const { toast } = useToast();
+  const qcTop = useQueryClient();
+  const { data: rsvpStatus } = useQuery<{ closed: boolean }>({ queryKey: ["/api/admin/btl/rsvp-status"] });
+  const [togglingRsvp, setTogglingRsvp] = useState(false);
+  async function toggleRsvpClosed() {
+    const closing = !rsvpStatus?.closed;
+    const msg = closing
+      ? "Close RSVPs? The page will show a closed message instead of the form, and nobody can sign up or change their RSVP. You can reopen any time."
+      : "Reopen RSVPs? The form comes back on the public page.";
+    if (!window.confirm(msg)) return;
+    setTogglingRsvp(true);
+    try {
+      await apiRequest("PUT", "/api/admin/btl/rsvp-status", { closed: closing });
+      qcTop.invalidateQueries({ queryKey: ["/api/admin/btl/rsvp-status"] });
+      toast({ title: closing ? "RSVPs closed" : "RSVPs reopened", description: closing ? "Now send the guest book to the venue from the Guest Book tab." : undefined });
+    } catch (err) {
+      toast({ title: "Couldn't change RSVP status", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setTogglingRsvp(false);
+    }
+  }
+  const rsvps = useMemo(() => {
+    const byEmail = new Map(cardGuests.map((g) => [g.email, g]));
+    return rawRsvps.map((r) => {
+      const g = byEmail.get(r.email.toLowerCase().trim());
+      return g ? { ...r, name: g.name, role: g.title || r.role, companyOrHandle: g.ig ?? r.companyOrHandle } : r;
+    });
+  }, [rawRsvps, cardGuests]);
 
   return (
     <div className="space-y-5">
@@ -131,6 +165,17 @@ export function BuildToLastTab() {
               <a href="/build-to-last" target="_blank" rel="noopener noreferrer" className="text-primary underline">/build-to-last</a>
             </p>
           </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={toggleRsvpClosed}
+              disabled={togglingRsvp || !rsvpStatus}
+              className={rsvpStatus?.closed ? "border-amber-400/60 text-amber-300" : "border-white/20 text-white/80"}
+              data-testid="button-btl-toggle-rsvp"
+            >
+              {togglingRsvp ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+              {rsvpStatus?.closed ? "RSVPs closed · Reopen" : "RSVPs open · Close RSVPs"}
+            </Button>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-center">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Confirmed</p>
@@ -140,6 +185,7 @@ export function BuildToLastTab() {
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Checked in</p>
               <p className="text-xl font-black text-white">{rsvps.filter((r) => r.checkedInAt).length}</p>
             </div>
+          </div>
           </div>
         </div>
         <div className="flex gap-2 mt-5 flex-wrap">
@@ -1753,6 +1799,80 @@ function QuestionsView({ rsvps }: { rsvps: BtlRsvp[] }) {
 
 /* ── Guest Book ────────────────────────────────────────────────────────── */
 
+const escHtml = (t: string) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
+/** Download the guest list as a PDF, or email it (PDF attached) to the venue. */
+function VenueGuestList({ count }: { count: number }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<BtlSettings>({ queryKey: ["/api/admin/btl/settings"] });
+  const [to, setTo] = useState<string | null>(null);
+  const [cc, setCc] = useState("");
+  const [note, setNote] = useState("");
+  const [ig, setIg] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const toValue = to ?? settings?.venueEmail ?? "";
+
+  async function send() {
+    if (!toValue.trim()) {
+      toast({ title: "Add the venue's email", variant: "destructive" });
+      return;
+    }
+    if (!window.confirm(`Email the guest list (${count} confirmed, names and positions${ig ? " and Instagram" : ""}) with a PDF attached to ${toValue.trim()}${cc.trim() ? ` (cc ${cc.trim()})` : ""}? Guest email addresses are not included.`)) return;
+    setBusy(true);
+    try {
+      await apiRequest("POST", "/api/admin/btl/guest-book/send", { to: toValue.trim(), cc: cc.trim(), includeInstagram: ig, note: note.trim() });
+      if (toValue.trim() !== (settings?.venueEmail ?? "")) {
+        await apiRequest("PUT", "/api/admin/btl/settings", { venueEmail: toValue.trim() });
+        qc.invalidateQueries({ queryKey: ["/api/admin/btl/settings"] });
+      }
+      toast({ title: "Guest list sent", description: `Emailed to ${toValue.trim()} with the PDF attached.` });
+    } catch (err) {
+      toast({ title: "Couldn't send", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="mr-auto">
+          <h3 className="font-bold text-white">Guest list for the venue</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">{count} confirmed. Names and positions only. Guest emails are never shared. Close RSVPs first so the list is final.</p>
+        </div>
+        <Button asChild variant="outline" className="border-white/20 text-white/80" data-testid="button-btl-guestlist-pdf">
+          <a href={`/api/admin/btl/guest-book.pdf${ig ? "?ig=1" : ""}`} download>
+            <Download className="w-4 h-4 mr-1.5" /> Download PDF
+          </a>
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-white/70 text-xs">Venue email (several: separate with commas)</Label>
+          <Input value={toValue} onChange={(e) => setTo(e.target.value)} placeholder="events@venue.com" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-guestlist-to" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-white/70 text-xs">CC (optional)</Label>
+          <Input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="you@…" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-guestlist-cc" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-white/70 text-xs">Message (optional — a default note is used if blank)</Label>
+        <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="bg-black/40 border-white/10 text-sm" data-testid="textarea-btl-guestlist-note" />
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-xs text-white/70 cursor-pointer">
+          <Checkbox checked={ig} onCheckedChange={(c) => setIg(!!c)} data-testid="checkbox-btl-guestlist-ig" /> Include Instagram handles
+        </label>
+        <Button onClick={send} disabled={busy || count === 0} className="bg-primary hover:bg-primary/90 ml-auto" data-testid="button-btl-guestlist-send">
+          {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Send className="w-4 h-4 mr-1.5" />} Send to venue
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function GuestBookView({ rsvps }: { rsvps: BtlRsvp[] }) {
   const [sort, setSort] = useState<"alpha" | "category">("alpha");
 
@@ -1766,9 +1886,9 @@ function GuestBookView({ rsvps }: { rsvps: BtlRsvp[] }) {
   function printIt() {
     const entries = sorted.map((r) => `
       <div style="break-inside:avoid;margin:0 0 22px">
-        <p style="margin:0;font-size:15px"><strong>${r.name}</strong>${r.companyOrHandle ? ` · ${r.companyOrHandle}` : ""}</p>
-        <p style="margin:2px 0 4px;font-size:12px;color:#777;text-transform:uppercase;letter-spacing:1px">${r.role}</p>
-        <p style="margin:0;font-size:13.5px;line-height:1.5">${r.workingOnNow}</p>
+        <p style="margin:0;font-size:15px"><strong>${escHtml(r.name)}</strong>${r.companyOrHandle ? ` · ${escHtml(r.companyOrHandle)}` : ""}</p>
+        <p style="margin:2px 0 4px;font-size:12px;color:#777;text-transform:uppercase;letter-spacing:1px">${escHtml(r.role)}</p>
+        <p style="margin:0;font-size:13.5px;line-height:1.5">${escHtml(r.workingOnNow)}</p>
       </div>`).join("");
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Build to Last Vol. 1 — Guest Book</title></head>
       <body style="font-family:Georgia,serif;color:#1a1611;max-width:640px;margin:40px auto;padding:0 24px">
@@ -1789,6 +1909,7 @@ function GuestBookView({ rsvps }: { rsvps: BtlRsvp[] }) {
 
   return (
     <div className="space-y-4">
+      <VenueGuestList count={rsvps.length} />
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-muted-foreground">The printed guest book handed to every attendee — built live from RSVPs.</p>
         <div className="flex gap-2">
@@ -1833,9 +1954,13 @@ type CardGuestRow = {
   email: string;
   title: string;
   ig: string | null;
-  question: string;
-  questionSaved: boolean;
+  ask: string;
+  askSaved: boolean;
+  share: string;
+  shareSaved: boolean;
   titleSaved: boolean;
+  titleSource: "edited" | "rsvp" | "ai" | "category" | "none";
+  igSaved: boolean;
   rsvped: boolean;
   invited: boolean;
   unsubscribed: boolean;
@@ -1850,14 +1975,17 @@ function CardsView() {
   const [order, setOrder] = useState<CardPageOrder>("alternate");
   const [blanks, setBlanks] = useState(10);
   const [search, setSearch] = useState("");
-  const [edits, setEdits] = useState<Record<string, { title?: string; question?: string }>>({});
+  const [edits, setEdits] = useState<Record<string, { title?: string; ig?: string; ask?: string; share?: string }>>({});
+  const [suggesting, setSuggesting] = useState(false);
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [paste, setPaste] = useState("");
   const [saving, setSaving] = useState(false);
 
   const effective = (g: CardGuestRow) => ({
     title: edits[g.key]?.title ?? g.title,
-    question: edits[g.key]?.question ?? g.question,
+    ig: edits[g.key]?.ig ?? g.ig ?? "",
+    ask: edits[g.key]?.ask ?? g.ask,
+    share: edits[g.key]?.share ?? g.share,
   });
   const printable = guests.filter((g) => who === "all" || g.rsvped);
   const shown = printable.filter((g) => {
@@ -1868,23 +1996,36 @@ function CardsView() {
   const dirtyCount = Object.keys(edits).length;
   const total = printable.length + Math.max(0, blanks);
   const sheets = Math.ceil(total / 10);
-  const toCard = (g: CardGuestRow) => ({ name: g.name, title: effective(g).title, ig: g.ig, question: effective(g).question });
+  const toCard = (g: CardGuestRow) => ({ name: g.name, title: effective(g).title, ig: normalizeInstagramHandle(effective(g).ig), ask: effective(g).ask, share: effective(g).share });
 
-  function setEdit(key: string, field: "title" | "question", value: string) {
+  function setEdit(key: string, field: "title" | "ig" | "ask" | "share", value: string) {
     setEdits((e) => ({ ...e, [key]: { ...e[key], [field]: value } }));
   }
 
   async function save(all: boolean) {
     setSaving(true);
     try {
-      const cards: Record<string, { title?: string; question?: string }> = {};
+      const cards: Record<string, { title?: string; ig?: string; ask?: string; share?: string }> = {};
       if (all) {
-        for (const g of guests) cards[g.key] = { title: g.titleSaved || edits[g.key]?.title !== undefined ? effective(g).title : "", question: effective(g).question };
+        for (const g of guests) {
+          const e = effective(g);
+          cards[g.key] = {
+            title: g.titleSaved || edits[g.key]?.title !== undefined ? e.title : "",
+            ig: g.igSaved || edits[g.key]?.ig !== undefined ? e.ig : "",
+            ask: e.ask,
+            share: e.share,
+          };
+        }
       } else {
         for (const [key, v] of Object.entries(edits)) {
           const g = guests.find((x) => x.key === key);
           if (!g) continue;
-          cards[key] = { title: v.title ?? (g.titleSaved ? g.title : ""), question: v.question ?? (g.questionSaved ? g.question : "") };
+          cards[key] = {
+            title: v.title ?? (g.titleSaved ? g.title : ""),
+            ig: v.ig ?? (g.igSaved ? (g.ig ?? "") : ""),
+            ask: v.ask ?? (g.askSaved ? g.ask : ""),
+            share: v.share ?? (g.shareSaved ? g.share : ""),
+          };
         }
       }
       await apiRequest("PUT", "/api/admin/btl/cards", { cards });
@@ -1898,23 +2039,47 @@ function CardsView() {
     }
   }
 
+  async function suggestPositions() {
+    setSuggesting(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/btl/cards/suggest-positions");
+      const body = await res.json();
+      toast({
+        title: body.suggested ? `Suggested ${body.suggested} position${body.suggested === 1 ? "" : "s"}` : "No new suggestions",
+        description: body.checked ? `Checked ${body.checked} guest${body.checked === 1 ? "" : "s"} without a position. Suggestions are guesses from the name and handle: check them before printing.` : "Every guest already has a position.",
+      });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/cards"] });
+    } catch (err) {
+      toast({ title: "Couldn't suggest positions", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
   function applyPaste() {
+    // Each line: guest email (or exact name), then question 1, then
+    // optionally question 2, separated by " | " or a tab. A plain
+    // "email, question" line sets just question 1.
     const next = { ...edits };
     let hit = 0, miss = 0;
     for (const line of paste.split("\n")) {
       const l = line.trim();
       if (!l) continue;
-      const m = /^([^,\t]+)[,\t]\s*(.+)$/.exec(l);
-      if (!m) { miss++; continue; }
-      const who = m[1].trim().toLowerCase();
+      let parts: string[];
+      if (l.includes("\t")) parts = l.split("\t");
+      else if (l.includes(" | ")) parts = l.split(" | ");
+      else { const m = /^([^,]+),\s*(.+)$/.exec(l); parts = m ? [m[1], m[2]] : []; }
+      parts = parts.map((x) => x.trim().replace(/^"|"$/g, "")).filter((x, i) => i === 0 || x);
+      if (parts.length < 2) { miss++; continue; }
+      const who = parts[0].toLowerCase();
       const g = guests.find((x) => x.email === who || x.name.toLowerCase() === who);
       if (!g) { miss++; continue; }
-      next[g.key] = { ...next[g.key], question: m[2].trim().replace(/^"|"$/g, "") };
+      next[g.key] = { ...next[g.key], ask: parts[1], ...(parts[2] ? { share: parts[2] } : {}) };
       hit++;
     }
     setEdits(next);
     setPaste("");
-    toast({ title: `Filled ${hit} question${hit === 1 ? "" : "s"}`, description: miss ? `${miss} line${miss === 1 ? "" : "s"} didn't match a guest.` : "Press Save changes to keep them.", variant: miss ? "destructive" : "default" });
+    toast({ title: `Filled ${hit} guest${hit === 1 ? "" : "s"}`, description: miss ? `${miss} line${miss === 1 ? "" : "s"} didn't match a guest.` : "Press Save changes to keep them.", variant: miss ? "destructive" : "default" });
   }
 
   function printCards() {
@@ -1956,8 +2121,8 @@ function CardsView() {
         </div>
         <p className="text-xs text-white/60">
           {format === "one"
-            ? "Front only: name, title and Instagram, with the QR code beside them."
-            : "Front: name, title and Instagram. Back: QR code and a conversation question."}
+            ? "Front only: name, title and Instagram on the left, the QR code on the right, and one question underneath both."
+            : "Front: name, title and Instagram. Back: the QR code with two questions next to it."}
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
@@ -2003,17 +2168,20 @@ function CardsView() {
           <Button size="sm" onClick={() => save(false)} disabled={saving || dirtyCount === 0} className="bg-primary hover:bg-primary/90" data-testid="button-btl-cards-save">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Save changes${dirtyCount ? ` (${dirtyCount})` : ""}`}
           </Button>
+          <Button size="sm" variant="outline" onClick={suggestPositions} disabled={suggesting} className="border-white/20 text-white/80" data-testid="button-btl-cards-suggest">
+            {suggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Suggest missing positions (${guests.filter((g) => g.titleSource === "none" || g.titleSource === "category").length})`}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => save(true)} disabled={saving} className="border-white/20 text-white/80" data-testid="button-btl-cards-lock">
             Lock all questions
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Titles come from the guest's RSVP position (or their category). Questions that are not locked are suggested from each guest's role and shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
+          Positions come from what the guest typed on the RSVP; if they didn't give one, press “Suggest missing positions” for a short AI guess from their name, handle and category (marked “AI suggested”: check it, and edit anything). Instagram handles come from the RSVP or the invite list. Question 1 is the one used on a one-sided card; two-sided backs show both. Questions that are not locked are suggested from each guest's role and can shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
         </p>
         <details className="text-xs text-white/70">
           <summary className="cursor-pointer text-primary">Paste a list of questions</summary>
           <div className="mt-2 space-y-2">
-            <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={4} placeholder={"jay@example.com, What's one thing from engineering you've borrowed to put on a better event?\nSir Moore, Which of your hats would you hand to someone else first?"} className="bg-black/40 border-white/10 text-xs" data-testid="textarea-btl-cards-paste" />
+            <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={4} placeholder={"jay@example.com | First question | Second question (optional)\nSir Moore | First question | Second question"} className="bg-black/40 border-white/10 text-xs" data-testid="textarea-btl-cards-paste" />
             <Button size="sm" variant="outline" onClick={applyPaste} disabled={!paste.trim()} className="border-white/20 text-white/80">Fill in questions</Button>
           </div>
         </details>
@@ -2027,18 +2195,22 @@ function CardsView() {
               <div key={g.key} onClick={() => setPreviewKey(g.key)} className={`grid grid-cols-1 md:grid-cols-12 gap-2 px-3 py-2 text-sm cursor-pointer ${preview?.key === g.key ? "bg-primary/10" : "hover:bg-white/5"}`}>
                 <div className="md:col-span-3 min-w-0">
                   <p className="text-white truncate">{g.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{g.ig ?? "no Instagram → ours"}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{effective(g).ig || "no Instagram, QR goes to ours"}</p>
                   <p className="text-[10px] mt-0.5">
                     {g.rsvped ? <span className="text-emerald-300">RSVP'd</span> : <span className="text-white/40">invited</span>}
                     {edited && <span className="ml-2 text-amber-300">edited</span>}
                   </p>
                 </div>
-                <div className="md:col-span-3">
-                  <Input value={e.title} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "title", ev.target.value)} placeholder="Title / role" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-title-${g.key}`} />
+                <div className="md:col-span-3 space-y-1">
+                  <Input value={e.title} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "title", ev.target.value)} placeholder="Position" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-title-${g.key}`} />
+                  {edits[g.key]?.title === undefined && g.titleSource === "ai" && <p className="text-[10px] text-amber-300">AI suggested, check it</p>}
+                  {edits[g.key]?.title === undefined && g.titleSource === "category" && <p className="text-[10px] text-white/40">from their category</p>}
+                  <Input value={e.ig} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "ig", ev.target.value)} placeholder="@instagram" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-ig-${g.key}`} />
                 </div>
-                <div className="md:col-span-6">
-                  <Textarea value={e.question} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "question", ev.target.value)} rows={2} className={`bg-black/40 border-white/10 text-xs min-h-0 ${format === "one" ? "opacity-50" : ""}`} data-testid={`textarea-btl-card-question-${g.key}`} />
-                  {!g.questionSaved && edits[g.key]?.question === undefined && <p className="text-[10px] text-white/40 mt-0.5">suggested — not locked</p>}
+                <div className="md:col-span-6 space-y-1">
+                  <Textarea value={e.ask} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "ask", ev.target.value)} rows={2} placeholder="Question 1" className="bg-black/40 border-white/10 text-xs min-h-0" data-testid={`textarea-btl-card-ask-${g.key}`} />
+                  <Textarea value={e.share} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "share", ev.target.value)} rows={2} placeholder={format === "one" ? "Question 2 (two-sided cards only)" : "Question 2"} className={`bg-black/40 border-white/10 text-xs min-h-0 ${format === "one" ? "opacity-50" : ""}`} data-testid={`textarea-btl-card-share-${g.key}`} />
+                  {!(g.askSaved && g.shareSaved) && edits[g.key]?.ask === undefined && edits[g.key]?.share === undefined && <p className="text-[10px] text-white/40">suggested, not locked</p>}
                 </div>
               </div>
             );
@@ -2174,6 +2346,7 @@ function SettingsView() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><Label className="text-white/70 text-xs">Venue name</Label><Input value={s.venueName} onChange={(e) => set("venueName", e.target.value)} className={inputCls} data-testid="input-btl-venue-name" /></div>
           <div><Label className="text-white/70 text-xs">Venue address (shown in logistics + "Tomorrow" email)</Label><Input value={s.venueAddress} onChange={(e) => set("venueAddress", e.target.value)} className={inputCls} data-testid="input-btl-venue-address" /></div>
+          <div className="sm:col-span-2"><Label className="text-white/70 text-xs">Venue contact email (the guest list is sent here)</Label><Input value={s.venueEmail ?? ""} onChange={(e) => set("venueEmail", e.target.value)} placeholder="events@venue.com" className={inputCls} data-testid="input-btl-venue-email" /></div>
           <div><Label className="text-white/70 text-xs">Doors time</Label><Input value={s.doorsTime} onChange={(e) => set("doorsTime", e.target.value)} className={inputCls} /></div>
           <div><Label className="text-white/70 text-xs">Programming starts</Label><Input value={s.programStartTime} onChange={(e) => set("programStartTime", e.target.value)} className={inputCls} /></div>
           <div><Label className="text-white/70 text-xs">Night cap / end time</Label><Input value={s.nightCapTime ?? ""} onChange={(e) => set("nightCapTime", e.target.value)} className={inputCls} data-testid="input-btl-night-cap-time" /></div>

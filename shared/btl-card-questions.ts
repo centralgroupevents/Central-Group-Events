@@ -1,115 +1,102 @@
-// Conversation-card questions for the name cards. Every guest gets a different
-// question: a saved one if the admin wrote or locked it, otherwise one picked
-// from the pool below by their position (or category), never repeating a
-// question until a group's pool runs out.
+// Conversation-card prompts for the name cards. Every guest gets two:
+//   ask    — a question they'd love to be asked (their expertise, a recent win,
+//            their biggest current challenge)
+//   share  — a question that gets them to hand over hard-won advice
+// A saved prompt (written or locked by the admin) always wins; otherwise one
+// pair is picked from the pool below by the guest's position or category,
+// and no prompt is used twice until the pools run out.
+// Kept short on purpose: both have to fit on the back of a 3.5 × 2 in card.
 
-export type QuestionGroup = "venue" | "planner" | "music" | "creator" | "hospitality" | "business" | "community" | "general";
+export type QuestionGroup = "creator" | "community" | "venue" | "music" | "planner" | "hospitality" | "business" | "general";
+export interface CardPrompts { ask: string; share: string }
 
-export const QUESTION_POOL: Record<QuestionGroup, string[]> = {
+export const QUESTION_POOL: Record<QuestionGroup, CardPrompts[]> = {
+  // Creators & influencers
+  creator: [
+    { ask: "Which content strategy or platform recently outperformed your expectations?", share: "What's the fastest way for a collaborator to win you over, or turn you off?" },
+    { ask: "How do you stay authentic while scaling a personal brand or creative project?", share: "What piece of conventional marketing wisdom would you tell this room to ignore?" },
+    { ask: "What's one thing you did this year that drove unexpected growth?", share: "What do brands get wrong when they approach a creator for the first time?" },
+    { ask: "What's the most underrated platform or format for Jersey audiences right now?", share: "What's your best tip for turning a one-time collab into a repeat partnership?" },
+    { ask: "Which of your posts surprised you most, and why do you think it landed?", share: "What would you tell a creator who's just starting to monetize?" },
+    { ask: "How has the New Jersey scene shaped the way you create?", share: "What's one shortcut in content creation that's actually worth taking?" },
+  ],
+  // Community partners & civic leaders
+  community: [
+    { ask: "Where's the biggest gap between local community groups and independent creators in NJ?", share: "What underused grant, resource, or local network do most NJ entrepreneurs miss?" },
+    { ask: "What's one thing your community needs that the events scene could help with?", share: "How do you get people to show up twice?" },
+    { ask: "What's a New Jersey story you're proud of that rarely gets told?", share: "What's the best way for a creator to approach your organization?" },
+    { ask: "How are you adapting your programs to navigate current economic shifts?", share: "What's one local network or partner every entrepreneur should know?" },
+    { ask: "What's the best turnout you've seen, and what brought people in?", share: "What would make it easier for independent creators to work with community groups?" },
+    { ask: "Who is quietly doing important work that more people should know?", share: "What does a good partnership with a community organization look like?" },
+  ],
+  // Venue owners & space curators
   venue: [
-    "What does a room need before a stranger feels comfortable talking to the person next to them?",
-    "What's the one thing renters ask for that you never expected to be asked?",
-    "What's a small detail in your space that guests notice before anything else?",
-    "What would you build into a venue if cost didn't matter?",
-    "What's the quietest night of the week at your place, and what would fill it?",
-    "Who's the best event you've ever hosted, and what made the room work?",
+    { ask: "Beyond the vibes, what's the hardest operational or financial reality of keeping a space alive?", share: "What separates a chaotic one-off promoter from a recurring partner who respects the space?" },
+    { ask: "What makes a space feel like a community third space, not just a venue?", share: "What do you wish every promoter knew before booking your room?" },
+    { ask: "What's the quietest night of the week at your space, and how would you fill it?", share: "What's one low-cost change that makes a room feel better right away?" },
+    { ask: "How has the New Jersey landscape influenced the way you curate your space?", share: "How do you decide which events are a fit and which to turn down?" },
+    { ask: "What do renters ask for that you never expected to be asked?", share: "What should every host confirm before event day?" },
+    { ask: "What's your biggest operational hurdle heading into next year?", share: "What hard lesson from running a space would you hand to someone opening their own?" },
+  ],
+  // DJs & live performers
+  music: [
+    { ask: "When the crowd isn't locking in, what's your go-to shift to turn the night around?", share: "What audio or production mistake do organizers keep making with live events?" },
+    { ask: "What's the hardest room you've played, and what won it over?", share: "What do promoters get wrong when they book DJs for a night?" },
+    { ask: "How do you read a room in the first ten minutes?", share: "What's one rule you'd give a new DJ before their first paid set?" },
+    { ask: "What does a New Jersey crowd do that no other crowd does?", share: "What's the one piece of gear or setup you'd never skip?" },
+    { ask: "What track always changes the energy in a room, and why does it work?", share: "How should organizers plan the night around the music, not the other way around?" },
+    { ask: "Who should every promoter in this room be booking right now?", share: "What's the best way for a venue to make a DJ feel at home?" },
   ],
   planner: [
-    "What's the part of planning that guests never see but would notice right away if it went wrong?",
-    "What's the first thing you do when an event starts falling apart?",
-    "What's the best event you've attended as a guest, and what did the planner get right?",
-    "What's one trend in New Jersey events you hope disappears, and one you hope sticks around?",
-    "How do you decide who gets the first invitation and who gets the last?",
-    "What would you plan if you had a free venue and one month?",
-  ],
-  music: [
-    "What's the one track that always changes the energy in a room, and why does it work?",
-    "What does a Jersey crowd do that no other crowd does?",
-    "What's the hardest room you've ever played, and what won it over?",
-    "How do you read a room in the first ten minutes?",
-    "What's the song you're tired of being asked for, and the one you never get tired of playing?",
-    "Who should every promoter in this room be booking right now?",
-  ],
-  creator: [
-    "What's a piece of content that did far better than you expected, and why do you think it landed?",
-    "What's something you've learned about New Jersey audiences that numbers alone can't tell you?",
-    "What's the best brand collaboration you've done, and what made it feel real?",
-    "How do you decide what's worth posting and what's just noise?",
-    "Who in this room would you most like to collaborate with, and on what?",
-    "What's a story from this scene that deserves to be told properly?",
+    { ask: "What's the part of planning guests never see but would notice right away if it went wrong?", share: "What's your first move when an event starts falling apart?" },
+    { ask: "What's the most memorable event you've attended recently, and why?", share: "What's one detail every first-time planner overlooks?" },
+    { ask: "How has the New Jersey landscape influenced the way you curate your events?", share: "How do you decide who gets the first invitation?" },
+    { ask: "What's the most valuable cross-industry partnership you've formed so far?", share: "What makes a sponsor want to come back for a second event?" },
+    { ask: "Which trend in New Jersey events do you hope sticks around?", share: "Which trend should the scene leave behind?" },
+    { ask: "What would you plan with a free venue and one month?", share: "What's the most valuable lesson from an event that went wrong?" },
   ],
   hospitality: [
-    "What's the dish or drink that tells people who you are?",
-    "What does hospitality mean to you beyond the food?",
-    "What's the best thing a guest has ever said to you after a night?",
-    "How do you keep quality steady on the busiest night?",
-    "What's one local partner you wish more people in New Jersey knew about?",
-    "What would your ideal collaboration with a venue look like?",
+    { ask: "What's the dish or drink that tells people who you are?", share: "What does hospitality mean to you beyond the food?" },
+    { ask: "What's the hardest part of keeping quality steady on your busiest night?", share: "What should event hosts ask a caterer before booking?" },
+    { ask: "How are you adapting your menu or pricing to current economic shifts?", share: "What simple move makes a small bite feel premium?" },
+    { ask: "What's the best thing a guest has ever said to you after a night?", share: "How should a venue and a food partner split the work?" },
+    { ask: "Which local partner do you wish more people in New Jersey knew about?", share: "What's the best way to plan food for a crowd that mingles?" },
+    { ask: "What would your ideal collaboration with a venue look like?", share: "What lesson from a service mistake would you pass on?" },
   ],
+  // Founders, owners, attorneys, real estate, tech, finance…
   business: [
-    "What's one decision in your career you'd make exactly the same way again?",
-    "What's something you know about your industry that most people in this room don't?",
-    "What question do you wish more people asked you about your work?",
-    "Where do you see the most opportunity in New Jersey over the next three years?",
-    "What's the best advice you've received about building something that lasts?",
-    "Who here could you help, and what would you need in return?",
-  ],
-  community: [
-    "What's one thing your community needs that the events scene could help with?",
-    "What's the best turnout you've ever seen, and what brought people in?",
-    "How do you get people to show up twice?",
-    "What's a New Jersey story you're proud of that rarely gets told?",
-    "Who is quietly doing important work that more people should know?",
-    "What would you do with one more hour in the day for your community?",
+    { ask: "What's your biggest operational focus or hurdle heading into next year?", share: "What's one decision about building something that lasts you'd make the same way again?" },
+    { ask: "How are you adapting your business model to current economic shifts?", share: "What do first-time founders in New Jersey most often get wrong?" },
+    { ask: "What does a sustainable business mean to you versus a fast-growth one?", share: "Which resource or network do most entrepreneurs here not realize they have?" },
+    { ask: "Where do you see the most opportunity in New Jersey over the next three years?", share: "What lesson from a deal or contract that went wrong would you pass on?" },
+    { ask: "What's the most valuable cross-industry partnership you've formed so far?", share: "What question should every founder ask before signing something?" },
+    { ask: "What question do you wish more people asked about your work?", share: "What's the best advice you've received about building something that lasts?" },
   ],
   general: [
-    "What are you building, or hoping to build, in New Jersey, and what's the first thing you'd need to make it real?",
-    "What's the best thing that's happened for you in the last six months?",
-    "What brought you here tonight, and who are you hoping to meet?",
-    "What's one thing you'd change about how people in New Jersey show up for each other?",
-    "What's the best event you've ever been to, and what made it work?",
-    "What's a skill you have that people are surprised by?",
-    "What's one thing you're learning right now?",
-    "Who taught you the most about your work, and what did they teach you?",
-    "What's the most underrated spot in New Jersey?",
-    "What would make tonight worth your time?",
-    "What's a risk you took that paid off?",
-    "What's the question you'd most like to ask someone in this room?",
+    { ask: "If you could collaborate with anyone in New Jersey, who would it be?", share: "What can you offer someone in this room tomorrow?" },
+    { ask: "What brought you here tonight, and who are you hoping to meet?", share: "What's one thing you've learned this year that you'd pass on?" },
+    { ask: "What's the most memorable event experience you've had recently, and why?", share: "What made it work that organizers could copy?" },
+    { ask: "What are you building, or hoping to build, in New Jersey?", share: "What's the first thing you'd need to make it real, and who here could help?" },
+    { ask: "What's a piece of conventional wisdom you chose to ignore?", share: "What's the best risk you've taken?" },
+    { ask: "What makes a space feel like a community third space?", share: "What's one thing every host can do to get strangers talking?" },
+    { ask: "How has New Jersey shaped the way you work?", share: "What's the most underrated spot in the state?" },
+    { ask: "What's your biggest hurdle heading into next year?", share: "What help would make the biggest difference to you right now?" },
+    { ask: "Who taught you the most about your work?", share: "What did they teach you that you still use?" },
+    { ask: "What's the best thing that's happened for you in the last six months?", share: "What lesson from it could others use?" },
+    { ask: "What does building something sustainable mean to you?", share: "What would you tell someone starting out today?" },
+    { ask: "What's a skill you have that people are surprised by?", share: "How could you put it to work for someone here?" },
   ],
 };
 
 const MATCHERS: Array<[QuestionGroup, RegExp]> = [
-  ["music", /\b(dj|music|producer|artist|singer|rapper|band|audio|sound|beat)/i],
+  ["music", /\b(dj|music|producer|artist|singer|rapper|band|audio|sound|beat|performer)/i],
   ["venue", /\b(venue|lounge|space|club|bar|cafe|café|gallery|hall|studio|theat|museum|rental)/i],
   ["hospitality", /\b(chef|food|restaurant|catering|caterer|bakery|kitchen|wine|cocktail|bartend|drink|brew|coffee|hospitality)/i],
   ["planner", /\b(planner|planning|promoter|promotion|events?|curator|coordinator|production|nightlife|festival|organiz)/i],
   ["creator", /\b(influencer|creator|content|photograph|video|media|blog|writer|podcast|brand|marketing|social)/i],
-  ["community", /\b(nonprofit|non-profit|community|institution|city|government|council|school|church|foundation|org\b)/i],
-  ["business", /\b(founder|owner|ceo|cfo|president|attorney|lawyer|real estate|realtor|agent|consult|tech|engineer|developer|invest|finance|account|manager|director)/i],
+  ["community", /\b(nonprofit|non-profit|community|institution|civic|city|government|council|school|church|foundation|org\b)/i],
+  ["business", /\b(founder|owner|ceo|cfo|president|attorney|lawyer|real estate|realtor|agent|consult|tech|engineer|developer|invest|finance|account|manager|director|entrepreneur)/i],
 ];
-
-// Used only when every pool question is taken. Each one names the guest, so
-// no two cards can come out identical.
-const PERSONAL_TEMPLATES = [
-  (f: string, w: string) => `${f}, what's something about ${w} that people outside it never see?`,
-  (f: string, w: string) => `${f}, what's the best thing that's happened for you in ${w} this year?`,
-  (f: string, w: string) => `${f}, who would you most like to meet tonight, and what would you ask them about ${w}?`,
-  (f: string, w: string) => `${f}, what's one thing about ${w} you'd teach everyone in this room?`,
-  (f: string, w: string) => `${f}, what would make ${w} easier for someone starting out in New Jersey?`,
-  (f: string, w: string) => `${f}, what's a lesson from ${w} that surprised you?`,
-];
-function personalized(g: { name: string; position: string }, i: number, used: Set<string>): string {
-  const parts = g.name.trim().split(/\s+/).filter(Boolean);
-  const work = g.position.trim() ? `your work as ${/^[aeiou]/i.test(g.position.trim()) ? "an" : "a"} ${g.position.trim().toLowerCase()}` : "your work";
-  // First name first; the full name if that exact text is already on a card.
-  for (const who of [parts[0] || "Friend", g.name.trim() || "Friend"]) {
-    for (let k = 0; k < PERSONAL_TEMPLATES.length; k++) {
-      const q = PERSONAL_TEMPLATES[(i + k) % PERSONAL_TEMPLATES.length](who, work);
-      if (!used.has(q.toLowerCase())) return q;
-    }
-  }
-  return PERSONAL_TEMPLATES[i % PERSONAL_TEMPLATES.length](g.name.trim() || "Friend", work);
-}
 
 /** Which pool fits this guest, from their position text and/or category. */
 export function questionGroupFor(position: string, category?: string | null): QuestionGroup {
@@ -123,26 +110,57 @@ export function questionGroupFor(position: string, category?: string | null): Qu
   return "general";
 }
 
+// Used only when every pool pair is taken. Each one names the guest, so no two
+// cards can come out identical.
+const PERSONAL_ASK = [
+  (f: string, w: string) => `${f}, what's something about ${w} that people outside it never see?`,
+  (f: string, w: string) => `${f}, what's the best thing that's happened for you in ${w} this year?`,
+  (f: string, w: string) => `${f}, what's your biggest hurdle in ${w} heading into next year?`,
+  (f: string, w: string) => `${f}, what's a lesson from ${w} that surprised you?`,
+];
+const PERSONAL_SHARE = [
+  (f: string, w: string) => `${f}, what's one thing about ${w} you'd teach everyone in this room?`,
+  (f: string, w: string) => `${f}, what would make ${w} easier for someone starting out in New Jersey?`,
+  (f: string, w: string) => `${f}, who here could you help with ${w}, and how?`,
+  (f: string, w: string) => `${f}, what's a mistake in ${w} you'd save someone from making?`,
+];
+function personalized(g: { name: string; position: string }, i: number, used: Set<string>): CardPrompts {
+  const parts = g.name.trim().split(/\s+/).filter(Boolean);
+  const work = g.position.trim() ? `your work as ${/^[aeiou]/i.test(g.position.trim()) ? "an" : "a"} ${g.position.trim().toLowerCase()}` : "your work";
+  const pick = (list: Array<(f: string, w: string) => string>, offset: number) => {
+    for (const who of [parts[0] || "Friend", g.name.trim() || "Friend"]) {
+      for (let k = 0; k < list.length; k++) {
+        const q = list[(i + offset + k) % list.length](who, work);
+        if (!used.has(q.toLowerCase())) return q;
+      }
+    }
+    return list[(i + offset) % list.length](g.name.trim() || "Friend", work);
+  };
+  return { ask: pick(PERSONAL_ASK, 0), share: pick(PERSONAL_SHARE, 1) };
+}
+
 /**
- * Picks a question for every guest without a saved one. Deterministic for a
- * given list (alphabetical), never reuses a question while any unused one
+ * Picks a pair for every guest without saved prompts. Deterministic for a
+ * given list (alphabetical); never reuses a question while any unused pair
  * remains in the guest's group or the general pool.
  */
 export function assignQuestions(
   guests: Array<{ key: string; name: string; position: string; category?: string | null }>,
-  saved: Record<string, string>,
-): Record<string, string> {
-  const used = new Set(Object.values(saved).map((q) => q.trim().toLowerCase()).filter(Boolean));
-  const out: Record<string, string> = {};
+  saved: Record<string, { ask?: string; share?: string }>,
+): Record<string, CardPrompts> {
+  const used = new Set<string>();
+  for (const v of Object.values(saved)) for (const q of [v.ask, v.share]) if (q?.trim()) used.add(q.trim().toLowerCase());
+  const out: Record<string, CardPrompts> = {};
   const cursor: Partial<Record<QuestionGroup, number>> = {};
-  const next = (g: QuestionGroup): string | null => {
+  const next = (g: QuestionGroup): CardPrompts | null => {
     for (const grp of [g, "general" as QuestionGroup]) {
       const pool = QUESTION_POOL[grp];
       for (let i = 0; i < pool.length; i++) {
         const idx = ((cursor[grp] ?? 0) + i) % pool.length;
-        if (!used.has(pool[idx].toLowerCase())) {
+        const pair = pool[idx];
+        if (!used.has(pair.ask.toLowerCase()) && !used.has(pair.share.toLowerCase())) {
           cursor[grp] = idx + 1;
-          return pool[idx];
+          return pair;
         }
       }
     }
@@ -151,11 +169,15 @@ export function assignQuestions(
   let fallbackIdx = 0;
   const ordered = [...guests].sort((a, b) => a.name.localeCompare(b.name));
   for (const g of ordered) {
-    if (saved[g.key]?.trim()) continue;
-    const q = next(questionGroupFor(g.position, g.category)) ?? personalized(g, fallbackIdx++, used);
-    const pick = q;
-    used.add(pick.toLowerCase());
-    out[g.key] = pick;
+    const have = saved[g.key] ?? {};
+    const needAsk = !have.ask?.trim();
+    const needShare = !have.share?.trim();
+    if (!needAsk && !needShare) continue;
+    const pair = next(questionGroupFor(g.position, g.category)) ?? personalized(g, fallbackIdx++, used);
+    const result: CardPrompts = { ask: needAsk ? pair.ask : have.ask!.trim(), share: needShare ? pair.share : have.share!.trim() };
+    used.add(result.ask.toLowerCase());
+    used.add(result.share.toLowerCase());
+    out[g.key] = result;
   }
   return out;
 }

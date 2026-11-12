@@ -91,7 +91,7 @@ export function renderBtlText(text: string, vars: Record<string, string>): strin
 // no marketing footer bars. The logo references a CID inline attachment
 // (see cgeLogoAttachment in btl-mailer) so it displays without depending
 // on the website hosting the image; previews swap the cid: for a URL.
-export function btlShell(bodyHtml: string, unsubscribeUrl: string): string {
+export function btlShell(bodyHtml: string, unsubscribeUrl: string | null): string {
   return `
   <div style="background:#faf8f4;padding:28px 16px">
     <div style="max-width:560px;margin:0 auto;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.75;color:#262118">
@@ -99,8 +99,9 @@ export function btlShell(bodyHtml: string, unsubscribeUrl: string): string {
       ${bodyHtml}
       ${partnersFooterHtml()}
       <p style="margin:26px 0 0;color:#9a917f;font-size:12px;font-family:Georgia,serif">
-        You're getting this because of Build to Last Vol. 1.
-        <a href="${unsubscribeUrl}" style="color:#9a917f">Unsubscribe from these emails</a>.
+        ${unsubscribeUrl
+          ? `You're getting this because of Build to Last Vol. 1. <a href="${unsubscribeUrl}" style="color:#9a917f">Unsubscribe from these emails</a>.`
+          : "Sent by Central Group Events."}
       </p>
     </div>
   </div>`;

@@ -148,6 +148,38 @@ export async function sendBtlTestEmail(
   }
 }
 
+/**
+ * One-off admin email (e.g. the guest list to the venue): the Build to Last
+ * look, no unsubscribe line, optional attachments. Not logged in the cadence
+ * send log and not deduplicated.
+ */
+export async function sendBtlAdminEmail(opts: {
+  to: string[];
+  cc?: string[];
+  subject: string;
+  bodyHtml: string;
+  attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    return { ok: false, error: "GMAIL_USER / GMAIL_APP_PASSWORD are not set in the server's secrets, so emails can't send yet." };
+  }
+  try {
+    const shell = inlineImages(btlShell(opts.bodyHtml, null));
+    await transporter.sendMail({
+      from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
+      to: opts.to,
+      cc: opts.cc && opts.cc.length > 0 ? opts.cc : undefined,
+      replyTo: "centralgroupevents@gmail.com",
+      subject: opts.subject,
+      html: shell.html,
+      attachments: [...shell.attachments, ...(opts.attachments ?? [])],
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message.slice(0, 300) : "unknown error" };
+  }
+}
+
 /** Pause between bulk sends — stays inside Gmail's burst limits. */
 export function btlSendPause(): Promise<void> {
   return new Promise((r) => setTimeout(r, 350));
@@ -161,6 +193,8 @@ export interface BtlSettings {
   rsvpUrl: string;
   venueName: string;
   venueAddress: string;
+  /** Where the guest list goes (the venue contact). */
+  venueEmail: string;
   doorsTime: string;
   programStartTime: string;
   /** When the night wraps (the "Night cap" line on the page and in emails). */
@@ -180,6 +214,7 @@ const BTL_DEFAULTS: BtlSettings = {
   rsvpUrl: "",
   venueName: "Equal Space",
   venueAddress: "Equal Space, Newark, NJ",
+  venueEmail: "",
   doorsTime: "6:00 PM",
   programStartTime: "7:00 PM",
   nightCapTime: "8:30 PM",
@@ -195,7 +230,7 @@ const BTL_DEFAULTS: BtlSettings = {
 export async function getBtlSettings(): Promise<BtlSettings> {
   const out: BtlSettings = { ...BTL_DEFAULTS };
   const stringKeys: Array<keyof BtlSettings> = [
-    "rsvpUrl", "venueName", "venueAddress", "doorsTime", "programStartTime", "nightCapTime",
+    "rsvpUrl", "venueName", "venueAddress", "venueEmail", "doorsTime", "programStartTime", "nightCapTime",
     "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl",
   ];
   for (const key of stringKeys) {

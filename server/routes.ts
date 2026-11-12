@@ -711,6 +711,12 @@ ${blogList || "_No recent posts yet._"}
   // confirmation email immediately.
   app.post("/api/build-to-last/rsvp", formLimiter, async (req: Request, res: Response) => {
     try {
+      // RSVPs closed by the admin: no new sign-ups, and no edits to the list.
+      if ((await storage.getSetting("btl.rsvpClosed")) === "true") {
+        const { BTL_PAGE_DEFAULTS } = await import("@shared/btl-page");
+        const custom = await storage.getSetting("btl.page.closedMessage");
+        return res.status(403).json({ message: (custom && custom.trim()) || BTL_PAGE_DEFAULTS.closedMessage, closed: true });
+      }
       const { btlRsvpInputSchema } = await import("@shared/schema");
       const input = btlRsvpInputSchema.parse(req.body);
       // Standard capitalization for names typed in lowercase / ALL CAPS.
@@ -1143,6 +1149,7 @@ ${blogList || "_No recent posts yet._"}
       const st = await getBtlSettings();
       const vars = { doors_time: st.doorsTime, program_start_time: st.programStartTime, night_cap_time: st.nightCapTime, venue_name: st.venueName };
       for (const k of Object.keys(copy)) copy[k] = renderBtlText(copy[k], vars);
+      copy.rsvpClosed = (await storage.getSetting("btl.rsvpClosed")) === "true" ? "true" : "false";
       res.setHeader("Cache-Control", "no-store");
       res.json(copy);
     } catch (err) {
@@ -1308,7 +1315,7 @@ ${blogList || "_No recent posts yet._"}
   app.put("/api/admin/btl/settings", requireAuth(), async (req: Request, res: Response) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const stringKeys = ["rsvpUrl", "venueName", "venueAddress", "doorsTime", "programStartTime", "nightCapTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
+      const stringKeys = ["rsvpUrl", "venueName", "venueAddress", "venueEmail", "doorsTime", "programStartTime", "nightCapTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
       for (const key of stringKeys) {
         if (typeof body[key] === "string") await storage.setSetting(`btl.${key}`, String(body[key]).slice(0, 4000));
       }
@@ -1441,8 +1448,14 @@ ${blogList || "_No recent posts yet._"}
     const { normalizeInstagramHandle } = await import("@shared/schema");
     const { assignQuestions } = await import("@shared/btl-card-questions");
     const [invitees, rsvps, rawSaved] = await Promise.all([storage.listBtlInvitees(slug), storage.listBtlRsvps(slug), storage.getSetting("btl.cards")]);
-    let saved: Record<string, { title?: string; question?: string }> = {};
+    // "question" is the earlier single-question field — it now means "ask".
+    type Saved = { title?: string; ig?: string; ask?: string; share?: string; question?: string };
+    let saved: Record<string, Saved> = {};
     try { const j = JSON.parse(rawSaved || "{}"); if (j && typeof j === "object") saved = j; } catch { /* ignore bad JSON */ }
+    // AI-suggested positions for guests who gave none (see btl-ai.ts).
+    let aiTitles: Record<string, string> = {};
+    try { const j = JSON.parse((await storage.getSetting("btl.cardSuggestions")) || "{}"); if (j && typeof j === "object") aiTitles = j; } catch { /* ignore */ }
+    const { normalizePersonName, looksLikeBrandOrHandle } = await import("@shared/btl-names");
     type G = { key: string; name: string; email: string; position: string; category: string | null; ig: string | null; rsvped: boolean; invited: boolean; unsubscribed: boolean; notes: string | null };
     const byEmail = new Map<string, G>();
     for (const i of invitees) {
@@ -1460,17 +1473,35 @@ ${blogList || "_No recent posts yet._"}
         byEmail.set(key, { key, name: r.name, email: key, position: (r.role || "").trim(), category: r.adminCategory ?? null, ig, rsvped: true, invited: false, unsubscribed: !!r.unsubscribed, notes: null });
       }
     }
+    // Standard capitalization on display (brand-like one-word names are left as typed).
+    for (const g of Array.from(byEmail.values())) if (!looksLikeBrandOrHandle(g.name)) g.name = normalizePersonName(g.name);
     const guests = Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
-    const savedQ: Record<string, string> = {};
-    for (const g of guests) if (saved[g.key]?.question?.trim()) savedQ[g.key] = saved[g.key].question!.trim();
+    const savedPrompts: Record<string, { ask?: string; share?: string }> = {};
+    for (const g of guests) {
+      const v = saved[g.key];
+      const ask = (v?.ask ?? v?.question ?? "").trim();
+      const share = (v?.share ?? "").trim();
+      if (ask || share) savedPrompts[g.key] = { ask: ask || undefined, share: share || undefined };
+    }
     const auto = assignQuestions(
-      guests.map((g) => ({ key: g.key, name: g.name, position: saved[g.key]?.title?.trim() || g.position, category: g.category })),
-      savedQ,
+      guests.map((g) => ({ key: g.key, name: g.name, position: saved[g.key]?.title?.trim() || g.position || aiTitles[g.key] || "", category: g.category })),
+      savedPrompts,
     );
     return guests.map((g) => {
       const o = saved[g.key] ?? {};
-      const title = (o.title ?? "").trim() || g.position || (g.category ? CARD_CATEGORY_LABELS[g.category] ?? "" : "");
-      return { ...g, title, titleSaved: !!(o.title ?? "").trim(), question: savedQ[g.key] ?? auto[g.key] ?? "", questionSaved: !!savedQ[g.key] };
+      const categoryLabel = g.category ? CARD_CATEGORY_LABELS[g.category] ?? "" : "";
+      // Position: admin edit > what the guest typed on the RSVP > AI suggestion > category label.
+      const titleSource: "edited" | "rsvp" | "ai" | "category" | "none" =
+        (o.title ?? "").trim() ? "edited" : g.position ? "rsvp" : aiTitles[g.key] ? "ai" : categoryLabel ? "category" : "none";
+      const title = titleSource === "edited" ? o.title!.trim() : titleSource === "rsvp" ? g.position : titleSource === "ai" ? aiTitles[g.key] : categoryLabel;
+      // Instagram: admin edit > RSVP > invite list (already merged above).
+      const igOverride = normalizeInstagramHandle(o.ig);
+      const sp = savedPrompts[g.key] ?? {};
+      return {
+        ...g, ig: igOverride || g.ig, igSaved: !!igOverride, title, titleSource, titleSaved: titleSource === "edited",
+        ask: sp.ask ?? auto[g.key]?.ask ?? "", askSaved: !!sp.ask,
+        share: sp.share ?? auto[g.key]?.share ?? "", shareSaved: !!sp.share,
+      };
     });
   }
 
@@ -1485,21 +1516,144 @@ ${blogList || "_No recent posts yet._"}
 
   app.put("/api/admin/btl/cards", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const incoming = ((req.body ?? {}) as { cards?: Record<string, { title?: unknown; question?: unknown }> }).cards ?? {};
+      const { normalizeInstagramHandle } = await import("@shared/schema");
+      const incoming = ((req.body ?? {}) as { cards?: Record<string, { title?: unknown; ig?: unknown; ask?: unknown; share?: unknown }> }).cards ?? {};
       const raw = await storage.getSetting("btl.cards");
-      let cur: Record<string, { title?: string; question?: string }> = {};
+      let cur: Record<string, { title?: string; ig?: string; ask?: string; share?: string }> = {};
       try { const j = JSON.parse(raw || "{}"); if (j && typeof j === "object") cur = j; } catch { /* start fresh */ }
       for (const [email, v] of Object.entries(incoming)) {
         const key = email.toLowerCase().trim();
         const title = String(v?.title ?? "").trim().slice(0, 120);
-        const question = String(v?.question ?? "").trim().slice(0, 300);
-        if (!title && !question) delete cur[key];
-        else cur[key] = { ...(title ? { title } : {}), ...(question ? { question } : {}) };
+        const ig = normalizeInstagramHandle(String(v?.ig ?? "")) ?? "";
+        const ask = String(v?.ask ?? "").trim().slice(0, 300);
+        const share = String(v?.share ?? "").trim().slice(0, 300);
+        if (!title && !ig && !ask && !share) delete cur[key];
+        else cur[key] = { ...(title ? { title } : {}), ...(ig ? { ig } : {}), ...(ask ? { ask } : {}), ...(share ? { share } : {}) };
       }
       await storage.setSetting("btl.cards", JSON.stringify(cur));
       res.json({ saved: Object.keys(incoming).length });
     } catch (err) {
       console.error("[btl/cards save] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Fill in positions for guests who have none (no RSVP position, no edit, no
+  // earlier suggestion) with short AI suggestions. Stored separately from the
+  // admin's own edits so they can always be overridden or cleared.
+  app.post("/api/admin/btl/cards/suggest-positions", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const guests = await loadCardGuests();
+      const needy = guests.filter((g) => g.titleSource === "none" || g.titleSource === "category");
+      if (needy.length === 0) return res.json({ suggested: 0, checked: 0 });
+      const { suggestPositions } = await import("./btl-ai");
+      let existing: Record<string, string> = {};
+      try { const j = JSON.parse((await storage.getSetting("btl.cardSuggestions")) || "{}"); if (j && typeof j === "object") existing = j; } catch { /* ignore */ }
+      let added = 0;
+      for (let i = 0; i < needy.length; i += 40) {
+        const chunk = needy.slice(i, i + 40);
+        const got = await suggestPositions(chunk.map((g) => ({ key: g.key, name: g.name, ig: g.ig, category: g.category, notes: g.notes })));
+        for (const [k, v] of Object.entries(got)) { existing[k] = v; added++; }
+      }
+      await storage.setSetting("btl.cardSuggestions", JSON.stringify(existing));
+      res.json({ suggested: added, checked: needy.length });
+    } catch (err) {
+      console.error("[btl/cards suggest] error:", err);
+      const msg = err instanceof Error ? err.message.slice(0, 200) : "unknown error";
+      res.status(/GEMINI_API_KEY/.test(msg) ? 503 : 500).json({ message: msg });
+    }
+  });
+
+  // ── Guest book to the venue ────────────────────────────────────────────
+  // The list of everyone coming (names, positions, optionally Instagram) as a
+  // PDF — downloaded, or emailed to the venue. Guest email addresses are
+  // never included.
+  async function guestBookRows() {
+    const guests = (await loadCardGuests()).filter((g) => g.rsvped);
+    return guests.map((g) => ({ name: g.name, position: g.title, instagram: g.ig ?? "" }));
+  }
+
+  async function guestBookPdfBuffer(includeInstagram: boolean) {
+    const { guestListPdf } = await import("./btl-pdf");
+    const rows = await guestBookRows();
+    return {
+      rows,
+      pdf: guestListPdf({
+        title: "Built to Last — Guest List",
+        subtitle: `Thursday, November 12, 2026 · Equal Space, Newark · ${rows.length} confirmed`,
+        rows,
+        showInstagram: includeInstagram,
+        footer: "Central Group Events · centralgroupevents.com",
+      }),
+    };
+  }
+
+  app.get("/api/admin/btl/guest-book.pdf", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { pdf } = await guestBookPdfBuffer(req.query.ig === "1");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'attachment; filename="Built-to-Last-Guest-List.pdf"');
+      res.setHeader("Cache-Control", "no-store");
+      res.send(pdf);
+    } catch (err) {
+      console.error("[btl/guest-book pdf] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/btl/guest-book/send", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { parseCcList } = await import("./btl-scheduled");
+      const { sendBtlAdminEmail } = await import("./btl-mailer");
+      const { paras } = await import("./btl-emails");
+      const b = (req.body ?? {}) as { to?: string; cc?: string; includeInstagram?: boolean; note?: string };
+      let to: string[], cc: string[];
+      try { to = parseCcList(b.to); cc = parseCcList(b.cc); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+      if (to.length === 0) return res.status(400).json({ message: "Add the venue's email address" });
+      const includeIg = !!b.includeInstagram;
+      const { rows, pdf } = await guestBookPdfBuffer(includeIg);
+      if (rows.length === 0) return res.status(400).json({ message: "No confirmed guests yet" });
+      const escH = (t: string) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+      const note = String(b.note ?? "").trim().slice(0, 1500);
+      const table = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin:6px 0 20px;font-size:14px">${rows
+        .map((r, i) => `<tr style="background:${i % 2 === 0 ? "#f3ecdd" : "transparent"}"><td style="padding:6px 8px;font-weight:bold">${escH(r.name)}</td><td style="padding:6px 8px;color:#4a4130">${escH(r.position)}</td>${includeIg ? `<td style="padding:6px 8px;color:#4a4130">${escH(r.instagram)}</td>` : ""}</tr>`)
+        .join("")}</table>`;
+      const body = [
+        paras("Hi,"),
+        paras(note || `Here is the guest list for Built to Last on Thursday, November 12 at Equal Space. ${rows.length} guests are confirmed. A PDF copy is attached.`),
+        table,
+        paras("Thank you again for hosting us.\n\n— The Central Group Events team"),
+      ].join("\n");
+      const sent = await sendBtlAdminEmail({
+        to, cc,
+        subject: `Built to Last — guest list (${rows.length} confirmed)`,
+        bodyHtml: body,
+        attachments: [{ filename: "Built-to-Last-Guest-List.pdf", content: pdf, contentType: "application/pdf" }],
+      });
+      if (!sent.ok) return res.status(502).json({ message: sent.error });
+      res.json({ sent: true, to, count: rows.length });
+    } catch (err) {
+      console.error("[btl/guest-book send] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Close / reopen RSVPs ───────────────────────────────────────────────
+  app.get("/api/admin/btl/rsvp-status", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      res.json({ closed: (await storage.getSetting("btl.rsvpClosed")) === "true" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/btl/rsvp-status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const closed = !!(req.body as { closed?: unknown })?.closed;
+      await storage.setSetting("btl.rsvpClosed", closed ? "true" : "false");
+      res.json({ closed });
+    } catch (err) {
+      console.error("[btl/rsvp-status] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
