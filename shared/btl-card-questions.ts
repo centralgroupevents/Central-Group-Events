@@ -6,6 +6,8 @@
 // pair is picked from the pool below by the guest's position or category,
 // and no prompt is used twice until the pools run out.
 // Kept short on purpose: both have to fit on the back of a 3.5 × 2 in card.
+// They must also work for any guest in the group, so none of them assume how
+// someone operates (invite-only vs open, rentals, DJs vs other performers...).
 
 export type QuestionGroup = "creator" | "community" | "venue" | "music" | "planner" | "hospitality" | "business" | "general";
 export interface CardPrompts { ask: string; share: string }
@@ -32,17 +34,17 @@ export const QUESTION_POOL: Record<QuestionGroup, CardPrompts[]> = {
   // Venue owners & space curators
   venue: [
     { ask: "Beyond the vibes, what's the hardest operational or financial reality of keeping a space alive?", share: "What separates a chaotic one-off promoter from a recurring partner who respects the space?" },
-    { ask: "What makes a space feel like a community third space, not just a venue?", share: "What do you wish every promoter knew before booking your room?" },
-    { ask: "What's the quietest night of the week at your space, and how would you fill it?", share: "What's one low-cost change that makes a room feel better right away?" },
+    { ask: "What makes a space feel like a community third space, not just a venue?", share: "What do you wish every event organizer knew before working in your space?" },
+    { ask: "What's the hardest night to fill at your space, and how would you fill it?", share: "What's one low-cost change that makes a room feel better right away?" },
     { ask: "How has the New Jersey landscape influenced the way you curate your space?", share: "How do you decide which events are a fit and which to turn down?" },
-    { ask: "What do renters ask for that you never expected to be asked?", share: "What should every host confirm before event day?" },
+    { ask: "What do clients ask for that you never expected to be asked?", share: "What should every host confirm before event day?" },
     { ask: "What's your biggest operational hurdle heading into next year?", share: "What hard lesson from running a space would you hand to someone opening their own?" },
   ],
   // DJs & live performers
   music: [
     { ask: "When the crowd isn't locking in, what's your go-to shift to turn the night around?", share: "What audio or production mistake do organizers keep making with live events?" },
-    { ask: "What's the hardest room you've played, and what won it over?", share: "What do promoters get wrong when they book DJs for a night?" },
-    { ask: "How do you read a room in the first ten minutes?", share: "What's one rule you'd give a new DJ before their first paid set?" },
+    { ask: "What's the hardest room you've played, and what won it over?", share: "What do promoters get wrong when they book artists for a night?" },
+    { ask: "How do you read a room in the first ten minutes?", share: "What's one rule you'd give a new performer before their first paid gig?" },
     { ask: "What does a New Jersey crowd do that no other crowd does?", share: "What's the one piece of gear or setup you'd never skip?" },
     { ask: "What track always changes the energy in a room, and why does it work?", share: "How should organizers plan the night around the music, not the other way around?" },
     { ask: "Who should every promoter in this room be booking right now?", share: "What's the best way for a venue to make a DJ feel at home?" },
@@ -50,14 +52,14 @@ export const QUESTION_POOL: Record<QuestionGroup, CardPrompts[]> = {
   planner: [
     { ask: "What's the part of planning guests never see but would notice right away if it went wrong?", share: "What's your first move when an event starts falling apart?" },
     { ask: "What's the most memorable event you've attended recently, and why?", share: "What's one detail every first-time planner overlooks?" },
-    { ask: "How has the New Jersey landscape influenced the way you curate your events?", share: "How do you decide who gets the first invitation?" },
-    { ask: "What's the most valuable cross-industry partnership you've formed so far?", share: "What makes a sponsor want to come back for a second event?" },
+    { ask: "How has the New Jersey landscape influenced the way you curate your events?", share: "What's your approach to building the right crowd for an event?" },
+    { ask: "What's the most valuable cross-industry partnership you've formed so far?", share: "What makes a partner want to work with you again?" },
     { ask: "Which trend in New Jersey events do you hope sticks around?", share: "Which trend should the scene leave behind?" },
     { ask: "What would you plan with a free venue and one month?", share: "What's the most valuable lesson from an event that went wrong?" },
   ],
   hospitality: [
     { ask: "What's the dish or drink that tells people who you are?", share: "What does hospitality mean to you beyond the food?" },
-    { ask: "What's the hardest part of keeping quality steady on your busiest night?", share: "What should event hosts ask a caterer before booking?" },
+    { ask: "What's the hardest part of keeping quality steady on your busiest night?", share: "What should event hosts ask a food partner before booking?" },
     { ask: "How are you adapting your menu or pricing to current economic shifts?", share: "What simple move makes a small bite feel premium?" },
     { ask: "What's the best thing a guest has ever said to you after a night?", share: "How should a venue and a food partner split the work?" },
     { ask: "Which local partner do you wish more people in New Jersey knew about?", share: "What's the best way to plan food for a crowd that mingles?" },

@@ -1961,6 +1961,11 @@ type CardGuestRow = {
   titleSaved: boolean;
   titleSource: "edited" | "rsvp" | "ai" | "category" | "none";
   igSaved: boolean;
+  about: string;
+  aboutSource: "edited" | "none";
+  promptSource: "ai" | "pool";
+  basis: string;
+  flag: string;
   rsvped: boolean;
   invited: boolean;
   unsubscribed: boolean;
@@ -1975,8 +1980,10 @@ function CardsView() {
   const [order, setOrder] = useState<CardPageOrder>("alternate");
   const [blanks, setBlanks] = useState(10);
   const [search, setSearch] = useState("");
-  const [edits, setEdits] = useState<Record<string, { title?: string; ig?: string; ask?: string; share?: string }>>({});
+  const [edits, setEdits] = useState<Record<string, { title?: string; ig?: string; about?: string; ask?: string; share?: string }>>({});
   const [suggesting, setSuggesting] = useState(false);
+  const [tailoring, setTailoring] = useState(false);
+  const [pasteAbout, setPasteAbout] = useState("");
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [paste, setPaste] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1984,6 +1991,7 @@ function CardsView() {
   const effective = (g: CardGuestRow) => ({
     title: edits[g.key]?.title ?? g.title,
     ig: edits[g.key]?.ig ?? g.ig ?? "",
+    about: edits[g.key]?.about ?? g.about,
     ask: edits[g.key]?.ask ?? g.ask,
     share: edits[g.key]?.share ?? g.share,
   });
@@ -1998,20 +2006,21 @@ function CardsView() {
   const sheets = Math.ceil(total / 10);
   const toCard = (g: CardGuestRow) => ({ name: g.name, title: effective(g).title, ig: normalizeInstagramHandle(effective(g).ig), ask: effective(g).ask, share: effective(g).share });
 
-  function setEdit(key: string, field: "title" | "ig" | "ask" | "share", value: string) {
+  function setEdit(key: string, field: "title" | "ig" | "about" | "ask" | "share", value: string) {
     setEdits((e) => ({ ...e, [key]: { ...e[key], [field]: value } }));
   }
 
   async function save(all: boolean) {
     setSaving(true);
     try {
-      const cards: Record<string, { title?: string; ig?: string; ask?: string; share?: string }> = {};
+      const cards: Record<string, { title?: string; ig?: string; about?: string; ask?: string; share?: string }> = {};
       if (all) {
         for (const g of guests) {
           const e = effective(g);
           cards[g.key] = {
             title: g.titleSaved || edits[g.key]?.title !== undefined ? e.title : "",
             ig: g.igSaved || edits[g.key]?.ig !== undefined ? e.ig : "",
+            about: g.aboutSource === "edited" || edits[g.key]?.about !== undefined ? e.about : "",
             ask: e.ask,
             share: e.share,
           };
@@ -2023,6 +2032,7 @@ function CardsView() {
           cards[key] = {
             title: v.title ?? (g.titleSaved ? g.title : ""),
             ig: v.ig ?? (g.igSaved ? (g.ig ?? "") : ""),
+            about: v.about ?? (g.aboutSource === "edited" ? g.about : ""),
             ask: v.ask ?? (g.askSaved ? g.ask : ""),
             share: v.share ?? (g.shareSaved ? g.share : ""),
           };
@@ -2037,6 +2047,43 @@ function CardsView() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function tailorQuestions() {
+    setTailoring(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/btl/cards/tailor-questions", {});
+      const body = await res.json();
+      toast({
+        title: body.tailored ? `Tailored ${body.tailored} guest${body.tailored === 1 ? "" : "s"}` : "No guests to tailor",
+        description: body.checked
+          ? `${body.thin ? `${body.thin} flagged for a closer look. ` : ""}Each shows what it's based on. Check them, edit anything, then lock.`
+          : "Confirmed guests need at least a position or an Instagram handle to tailor from.",
+      });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/cards"] });
+    } catch (err) {
+      toast({ title: "Couldn't tailor questions", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setTailoring(false);
+    }
+  }
+
+  function applyPasteAbout() {
+    const next = { ...edits };
+    let hit = 0, miss = 0;
+    for (const line of pasteAbout.split("\n")) {
+      const l = line.trim();
+      if (!l) continue;
+      const m = /^([^|\t]+)(?:\s\|\s|\t)(.+)$/.exec(l);
+      const who = m?.[1].trim().toLowerCase();
+      const g = who ? guests.find((x) => x.email === who || x.name.toLowerCase() === who) : undefined;
+      if (!m || !g) { miss++; continue; }
+      next[g.key] = { ...next[g.key], about: m[2].trim() };
+      hit++;
+    }
+    setEdits(next);
+    setPasteAbout("");
+    toast({ title: `Added ${hit} background note${hit === 1 ? "" : "s"}`, description: miss ? `${miss} line${miss === 1 ? "" : "s"} didn't match a guest.` : "Press Save changes to keep them.", variant: miss ? "destructive" : "default" });
   }
 
   async function suggestPositions() {
@@ -2172,6 +2219,9 @@ function CardsView() {
           <Button size="sm" onClick={() => save(false)} disabled={saving || dirtyCount === 0} className="bg-primary hover:bg-primary/90" data-testid="button-btl-cards-save">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Save changes${dirtyCount ? ` (${dirtyCount})` : ""}`}
           </Button>
+          <Button size="sm" variant="outline" onClick={tailorQuestions} disabled={tailoring} className="border-white/20 text-white/80" data-testid="button-btl-cards-tailor">
+            {tailoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Tailor questions with AI"}
+          </Button>
           <Button size="sm" variant="outline" onClick={suggestPositions} disabled={suggesting} className="border-white/20 text-white/80" data-testid="button-btl-cards-suggest">
             {suggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Suggest missing positions (${guests.filter((g) => g.titleSource === "none" || g.titleSource === "category").length})`}
           </Button>
@@ -2180,13 +2230,20 @@ function CardsView() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Positions come from what the guest typed on the RSVP; if they didn't give one, press “Suggest missing positions” for a short AI guess from their name, handle and category (marked “AI suggested”: check it, and edit anything). Instagram handles come from the RSVP or the invite list. Question 1 is the one used on a one-sided card; two-sided backs show both. Questions that are not locked are suggested from each guest's role and can shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
+          Positions come from what the guest typed on the RSVP; if they didn't give one, press “Suggest missing positions” for a short AI guess from their name, handle and category (marked “AI suggested”: check it, and edit anything). Instagram handles come from the RSVP or the invite list. For questions that fit who someone is, press “Tailor questions with AI”: it writes a pair from each confirmed guest's position, Instagram handle and any background note you add (nothing is looked up on Instagram). Each pair shows what it's based on, and anything the AI isn't sure about is flagged for you to check. A line in the Background box makes it far more accurate. Question 1 is the one used on a one-sided card; two-sided backs show both. Questions that are not locked are suggested from each guest's role and can shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
         </p>
         <details className="text-xs text-white/70">
           <summary className="cursor-pointer text-primary">Paste a list of questions</summary>
           <div className="mt-2 space-y-2">
             <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={4} placeholder={"jay@example.com | First question | Second question (optional)\nSir Moore | First question | Second question"} className="bg-black/40 border-white/10 text-xs" data-testid="textarea-btl-cards-paste" />
             <Button size="sm" variant="outline" onClick={applyPaste} disabled={!paste.trim()} className="border-white/20 text-white/80">Fill in questions</Button>
+          </div>
+        </details>
+        <details className="text-xs text-white/70">
+          <summary className="cursor-pointer text-primary">Paste background notes about guests</summary>
+          <div className="mt-2 space-y-2">
+            <Textarea value={pasteAbout} onChange={(e) => setPasteAbout(e.target.value)} rows={4} placeholder={"jay@example.com | Premier R&B events company, hosts open-invite nights across North Jersey\nSir Moore | Newark chef, photographer and community organizer"} className="bg-black/40 border-white/10 text-xs" data-testid="textarea-btl-cards-paste-about" />
+            <Button size="sm" variant="outline" onClick={applyPasteAbout} disabled={!pasteAbout.trim()} className="border-white/20 text-white/80">Add notes</Button>
           </div>
         </details>
         <div className="max-h-[32rem] overflow-y-auto rounded-lg border border-white/10 divide-y divide-white/5">
@@ -2210,11 +2267,16 @@ function CardsView() {
                   {edits[g.key]?.title === undefined && g.titleSource === "ai" && <p className="text-[10px] text-amber-300">AI suggested, check it</p>}
                   {edits[g.key]?.title === undefined && g.titleSource === "category" && <p className="text-[10px] text-white/40">from their category</p>}
                   <Input value={e.ig} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "ig", ev.target.value)} placeholder="@instagram" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-ig-${g.key}`} />
+                  <Textarea value={e.about} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "about", ev.target.value)} rows={2} placeholder="Background (not printed)" className="bg-black/40 border-white/10 text-[11px] min-h-0" data-testid={`textarea-btl-card-about-${g.key}`} />
                 </div>
                 <div className="md:col-span-6 space-y-1">
                   <Textarea value={e.ask} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "ask", ev.target.value)} rows={2} placeholder="Question 1" className="bg-black/40 border-white/10 text-xs min-h-0" data-testid={`textarea-btl-card-ask-${g.key}`} />
                   <Textarea value={e.share} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "share", ev.target.value)} rows={2} placeholder={format === "one" ? "Question 2 (two-sided cards only)" : "Question 2"} className={`bg-black/40 border-white/10 text-xs min-h-0 ${format === "one" ? "opacity-50" : ""}`} data-testid={`textarea-btl-card-share-${g.key}`} />
-                  {!(g.askSaved && g.shareSaved) && edits[g.key]?.ask === undefined && edits[g.key]?.share === undefined && <p className="text-[10px] text-white/40">suggested, not locked</p>}
+                  {!(g.askSaved && g.shareSaved) && edits[g.key]?.ask === undefined && edits[g.key]?.share === undefined && (
+                    g.promptSource === "ai"
+                      ? <p className="text-[10px] text-sky-300">AI tailored{g.basis ? `: ${g.basis}` : ""}{g.flag ? <span className="text-amber-300"> · check: {g.flag}</span> : null}</p>
+                      : <p className="text-[10px] text-white/40">suggested from their role, not locked{!e.about ? " · no background yet" : ""}</p>
+                  )}
                 </div>
               </div>
             );
