@@ -53,6 +53,25 @@ export function speakerSlug(name: string): string {
 }
 
 /**
+ * The photo slug for a panelist's name, forgiving of how it was typed in
+ * Settings ("Kimberly Simone, Esq.", "Kimberly McKoy-Simone", "Kim Simone"):
+ * exact slug first, then a unique first-name or last-name match against the
+ * panelists we hold a photo for. Falls back to the plain slug.
+ */
+export function speakerPhotoSlug(name: string): string {
+  const exact = speakerSlug(name);
+  if (hasAsset(`speakers/${exact}.jpg`)) return exact;
+  const known = Object.keys(SPEAKER_LINKEDIN).filter((k) => hasAsset(`speakers/${k}.jpg`));
+  const tokens = exact.split("-").filter(Boolean);
+  const hits = (idx: number) => known.filter((k) => k.split("-")[idx] !== undefined && tokens.includes(k.split("-")[idx]));
+  const byFirst = hits(0);
+  if (byFirst.length === 1) return byFirst[0];
+  const byLast = known.filter((k) => tokens.includes(k.split("-").slice(-1)[0]));
+  if (byLast.length === 1) return byLast[0];
+  return exact;
+}
+
+/**
  * Writes any embedded brand image that isn't already in the public folder
  * (so emails can attach it and the site can serve it). Run at server start.
  * A real file in client/public / dist/public is never overwritten.
@@ -162,7 +181,7 @@ export function speakerCardsHtml(speakers: Array<{ name: string; credential: str
   const rows = speakers
     .filter((s) => s.name.trim())
     .map((s) => {
-      const slug = speakerSlug(s.name);
+      const slug = speakerPhotoSlug(s.name);
       const hasPhoto = hasAsset(`speakers/${slug}.jpg`);
       const linkedin = SPEAKER_LINKEDIN[slug];
       const initials = s.name.split(",")[0].trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
