@@ -25,6 +25,7 @@ export const BTL_PAGE_FIELDS: BtlPageField[] = [
   { key: "essentials", label: "The Essentials", help: "One bullet per line.", multiline: true },
   { key: "flow", label: "Event Flow", help: "One line per slot. The time before \" — \" renders bold. Use {{doors_time}}, {{program_start_time}} and {{night_cap_time}} to follow the times in Settings — or type times directly.", multiline: true },
   { key: "dressCode", label: "Dress code + venue line", help: "Shown under the event flow, after the gold DRESS CODE label.", multiline: true },
+  { key: "closedMessage", label: "RSVPs closed — message", help: "Shown instead of the RSVP form once you press Close RSVPs in the admin.", multiline: true },
   { key: "rsvpFootnote", label: "RSVP footnote", help: "The small line under the RSVP button.", multiline: true },
 ];
 
@@ -53,6 +54,7 @@ export const BTL_PAGE_DEFAULTS: Record<string, string> = {
     "{{night_cap_time}} — Night cap",
   ].join("\n"),
   dressCode: "Come as yourself — we know plenty of you are coming straight from work. Business casual is perfect. · {{venue_name}}, Newark",
+  closedMessage: "RSVPs are now closed. Thank you to everyone who signed up. Follow @centralgroupevents to hear about the next one.",
   rsvpFootnote: "Free · RSVP required · You'll get event updates by email from Anthony; every email has a one-click unsubscribe.",
 };
 

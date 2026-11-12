@@ -74,6 +74,7 @@ type BtlSettings = {
   rsvpUrl: string;
   venueName: string;
   venueAddress: string;
+  venueEmail: string;
   doorsTime: string;
   programStartTime: string;
   nightCapTime: string;
@@ -124,6 +125,27 @@ export function BuildToLastTab() {
   // position (the guest's own, an edit, an AI suggestion, or their category).
   // Edits made in Name Cards flow into the RSVP list, guest book and cards.
   const { data: cardGuests = [] } = useQuery<CardGuestRow[]>({ queryKey: ["/api/admin/btl/cards"] });
+  const { toast } = useToast();
+  const qcTop = useQueryClient();
+  const { data: rsvpStatus } = useQuery<{ closed: boolean }>({ queryKey: ["/api/admin/btl/rsvp-status"] });
+  const [togglingRsvp, setTogglingRsvp] = useState(false);
+  async function toggleRsvpClosed() {
+    const closing = !rsvpStatus?.closed;
+    const msg = closing
+      ? "Close RSVPs? The page will show a closed message instead of the form, and nobody can sign up or change their RSVP. You can reopen any time."
+      : "Reopen RSVPs? The form comes back on the public page.";
+    if (!window.confirm(msg)) return;
+    setTogglingRsvp(true);
+    try {
+      await apiRequest("PUT", "/api/admin/btl/rsvp-status", { closed: closing });
+      qcTop.invalidateQueries({ queryKey: ["/api/admin/btl/rsvp-status"] });
+      toast({ title: closing ? "RSVPs closed" : "RSVPs reopened", description: closing ? "Now send the guest book to the venue from the Guest Book tab." : undefined });
+    } catch (err) {
+      toast({ title: "Couldn't change RSVP status", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setTogglingRsvp(false);
+    }
+  }
   const rsvps = useMemo(() => {
     const byEmail = new Map(cardGuests.map((g) => [g.email, g]));
     return rawRsvps.map((r) => {
@@ -143,6 +165,17 @@ export function BuildToLastTab() {
               <a href="/build-to-last" target="_blank" rel="noopener noreferrer" className="text-primary underline">/build-to-last</a>
             </p>
           </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={toggleRsvpClosed}
+              disabled={togglingRsvp || !rsvpStatus}
+              className={rsvpStatus?.closed ? "border-amber-400/60 text-amber-300" : "border-white/20 text-white/80"}
+              data-testid="button-btl-toggle-rsvp"
+            >
+              {togglingRsvp ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+              {rsvpStatus?.closed ? "RSVPs closed · Reopen" : "RSVPs open · Close RSVPs"}
+            </Button>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-black/30 border border-white/10 rounded-xl px-4 py-2 text-center">
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Confirmed</p>
@@ -152,6 +185,7 @@ export function BuildToLastTab() {
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Checked in</p>
               <p className="text-xl font-black text-white">{rsvps.filter((r) => r.checkedInAt).length}</p>
             </div>
+          </div>
           </div>
         </div>
         <div className="flex gap-2 mt-5 flex-wrap">
@@ -1767,6 +1801,78 @@ function QuestionsView({ rsvps }: { rsvps: BtlRsvp[] }) {
 
 const escHtml = (t: string) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
+/** Download the guest list as a PDF, or email it (PDF attached) to the venue. */
+function VenueGuestList({ count }: { count: number }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: settings } = useQuery<BtlSettings>({ queryKey: ["/api/admin/btl/settings"] });
+  const [to, setTo] = useState<string | null>(null);
+  const [cc, setCc] = useState("");
+  const [note, setNote] = useState("");
+  const [ig, setIg] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const toValue = to ?? settings?.venueEmail ?? "";
+
+  async function send() {
+    if (!toValue.trim()) {
+      toast({ title: "Add the venue's email", variant: "destructive" });
+      return;
+    }
+    if (!window.confirm(`Email the guest list (${count} confirmed, names and positions${ig ? " and Instagram" : ""}) with a PDF attached to ${toValue.trim()}${cc.trim() ? ` (cc ${cc.trim()})` : ""}? Guest email addresses are not included.`)) return;
+    setBusy(true);
+    try {
+      await apiRequest("POST", "/api/admin/btl/guest-book/send", { to: toValue.trim(), cc: cc.trim(), includeInstagram: ig, note: note.trim() });
+      if (toValue.trim() !== (settings?.venueEmail ?? "")) {
+        await apiRequest("PUT", "/api/admin/btl/settings", { venueEmail: toValue.trim() });
+        qc.invalidateQueries({ queryKey: ["/api/admin/btl/settings"] });
+      }
+      toast({ title: "Guest list sent", description: `Emailed to ${toValue.trim()} with the PDF attached.` });
+    } catch (err) {
+      toast({ title: "Couldn't send", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="mr-auto">
+          <h3 className="font-bold text-white">Guest list for the venue</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">{count} confirmed. Names and positions only. Guest emails are never shared. Close RSVPs first so the list is final.</p>
+        </div>
+        <Button asChild variant="outline" className="border-white/20 text-white/80" data-testid="button-btl-guestlist-pdf">
+          <a href={`/api/admin/btl/guest-book.pdf${ig ? "?ig=1" : ""}`} download>
+            <Download className="w-4 h-4 mr-1.5" /> Download PDF
+          </a>
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-white/70 text-xs">Venue email (several: separate with commas)</Label>
+          <Input value={toValue} onChange={(e) => setTo(e.target.value)} placeholder="events@venue.com" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-guestlist-to" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-white/70 text-xs">CC (optional)</Label>
+          <Input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="you@…" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-guestlist-cc" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-white/70 text-xs">Message (optional — a default note is used if blank)</Label>
+        <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="bg-black/40 border-white/10 text-sm" data-testid="textarea-btl-guestlist-note" />
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-xs text-white/70 cursor-pointer">
+          <Checkbox checked={ig} onCheckedChange={(c) => setIg(!!c)} data-testid="checkbox-btl-guestlist-ig" /> Include Instagram handles
+        </label>
+        <Button onClick={send} disabled={busy || count === 0} className="bg-primary hover:bg-primary/90 ml-auto" data-testid="button-btl-guestlist-send">
+          {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Send className="w-4 h-4 mr-1.5" />} Send to venue
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function GuestBookView({ rsvps }: { rsvps: BtlRsvp[] }) {
   const [sort, setSort] = useState<"alpha" | "category">("alpha");
 
@@ -1803,6 +1909,7 @@ function GuestBookView({ rsvps }: { rsvps: BtlRsvp[] }) {
 
   return (
     <div className="space-y-4">
+      <VenueGuestList count={rsvps.length} />
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-muted-foreground">The printed guest book handed to every attendee — built live from RSVPs.</p>
         <div className="flex gap-2">
@@ -2239,6 +2346,7 @@ function SettingsView() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><Label className="text-white/70 text-xs">Venue name</Label><Input value={s.venueName} onChange={(e) => set("venueName", e.target.value)} className={inputCls} data-testid="input-btl-venue-name" /></div>
           <div><Label className="text-white/70 text-xs">Venue address (shown in logistics + "Tomorrow" email)</Label><Input value={s.venueAddress} onChange={(e) => set("venueAddress", e.target.value)} className={inputCls} data-testid="input-btl-venue-address" /></div>
+          <div className="sm:col-span-2"><Label className="text-white/70 text-xs">Venue contact email (the guest list is sent here)</Label><Input value={s.venueEmail ?? ""} onChange={(e) => set("venueEmail", e.target.value)} placeholder="events@venue.com" className={inputCls} data-testid="input-btl-venue-email" /></div>
           <div><Label className="text-white/70 text-xs">Doors time</Label><Input value={s.doorsTime} onChange={(e) => set("doorsTime", e.target.value)} className={inputCls} /></div>
           <div><Label className="text-white/70 text-xs">Programming starts</Label><Input value={s.programStartTime} onChange={(e) => set("programStartTime", e.target.value)} className={inputCls} /></div>
           <div><Label className="text-white/70 text-xs">Night cap / end time</Label><Input value={s.nightCapTime ?? ""} onChange={(e) => set("nightCapTime", e.target.value)} className={inputCls} data-testid="input-btl-night-cap-time" /></div>

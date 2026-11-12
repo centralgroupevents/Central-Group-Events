@@ -711,6 +711,12 @@ ${blogList || "_No recent posts yet._"}
   // confirmation email immediately.
   app.post("/api/build-to-last/rsvp", formLimiter, async (req: Request, res: Response) => {
     try {
+      // RSVPs closed by the admin: no new sign-ups, and no edits to the list.
+      if ((await storage.getSetting("btl.rsvpClosed")) === "true") {
+        const { BTL_PAGE_DEFAULTS } = await import("@shared/btl-page");
+        const custom = await storage.getSetting("btl.page.closedMessage");
+        return res.status(403).json({ message: (custom && custom.trim()) || BTL_PAGE_DEFAULTS.closedMessage, closed: true });
+      }
       const { btlRsvpInputSchema } = await import("@shared/schema");
       const input = btlRsvpInputSchema.parse(req.body);
       // Standard capitalization for names typed in lowercase / ALL CAPS.
@@ -1143,6 +1149,7 @@ ${blogList || "_No recent posts yet._"}
       const st = await getBtlSettings();
       const vars = { doors_time: st.doorsTime, program_start_time: st.programStartTime, night_cap_time: st.nightCapTime, venue_name: st.venueName };
       for (const k of Object.keys(copy)) copy[k] = renderBtlText(copy[k], vars);
+      copy.rsvpClosed = (await storage.getSetting("btl.rsvpClosed")) === "true" ? "true" : "false";
       res.setHeader("Cache-Control", "no-store");
       res.json(copy);
     } catch (err) {
@@ -1308,7 +1315,7 @@ ${blogList || "_No recent posts yet._"}
   app.put("/api/admin/btl/settings", requireAuth(), async (req: Request, res: Response) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const stringKeys = ["rsvpUrl", "venueName", "venueAddress", "doorsTime", "programStartTime", "nightCapTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
+      const stringKeys = ["rsvpUrl", "venueName", "venueAddress", "venueEmail", "doorsTime", "programStartTime", "nightCapTime", "questionThemes", "photoGalleryUrl", "recapVideoUrl", "fieldNotesUrl", "contactSheetUrl"];
       for (const key of stringKeys) {
         if (typeof body[key] === "string") await storage.setSetting(`btl.${key}`, String(body[key]).slice(0, 4000));
       }
@@ -1554,6 +1561,100 @@ ${blogList || "_No recent posts yet._"}
       console.error("[btl/cards suggest] error:", err);
       const msg = err instanceof Error ? err.message.slice(0, 200) : "unknown error";
       res.status(/GEMINI_API_KEY/.test(msg) ? 503 : 500).json({ message: msg });
+    }
+  });
+
+  // ── Guest book to the venue ────────────────────────────────────────────
+  // The list of everyone coming (names, positions, optionally Instagram) as a
+  // PDF — downloaded, or emailed to the venue. Guest email addresses are
+  // never included.
+  async function guestBookRows() {
+    const guests = (await loadCardGuests()).filter((g) => g.rsvped);
+    return guests.map((g) => ({ name: g.name, position: g.title, instagram: g.ig ?? "" }));
+  }
+
+  async function guestBookPdfBuffer(includeInstagram: boolean) {
+    const { guestListPdf } = await import("./btl-pdf");
+    const rows = await guestBookRows();
+    return {
+      rows,
+      pdf: guestListPdf({
+        title: "Built to Last — Guest List",
+        subtitle: `Thursday, November 12, 2026 · Equal Space, Newark · ${rows.length} confirmed`,
+        rows,
+        showInstagram: includeInstagram,
+        footer: "Central Group Events · centralgroupevents.com",
+      }),
+    };
+  }
+
+  app.get("/api/admin/btl/guest-book.pdf", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { pdf } = await guestBookPdfBuffer(req.query.ig === "1");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'attachment; filename="Built-to-Last-Guest-List.pdf"');
+      res.setHeader("Cache-Control", "no-store");
+      res.send(pdf);
+    } catch (err) {
+      console.error("[btl/guest-book pdf] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/btl/guest-book/send", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { parseCcList } = await import("./btl-scheduled");
+      const { sendBtlAdminEmail } = await import("./btl-mailer");
+      const { paras } = await import("./btl-emails");
+      const b = (req.body ?? {}) as { to?: string; cc?: string; includeInstagram?: boolean; note?: string };
+      let to: string[], cc: string[];
+      try { to = parseCcList(b.to); cc = parseCcList(b.cc); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+      if (to.length === 0) return res.status(400).json({ message: "Add the venue's email address" });
+      const includeIg = !!b.includeInstagram;
+      const { rows, pdf } = await guestBookPdfBuffer(includeIg);
+      if (rows.length === 0) return res.status(400).json({ message: "No confirmed guests yet" });
+      const escH = (t: string) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+      const note = String(b.note ?? "").trim().slice(0, 1500);
+      const table = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin:6px 0 20px;font-size:14px">${rows
+        .map((r, i) => `<tr style="background:${i % 2 === 0 ? "#f3ecdd" : "transparent"}"><td style="padding:6px 8px;font-weight:bold">${escH(r.name)}</td><td style="padding:6px 8px;color:#4a4130">${escH(r.position)}</td>${includeIg ? `<td style="padding:6px 8px;color:#4a4130">${escH(r.instagram)}</td>` : ""}</tr>`)
+        .join("")}</table>`;
+      const body = [
+        paras("Hi,"),
+        paras(note || `Here is the guest list for Built to Last on Thursday, November 12 at Equal Space. ${rows.length} guests are confirmed. A PDF copy is attached.`),
+        table,
+        paras("Thank you again for hosting us.\n\n— The Central Group Events team"),
+      ].join("\n");
+      const sent = await sendBtlAdminEmail({
+        to, cc,
+        subject: `Built to Last — guest list (${rows.length} confirmed)`,
+        bodyHtml: body,
+        attachments: [{ filename: "Built-to-Last-Guest-List.pdf", content: pdf, contentType: "application/pdf" }],
+      });
+      if (!sent.ok) return res.status(502).json({ message: sent.error });
+      res.json({ sent: true, to, count: rows.length });
+    } catch (err) {
+      console.error("[btl/guest-book send] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── Close / reopen RSVPs ───────────────────────────────────────────────
+  app.get("/api/admin/btl/rsvp-status", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      res.json({ closed: (await storage.getSetting("btl.rsvpClosed")) === "true" });
+    } catch (err) {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/btl/rsvp-status", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const closed = !!(req.body as { closed?: unknown })?.closed;
+      await storage.setSetting("btl.rsvpClosed", closed ? "true" : "false");
+      res.json({ closed });
+    } catch (err) {
+      console.error("[btl/rsvp-status] error:", err);
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
