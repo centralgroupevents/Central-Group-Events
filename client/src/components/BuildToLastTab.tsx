@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
+import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS, normalizeInstagramHandle } from "@shared/schema";
 import { BTL_PAGE_FIELDS, BTL_PAGE_DEFAULTS } from "@shared/btl-page";
 import { CARD_CSS, cardFront, cardBack, cardsDocument, type CardFormat, type CardPageOrder } from "@/lib/btl-cards";
 import { Download, Loader2, Plus, Send, Upload, Eye, Check, Printer, Pencil, Trash2, X } from "lucide-react";
@@ -118,7 +118,19 @@ type View = (typeof VIEWS)[number];
 
 export function BuildToLastTab() {
   const [view, setView] = useState<View>("RSVPs");
-  const { data: rsvps = [], isLoading } = useQuery<BtlRsvp[]>({ queryKey: ["/api/admin/btl/rsvps"] });
+  const { data: rawRsvps = [], isLoading } = useQuery<BtlRsvp[]>({ queryKey: ["/api/admin/btl/rsvps"] });
+  // Guest profiles merge the RSVP with the invite list: standard-capitalized
+  // names, Instagram from the invite list when the RSVP has none, and the
+  // position (the guest's own, an edit, an AI suggestion, or their category).
+  // Edits made in Name Cards flow into the RSVP list, guest book and cards.
+  const { data: cardGuests = [] } = useQuery<CardGuestRow[]>({ queryKey: ["/api/admin/btl/cards"] });
+  const rsvps = useMemo(() => {
+    const byEmail = new Map(cardGuests.map((g) => [g.email, g]));
+    return rawRsvps.map((r) => {
+      const g = byEmail.get(r.email.toLowerCase().trim());
+      return g ? { ...r, name: g.name, role: g.title || r.role, companyOrHandle: g.ig ?? r.companyOrHandle } : r;
+    });
+  }, [rawRsvps, cardGuests]);
 
   return (
     <div className="space-y-5">
@@ -1753,6 +1765,8 @@ function QuestionsView({ rsvps }: { rsvps: BtlRsvp[] }) {
 
 /* ── Guest Book ────────────────────────────────────────────────────────── */
 
+const escHtml = (t: string) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
 function GuestBookView({ rsvps }: { rsvps: BtlRsvp[] }) {
   const [sort, setSort] = useState<"alpha" | "category">("alpha");
 
@@ -1766,9 +1780,9 @@ function GuestBookView({ rsvps }: { rsvps: BtlRsvp[] }) {
   function printIt() {
     const entries = sorted.map((r) => `
       <div style="break-inside:avoid;margin:0 0 22px">
-        <p style="margin:0;font-size:15px"><strong>${r.name}</strong>${r.companyOrHandle ? ` · ${r.companyOrHandle}` : ""}</p>
-        <p style="margin:2px 0 4px;font-size:12px;color:#777;text-transform:uppercase;letter-spacing:1px">${r.role}</p>
-        <p style="margin:0;font-size:13.5px;line-height:1.5">${r.workingOnNow}</p>
+        <p style="margin:0;font-size:15px"><strong>${escHtml(r.name)}</strong>${r.companyOrHandle ? ` · ${escHtml(r.companyOrHandle)}` : ""}</p>
+        <p style="margin:2px 0 4px;font-size:12px;color:#777;text-transform:uppercase;letter-spacing:1px">${escHtml(r.role)}</p>
+        <p style="margin:0;font-size:13.5px;line-height:1.5">${escHtml(r.workingOnNow)}</p>
       </div>`).join("");
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Build to Last Vol. 1 — Guest Book</title></head>
       <body style="font-family:Georgia,serif;color:#1a1611;max-width:640px;margin:40px auto;padding:0 24px">
@@ -1838,6 +1852,8 @@ type CardGuestRow = {
   share: string;
   shareSaved: boolean;
   titleSaved: boolean;
+  titleSource: "edited" | "rsvp" | "ai" | "category" | "none";
+  igSaved: boolean;
   rsvped: boolean;
   invited: boolean;
   unsubscribed: boolean;
@@ -1852,13 +1868,15 @@ function CardsView() {
   const [order, setOrder] = useState<CardPageOrder>("alternate");
   const [blanks, setBlanks] = useState(10);
   const [search, setSearch] = useState("");
-  const [edits, setEdits] = useState<Record<string, { title?: string; ask?: string; share?: string }>>({});
+  const [edits, setEdits] = useState<Record<string, { title?: string; ig?: string; ask?: string; share?: string }>>({});
+  const [suggesting, setSuggesting] = useState(false);
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [paste, setPaste] = useState("");
   const [saving, setSaving] = useState(false);
 
   const effective = (g: CardGuestRow) => ({
     title: edits[g.key]?.title ?? g.title,
+    ig: edits[g.key]?.ig ?? g.ig ?? "",
     ask: edits[g.key]?.ask ?? g.ask,
     share: edits[g.key]?.share ?? g.share,
   });
@@ -1871,20 +1889,25 @@ function CardsView() {
   const dirtyCount = Object.keys(edits).length;
   const total = printable.length + Math.max(0, blanks);
   const sheets = Math.ceil(total / 10);
-  const toCard = (g: CardGuestRow) => ({ name: g.name, title: effective(g).title, ig: g.ig, ask: effective(g).ask, share: effective(g).share });
+  const toCard = (g: CardGuestRow) => ({ name: g.name, title: effective(g).title, ig: normalizeInstagramHandle(effective(g).ig), ask: effective(g).ask, share: effective(g).share });
 
-  function setEdit(key: string, field: "title" | "ask" | "share", value: string) {
+  function setEdit(key: string, field: "title" | "ig" | "ask" | "share", value: string) {
     setEdits((e) => ({ ...e, [key]: { ...e[key], [field]: value } }));
   }
 
   async function save(all: boolean) {
     setSaving(true);
     try {
-      const cards: Record<string, { title?: string; ask?: string; share?: string }> = {};
+      const cards: Record<string, { title?: string; ig?: string; ask?: string; share?: string }> = {};
       if (all) {
         for (const g of guests) {
           const e = effective(g);
-          cards[g.key] = { title: g.titleSaved || edits[g.key]?.title !== undefined ? e.title : "", ask: e.ask, share: e.share };
+          cards[g.key] = {
+            title: g.titleSaved || edits[g.key]?.title !== undefined ? e.title : "",
+            ig: g.igSaved || edits[g.key]?.ig !== undefined ? e.ig : "",
+            ask: e.ask,
+            share: e.share,
+          };
         }
       } else {
         for (const [key, v] of Object.entries(edits)) {
@@ -1892,6 +1915,7 @@ function CardsView() {
           if (!g) continue;
           cards[key] = {
             title: v.title ?? (g.titleSaved ? g.title : ""),
+            ig: v.ig ?? (g.igSaved ? (g.ig ?? "") : ""),
             ask: v.ask ?? (g.askSaved ? g.ask : ""),
             share: v.share ?? (g.shareSaved ? g.share : ""),
           };
@@ -1905,6 +1929,23 @@ function CardsView() {
       toast({ title: "Save failed", description: String((err as Error).message), variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function suggestPositions() {
+    setSuggesting(true);
+    try {
+      const res = await apiRequest("POST", "/api/admin/btl/cards/suggest-positions");
+      const body = await res.json();
+      toast({
+        title: body.suggested ? `Suggested ${body.suggested} position${body.suggested === 1 ? "" : "s"}` : "No new suggestions",
+        description: body.checked ? `Checked ${body.checked} guest${body.checked === 1 ? "" : "s"} without a position. Suggestions are guesses from the name and handle: check them before printing.` : "Every guest already has a position.",
+      });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/cards"] });
+    } catch (err) {
+      toast({ title: "Couldn't suggest positions", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setSuggesting(false);
     }
   }
 
@@ -2020,12 +2061,15 @@ function CardsView() {
           <Button size="sm" onClick={() => save(false)} disabled={saving || dirtyCount === 0} className="bg-primary hover:bg-primary/90" data-testid="button-btl-cards-save">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Save changes${dirtyCount ? ` (${dirtyCount})` : ""}`}
           </Button>
+          <Button size="sm" variant="outline" onClick={suggestPositions} disabled={suggesting} className="border-white/20 text-white/80" data-testid="button-btl-cards-suggest">
+            {suggesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Suggest missing positions (${guests.filter((g) => g.titleSource === "none" || g.titleSource === "category").length})`}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => save(true)} disabled={saving} className="border-white/20 text-white/80" data-testid="button-btl-cards-lock">
             Lock all questions
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Titles come from the guest's RSVP position (or their category). Question 1 is the one used on a one-sided card; two-sided backs show both. Questions that are not locked are suggested from each guest's role and can shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
+          Positions come from what the guest typed on the RSVP; if they didn't give one, press “Suggest missing positions” for a short AI guess from their name, handle and category (marked “AI suggested”: check it, and edit anything). Instagram handles come from the RSVP or the invite list. Question 1 is the one used on a one-sided card; two-sided backs show both. Questions that are not locked are suggested from each guest's role and can shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
         </p>
         <details className="text-xs text-white/70">
           <summary className="cursor-pointer text-primary">Paste a list of questions</summary>
@@ -2044,14 +2088,17 @@ function CardsView() {
               <div key={g.key} onClick={() => setPreviewKey(g.key)} className={`grid grid-cols-1 md:grid-cols-12 gap-2 px-3 py-2 text-sm cursor-pointer ${preview?.key === g.key ? "bg-primary/10" : "hover:bg-white/5"}`}>
                 <div className="md:col-span-3 min-w-0">
                   <p className="text-white truncate">{g.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">{g.ig ?? "no Instagram → ours"}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{effective(g).ig || "no Instagram, QR goes to ours"}</p>
                   <p className="text-[10px] mt-0.5">
                     {g.rsvped ? <span className="text-emerald-300">RSVP'd</span> : <span className="text-white/40">invited</span>}
                     {edited && <span className="ml-2 text-amber-300">edited</span>}
                   </p>
                 </div>
-                <div className="md:col-span-3">
-                  <Input value={e.title} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "title", ev.target.value)} placeholder="Title / role" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-title-${g.key}`} />
+                <div className="md:col-span-3 space-y-1">
+                  <Input value={e.title} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "title", ev.target.value)} placeholder="Position" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-title-${g.key}`} />
+                  {edits[g.key]?.title === undefined && g.titleSource === "ai" && <p className="text-[10px] text-amber-300">AI suggested, check it</p>}
+                  {edits[g.key]?.title === undefined && g.titleSource === "category" && <p className="text-[10px] text-white/40">from their category</p>}
+                  <Input value={e.ig} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "ig", ev.target.value)} placeholder="@instagram" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-ig-${g.key}`} />
                 </div>
                 <div className="md:col-span-6 space-y-1">
                   <Textarea value={e.ask} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "ask", ev.target.value)} rows={2} placeholder="Question 1" className="bg-black/40 border-white/10 text-xs min-h-0" data-testid={`textarea-btl-card-ask-${g.key}`} />

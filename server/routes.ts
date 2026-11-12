@@ -1442,9 +1442,13 @@ ${blogList || "_No recent posts yet._"}
     const { assignQuestions } = await import("@shared/btl-card-questions");
     const [invitees, rsvps, rawSaved] = await Promise.all([storage.listBtlInvitees(slug), storage.listBtlRsvps(slug), storage.getSetting("btl.cards")]);
     // "question" is the earlier single-question field — it now means "ask".
-    type Saved = { title?: string; ask?: string; share?: string; question?: string };
+    type Saved = { title?: string; ig?: string; ask?: string; share?: string; question?: string };
     let saved: Record<string, Saved> = {};
     try { const j = JSON.parse(rawSaved || "{}"); if (j && typeof j === "object") saved = j; } catch { /* ignore bad JSON */ }
+    // AI-suggested positions for guests who gave none (see btl-ai.ts).
+    let aiTitles: Record<string, string> = {};
+    try { const j = JSON.parse((await storage.getSetting("btl.cardSuggestions")) || "{}"); if (j && typeof j === "object") aiTitles = j; } catch { /* ignore */ }
+    const { normalizePersonName, looksLikeBrandOrHandle } = await import("@shared/btl-names");
     type G = { key: string; name: string; email: string; position: string; category: string | null; ig: string | null; rsvped: boolean; invited: boolean; unsubscribed: boolean; notes: string | null };
     const byEmail = new Map<string, G>();
     for (const i of invitees) {
@@ -1462,6 +1466,8 @@ ${blogList || "_No recent posts yet._"}
         byEmail.set(key, { key, name: r.name, email: key, position: (r.role || "").trim(), category: r.adminCategory ?? null, ig, rsvped: true, invited: false, unsubscribed: !!r.unsubscribed, notes: null });
       }
     }
+    // Standard capitalization on display (brand-like one-word names are left as typed).
+    for (const g of Array.from(byEmail.values())) if (!looksLikeBrandOrHandle(g.name)) g.name = normalizePersonName(g.name);
     const guests = Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
     const savedPrompts: Record<string, { ask?: string; share?: string }> = {};
     for (const g of guests) {
@@ -1471,15 +1477,21 @@ ${blogList || "_No recent posts yet._"}
       if (ask || share) savedPrompts[g.key] = { ask: ask || undefined, share: share || undefined };
     }
     const auto = assignQuestions(
-      guests.map((g) => ({ key: g.key, name: g.name, position: saved[g.key]?.title?.trim() || g.position, category: g.category })),
+      guests.map((g) => ({ key: g.key, name: g.name, position: saved[g.key]?.title?.trim() || g.position || aiTitles[g.key] || "", category: g.category })),
       savedPrompts,
     );
     return guests.map((g) => {
       const o = saved[g.key] ?? {};
-      const title = (o.title ?? "").trim() || g.position || (g.category ? CARD_CATEGORY_LABELS[g.category] ?? "" : "");
+      const categoryLabel = g.category ? CARD_CATEGORY_LABELS[g.category] ?? "" : "";
+      // Position: admin edit > what the guest typed on the RSVP > AI suggestion > category label.
+      const titleSource: "edited" | "rsvp" | "ai" | "category" | "none" =
+        (o.title ?? "").trim() ? "edited" : g.position ? "rsvp" : aiTitles[g.key] ? "ai" : categoryLabel ? "category" : "none";
+      const title = titleSource === "edited" ? o.title!.trim() : titleSource === "rsvp" ? g.position : titleSource === "ai" ? aiTitles[g.key] : categoryLabel;
+      // Instagram: admin edit > RSVP > invite list (already merged above).
+      const igOverride = normalizeInstagramHandle(o.ig);
       const sp = savedPrompts[g.key] ?? {};
       return {
-        ...g, title, titleSaved: !!(o.title ?? "").trim(),
+        ...g, ig: igOverride || g.ig, igSaved: !!igOverride, title, titleSource, titleSaved: titleSource === "edited",
         ask: sp.ask ?? auto[g.key]?.ask ?? "", askSaved: !!sp.ask,
         share: sp.share ?? auto[g.key]?.share ?? "", shareSaved: !!sp.share,
       };
@@ -1497,23 +1509,51 @@ ${blogList || "_No recent posts yet._"}
 
   app.put("/api/admin/btl/cards", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const incoming = ((req.body ?? {}) as { cards?: Record<string, { title?: unknown; ask?: unknown; share?: unknown }> }).cards ?? {};
+      const { normalizeInstagramHandle } = await import("@shared/schema");
+      const incoming = ((req.body ?? {}) as { cards?: Record<string, { title?: unknown; ig?: unknown; ask?: unknown; share?: unknown }> }).cards ?? {};
       const raw = await storage.getSetting("btl.cards");
-      let cur: Record<string, { title?: string; ask?: string; share?: string }> = {};
+      let cur: Record<string, { title?: string; ig?: string; ask?: string; share?: string }> = {};
       try { const j = JSON.parse(raw || "{}"); if (j && typeof j === "object") cur = j; } catch { /* start fresh */ }
       for (const [email, v] of Object.entries(incoming)) {
         const key = email.toLowerCase().trim();
         const title = String(v?.title ?? "").trim().slice(0, 120);
+        const ig = normalizeInstagramHandle(String(v?.ig ?? "")) ?? "";
         const ask = String(v?.ask ?? "").trim().slice(0, 300);
         const share = String(v?.share ?? "").trim().slice(0, 300);
-        if (!title && !ask && !share) delete cur[key];
-        else cur[key] = { ...(title ? { title } : {}), ...(ask ? { ask } : {}), ...(share ? { share } : {}) };
+        if (!title && !ig && !ask && !share) delete cur[key];
+        else cur[key] = { ...(title ? { title } : {}), ...(ig ? { ig } : {}), ...(ask ? { ask } : {}), ...(share ? { share } : {}) };
       }
       await storage.setSetting("btl.cards", JSON.stringify(cur));
       res.json({ saved: Object.keys(incoming).length });
     } catch (err) {
       console.error("[btl/cards save] error:", err);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Fill in positions for guests who have none (no RSVP position, no edit, no
+  // earlier suggestion) with short AI suggestions. Stored separately from the
+  // admin's own edits so they can always be overridden or cleared.
+  app.post("/api/admin/btl/cards/suggest-positions", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const guests = await loadCardGuests();
+      const needy = guests.filter((g) => g.titleSource === "none" || g.titleSource === "category");
+      if (needy.length === 0) return res.json({ suggested: 0, checked: 0 });
+      const { suggestPositions } = await import("./btl-ai");
+      let existing: Record<string, string> = {};
+      try { const j = JSON.parse((await storage.getSetting("btl.cardSuggestions")) || "{}"); if (j && typeof j === "object") existing = j; } catch { /* ignore */ }
+      let added = 0;
+      for (let i = 0; i < needy.length; i += 40) {
+        const chunk = needy.slice(i, i + 40);
+        const got = await suggestPositions(chunk.map((g) => ({ key: g.key, name: g.name, ig: g.ig, category: g.category, notes: g.notes })));
+        for (const [k, v] of Object.entries(got)) { existing[k] = v; added++; }
+      }
+      await storage.setSetting("btl.cardSuggestions", JSON.stringify(existing));
+      res.json({ suggested: added, checked: needy.length });
+    } catch (err) {
+      console.error("[btl/cards suggest] error:", err);
+      const msg = err instanceof Error ? err.message.slice(0, 200) : "unknown error";
+      res.status(/GEMINI_API_KEY/.test(msg) ? 503 : 500).json({ message: msg });
     }
   });
 
