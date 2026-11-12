@@ -2130,9 +2130,10 @@ function CardsView() {
     toast({ title: `Filled ${hit} guest${hit === 1 ? "" : "s"}`, description: miss ? `${miss} line${miss === 1 ? "" : "s"} didn't match a guest.` : "Press Save changes to keep them.", variant: miss ? "destructive" : "default" });
   }
 
-  function printCards() {
+  function printCards(testSheet = false) {
     if (dirtyCount > 0 && !window.confirm("You have unsaved edits. They will still print, but press Save changes to keep them. Print anyway?")) return;
-    const html = cardsDocument({ guests: printable.map(toCard), format, order, blanks, layout, origin: window.location.origin });
+    const per = layout === "shop" ? 8 : 10;
+    const html = cardsDocument({ guests: printable.map(toCard).slice(0, testSheet ? per : undefined), format, order, blanks: testSheet ? 0 : blanks, layout, origin: window.location.origin });
     const w = window.open("", "_blank");
     if (!w) {
       toast({ title: "Pop-up blocked", description: "Allow pop-ups for this site, then press Print again.", variant: "destructive" });
@@ -2190,12 +2191,15 @@ function CardsView() {
               <button type="button" className={pill(order === "fronts-first")} onClick={() => setOrder("fronts-first")}>All fronts, then all backs</button>
             </div>
           )}
-          <Button onClick={printCards} disabled={total === 0} className="bg-primary hover:bg-primary/90 h-9 ml-auto" data-testid="button-btl-cards-print">
+          <Button variant="outline" onClick={() => printCards(true)} disabled={total === 0} className="border-white/20 text-white/80 h-9 ml-auto" data-testid="button-btl-cards-test">
+            One test sheet
+          </Button>
+          <Button onClick={() => printCards(false)} disabled={total === 0} className="bg-primary hover:bg-primary/90 h-9" data-testid="button-btl-cards-print">
             <Printer className="w-3.5 h-3.5 mr-1.5" /> Print / save as PDF
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          {total} cards · {sheets} sheet{sheets === 1 ? "" : "s"}{format === "two" ? ` (${sheets * 2} pages, front and back)` : ""}. In the print dialog choose US Letter, Margins: None, Scale: 100% (not “fit to page”), and turn Background graphics on. {layout === "shop" ? "To get a PDF for the shop, set Destination to “Save as PDF”. Take it in as: 100 lb cover stock, full colour, double-sided, flip on the long edge, guillotine cut on the crop marks, and ask for a one-sheet front/back test first." : ""}
+          {total} cards · {sheets} sheet{sheets === 1 ? "" : "s"}{format === "two" ? ` (${sheets * 2} pages, front and back)` : ""}. In the print dialog choose US Letter, Margins: None, Scale: 100% (not “fit to page”), and turn Background graphics on. {layout === "shop" ? "To get a PDF for the shop, set Destination to “Save as PDF”. Take it in as: 100 lb cover stock, full colour, double-sided, flip on the long edge, guillotine cut on the crop marks, and ask for a one-sheet front/back test first (the “One test sheet” button makes it: the first sheet of cards, front and back)." : ""}
           {format === "two" && order === "alternate" && " For a printer without two-sided printing, pick “All fronts, then all backs”: print the fronts, put the stack back in, and print the backs (flip on the long edge)."}
         </p>
       </div>
