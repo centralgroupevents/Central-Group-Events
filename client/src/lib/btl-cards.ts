@@ -2,7 +2,8 @@
 // Letter sheet in a 2 × 5 grid, which is the most cards per sheet and fits
 // standard 10-up perforated card stock. Two formats:
 //   one-sided  front: name, title, Instagram + a QR code beside them
-//   two-sided  front: name, title, Instagram · back: QR code + a question
+//   two-sided  front: name, title, Instagram · back: QR code + two prompts
+//              ("Ask me" and "Tell the room")
 // The QR goes to the guest's Instagram, or to @centralgroupevents when we
 // don't have one. Rendered as HTML so it previews in the admin and prints
 // (or saves as PDF) straight from the browser.
@@ -19,7 +20,10 @@ export interface CardGuest {
   title: string;
   /** "@handle" or null */
   ig: string | null;
-  question: string;
+  /** A question they'd love to be asked */
+  ask: string;
+  /** A question that gets them to share advice */
+  share: string;
 }
 
 const esc = (s: string) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -64,7 +68,8 @@ function footer(logo: string, right: string): string {
   return `<div class="bc-ft"><img src="${logo}" alt="CGE"><span>${esc(right)}</span></div>`;
 }
 
-const BLANK_QUESTION = "What brought you here tonight, and who are you hoping to meet?";
+const BLANK_ASK = "What brought you here tonight, and who are you hoping to meet?";
+const BLANK_SHARE = "What's one thing you've learned this year that you'd pass on?";
 
 export function cardFront(g: CardGuest | null, format: CardFormat, logo: string): string {
   const name = g ? esc(g.name) : '<span class="bc-blank">Name</span>';
@@ -83,8 +88,13 @@ export function cardFront(g: CardGuest | null, format: CardFormat, logo: string)
 export function cardBack(g: CardGuest | null, logo: string): string {
   const qrUrl = cardQrUrl(g ?? { ig: null });
   const cap = g?.ig ? `Scan to follow ${g.ig}` : `Scan to follow @${CGE_INSTAGRAM}`;
-  const q = g?.question?.trim() || BLANK_QUESTION;
-  return `<div class="bc">${pattern(0.055)}<div class="bc-in3"><div class="bc-qw">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div><div class="bc-q"><div class="bc-k">Conversation starter</div><p style="font-size:${q.length > 120 ? "8.4pt" : "9.6pt"}">${esc(q)}</p></div></div>${footer(logo, "centralgroupevents.com")}</div>`;
+  let ask = g?.ask?.trim() ?? "";
+  let share = g?.share?.trim() ?? "";
+  if (!ask && !share) { ask = BLANK_ASK; share = BLANK_SHARE; }
+  const total = ask.length + share.length;
+  const size = ask && share ? (total > 210 ? "6.5pt" : total > 160 ? "7pt" : "7.6pt") : (total > 120 ? "8.4pt" : "9.4pt");
+  const block = (label: string, text: string) => (text ? `<div class="bc-pq"><div class="bc-k">${label}</div><p style="font-size:${size}">${esc(text)}</p></div>` : "");
+  return `<div class="bc">${pattern(0.055)}<div class="bc-in3"><div class="bc-qw">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div><div class="bc-q">${block("Ask me", ask)}${block("Tell the room", share)}</div></div>${footer(logo, "centralgroupevents.com")}</div>`;
 }
 
 export const CARD_CSS = `
@@ -105,11 +115,12 @@ export const CARD_CSS = `
 .bc-ft img{height:.13in}.bc-ft span{font-weight:600;font-size:5.2pt;letter-spacing:1.4px;text-transform:uppercase;color:#bdb39b}
 .bc-in2{position:absolute;left:.25in;right:.25in;top:.2in;bottom:.42in;display:flex;flex-direction:column;justify-content:center}
 .bc-in2 .bc-ig{font-size:11pt}.bc-in2 .bc-rl{font-size:7.6pt}
-.bc-in3{position:absolute;left:.2in;right:.2in;top:.2in;bottom:.42in;display:flex;gap:.17in;align-items:center}
-.bc-qw{width:1.05in;display:flex;flex-direction:column;align-items:center;flex:none}
-.bc-qw .bc-qr{width:1in;height:1in}.bc-qw .bc-cap{font-size:5pt}
-.bc-k{font-weight:700;font-size:6.6pt;letter-spacing:1.6px;text-transform:uppercase;color:#f0a31a;margin-bottom:.05in}
-.bc-q p{margin:0;font-weight:600;line-height:1.35;color:#f3ecdd}
+.bc-in3{position:absolute;left:.2in;right:.2in;top:.18in;bottom:.4in;display:flex;gap:.14in;align-items:center}
+.bc-qw{width:.92in;display:flex;flex-direction:column;align-items:center;flex:none}
+.bc-qw .bc-qr{width:.88in;height:.88in}.bc-qw .bc-cap{font-size:4.8pt}
+.bc-k{font-weight:700;font-size:5.8pt;letter-spacing:1.5px;text-transform:uppercase;color:#f0a31a;margin-bottom:.02in}
+.bc-pq{margin-bottom:.07in}.bc-pq:last-child{margin-bottom:0}
+.bc-q{min-width:0;flex:1}.bc-q p{margin:0;font-weight:600;line-height:1.28;color:#f3ecdd}
 `;
 
 /** Full printable document: Letter pages, 2 × 5 cards, light cut guides. */

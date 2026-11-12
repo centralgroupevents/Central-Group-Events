@@ -1833,8 +1833,10 @@ type CardGuestRow = {
   email: string;
   title: string;
   ig: string | null;
-  question: string;
-  questionSaved: boolean;
+  ask: string;
+  askSaved: boolean;
+  share: string;
+  shareSaved: boolean;
   titleSaved: boolean;
   rsvped: boolean;
   invited: boolean;
@@ -1850,14 +1852,15 @@ function CardsView() {
   const [order, setOrder] = useState<CardPageOrder>("alternate");
   const [blanks, setBlanks] = useState(10);
   const [search, setSearch] = useState("");
-  const [edits, setEdits] = useState<Record<string, { title?: string; question?: string }>>({});
+  const [edits, setEdits] = useState<Record<string, { title?: string; ask?: string; share?: string }>>({});
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [paste, setPaste] = useState("");
   const [saving, setSaving] = useState(false);
 
   const effective = (g: CardGuestRow) => ({
     title: edits[g.key]?.title ?? g.title,
-    question: edits[g.key]?.question ?? g.question,
+    ask: edits[g.key]?.ask ?? g.ask,
+    share: edits[g.key]?.share ?? g.share,
   });
   const printable = guests.filter((g) => who === "all" || g.rsvped);
   const shown = printable.filter((g) => {
@@ -1868,23 +1871,30 @@ function CardsView() {
   const dirtyCount = Object.keys(edits).length;
   const total = printable.length + Math.max(0, blanks);
   const sheets = Math.ceil(total / 10);
-  const toCard = (g: CardGuestRow) => ({ name: g.name, title: effective(g).title, ig: g.ig, question: effective(g).question });
+  const toCard = (g: CardGuestRow) => ({ name: g.name, title: effective(g).title, ig: g.ig, ask: effective(g).ask, share: effective(g).share });
 
-  function setEdit(key: string, field: "title" | "question", value: string) {
+  function setEdit(key: string, field: "title" | "ask" | "share", value: string) {
     setEdits((e) => ({ ...e, [key]: { ...e[key], [field]: value } }));
   }
 
   async function save(all: boolean) {
     setSaving(true);
     try {
-      const cards: Record<string, { title?: string; question?: string }> = {};
+      const cards: Record<string, { title?: string; ask?: string; share?: string }> = {};
       if (all) {
-        for (const g of guests) cards[g.key] = { title: g.titleSaved || edits[g.key]?.title !== undefined ? effective(g).title : "", question: effective(g).question };
+        for (const g of guests) {
+          const e = effective(g);
+          cards[g.key] = { title: g.titleSaved || edits[g.key]?.title !== undefined ? e.title : "", ask: e.ask, share: e.share };
+        }
       } else {
         for (const [key, v] of Object.entries(edits)) {
           const g = guests.find((x) => x.key === key);
           if (!g) continue;
-          cards[key] = { title: v.title ?? (g.titleSaved ? g.title : ""), question: v.question ?? (g.questionSaved ? g.question : "") };
+          cards[key] = {
+            title: v.title ?? (g.titleSaved ? g.title : ""),
+            ask: v.ask ?? (g.askSaved ? g.ask : ""),
+            share: v.share ?? (g.shareSaved ? g.share : ""),
+          };
         }
       }
       await apiRequest("PUT", "/api/admin/btl/cards", { cards });
@@ -1899,22 +1909,29 @@ function CardsView() {
   }
 
   function applyPaste() {
+    // Each line: guest email (or exact name), then the "ask" question, then
+    // optionally the "share" question, separated by " | " or a tab. A plain
+    // "email, question" line sets just the ask question.
     const next = { ...edits };
     let hit = 0, miss = 0;
     for (const line of paste.split("\n")) {
       const l = line.trim();
       if (!l) continue;
-      const m = /^([^,\t]+)[,\t]\s*(.+)$/.exec(l);
-      if (!m) { miss++; continue; }
-      const who = m[1].trim().toLowerCase();
+      let parts: string[];
+      if (l.includes("\t")) parts = l.split("\t");
+      else if (l.includes(" | ")) parts = l.split(" | ");
+      else { const m = /^([^,]+),\s*(.+)$/.exec(l); parts = m ? [m[1], m[2]] : []; }
+      parts = parts.map((x) => x.trim().replace(/^"|"$/g, "")).filter((x, i) => i === 0 || x);
+      if (parts.length < 2) { miss++; continue; }
+      const who = parts[0].toLowerCase();
       const g = guests.find((x) => x.email === who || x.name.toLowerCase() === who);
       if (!g) { miss++; continue; }
-      next[g.key] = { ...next[g.key], question: m[2].trim().replace(/^"|"$/g, "") };
+      next[g.key] = { ...next[g.key], ask: parts[1], ...(parts[2] ? { share: parts[2] } : {}) };
       hit++;
     }
     setEdits(next);
     setPaste("");
-    toast({ title: `Filled ${hit} question${hit === 1 ? "" : "s"}`, description: miss ? `${miss} line${miss === 1 ? "" : "s"} didn't match a guest.` : "Press Save changes to keep them.", variant: miss ? "destructive" : "default" });
+    toast({ title: `Filled ${hit} guest${hit === 1 ? "" : "s"}`, description: miss ? `${miss} line${miss === 1 ? "" : "s"} didn't match a guest.` : "Press Save changes to keep them.", variant: miss ? "destructive" : "default" });
   }
 
   function printCards() {
@@ -1957,7 +1974,7 @@ function CardsView() {
         <p className="text-xs text-white/60">
           {format === "one"
             ? "Front only: name, title and Instagram, with the QR code beside them."
-            : "Front: name, title and Instagram. Back: QR code and a conversation question."}
+            : "Front: name, title and Instagram. Back: QR code plus two prompts, \u201cAsk me\u201d and \u201cTell the room.\u201d"}
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
@@ -1998,7 +2015,7 @@ function CardsView() {
 
       <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h3 className="font-bold text-white mr-auto">Titles and questions</h3>
+          <h3 className="font-bold text-white mr-auto">Titles and prompts</h3>
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, title" className="bg-black/40 border-white/10 h-9 w-56" data-testid="input-btl-cards-search" />
           <Button size="sm" onClick={() => save(false)} disabled={saving || dirtyCount === 0} className="bg-primary hover:bg-primary/90" data-testid="button-btl-cards-save">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Save changes${dirtyCount ? ` (${dirtyCount})` : ""}`}
@@ -2008,13 +2025,13 @@ function CardsView() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Titles come from the guest's RSVP position (or their category). Questions that are not locked are suggested from each guest's role and shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
+          Titles come from the guest's RSVP position (or their category). \u201cAsk me\u201d is a question they'd love to be asked; \u201cTell the room\u201d gets them to share advice. Prompts that are not locked are suggested from each guest's role and can shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or prompt directly.
         </p>
         <details className="text-xs text-white/70">
-          <summary className="cursor-pointer text-primary">Paste a list of questions</summary>
+          <summary className="cursor-pointer text-primary">Paste a list of prompts</summary>
           <div className="mt-2 space-y-2">
-            <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={4} placeholder={"jay@example.com, What's one thing from engineering you've borrowed to put on a better event?\nSir Moore, Which of your hats would you hand to someone else first?"} className="bg-black/40 border-white/10 text-xs" data-testid="textarea-btl-cards-paste" />
-            <Button size="sm" variant="outline" onClick={applyPaste} disabled={!paste.trim()} className="border-white/20 text-white/80">Fill in questions</Button>
+            <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={4} placeholder={"jay@example.com | Question they'd love to be asked | Question that gets them to share advice\nSir Moore | Another ask question | Another share question"} className="bg-black/40 border-white/10 text-xs" data-testid="textarea-btl-cards-paste" />
+            <Button size="sm" variant="outline" onClick={applyPaste} disabled={!paste.trim()} className="border-white/20 text-white/80">Fill in prompts</Button>
           </div>
         </details>
         <div className="max-h-[32rem] overflow-y-auto rounded-lg border border-white/10 divide-y divide-white/5">
@@ -2036,9 +2053,10 @@ function CardsView() {
                 <div className="md:col-span-3">
                   <Input value={e.title} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "title", ev.target.value)} placeholder="Title / role" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-title-${g.key}`} />
                 </div>
-                <div className="md:col-span-6">
-                  <Textarea value={e.question} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "question", ev.target.value)} rows={2} className={`bg-black/40 border-white/10 text-xs min-h-0 ${format === "one" ? "opacity-50" : ""}`} data-testid={`textarea-btl-card-question-${g.key}`} />
-                  {!g.questionSaved && edits[g.key]?.question === undefined && <p className="text-[10px] text-white/40 mt-0.5">suggested — not locked</p>}
+                <div className="md:col-span-6 space-y-1">
+                  <Textarea value={e.ask} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "ask", ev.target.value)} rows={2} placeholder="Ask me…" className={`bg-black/40 border-white/10 text-xs min-h-0 ${format === "one" ? "opacity-50" : ""}`} data-testid={`textarea-btl-card-ask-${g.key}`} />
+                  <Textarea value={e.share} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "share", ev.target.value)} rows={2} placeholder="Tell the room…" className={`bg-black/40 border-white/10 text-xs min-h-0 ${format === "one" ? "opacity-50" : ""}`} data-testid={`textarea-btl-card-share-${g.key}`} />
+                  {!(g.askSaved && g.shareSaved) && edits[g.key]?.ask === undefined && edits[g.key]?.share === undefined && <p className="text-[10px] text-white/40">suggested, not locked</p>}
                 </div>
               </div>
             );

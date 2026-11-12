@@ -1441,7 +1441,9 @@ ${blogList || "_No recent posts yet._"}
     const { normalizeInstagramHandle } = await import("@shared/schema");
     const { assignQuestions } = await import("@shared/btl-card-questions");
     const [invitees, rsvps, rawSaved] = await Promise.all([storage.listBtlInvitees(slug), storage.listBtlRsvps(slug), storage.getSetting("btl.cards")]);
-    let saved: Record<string, { title?: string; question?: string }> = {};
+    // "question" is the earlier single-question field — it now means "ask".
+    type Saved = { title?: string; ask?: string; share?: string; question?: string };
+    let saved: Record<string, Saved> = {};
     try { const j = JSON.parse(rawSaved || "{}"); if (j && typeof j === "object") saved = j; } catch { /* ignore bad JSON */ }
     type G = { key: string; name: string; email: string; position: string; category: string | null; ig: string | null; rsvped: boolean; invited: boolean; unsubscribed: boolean; notes: string | null };
     const byEmail = new Map<string, G>();
@@ -1461,16 +1463,26 @@ ${blogList || "_No recent posts yet._"}
       }
     }
     const guests = Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
-    const savedQ: Record<string, string> = {};
-    for (const g of guests) if (saved[g.key]?.question?.trim()) savedQ[g.key] = saved[g.key].question!.trim();
+    const savedPrompts: Record<string, { ask?: string; share?: string }> = {};
+    for (const g of guests) {
+      const v = saved[g.key];
+      const ask = (v?.ask ?? v?.question ?? "").trim();
+      const share = (v?.share ?? "").trim();
+      if (ask || share) savedPrompts[g.key] = { ask: ask || undefined, share: share || undefined };
+    }
     const auto = assignQuestions(
       guests.map((g) => ({ key: g.key, name: g.name, position: saved[g.key]?.title?.trim() || g.position, category: g.category })),
-      savedQ,
+      savedPrompts,
     );
     return guests.map((g) => {
       const o = saved[g.key] ?? {};
       const title = (o.title ?? "").trim() || g.position || (g.category ? CARD_CATEGORY_LABELS[g.category] ?? "" : "");
-      return { ...g, title, titleSaved: !!(o.title ?? "").trim(), question: savedQ[g.key] ?? auto[g.key] ?? "", questionSaved: !!savedQ[g.key] };
+      const sp = savedPrompts[g.key] ?? {};
+      return {
+        ...g, title, titleSaved: !!(o.title ?? "").trim(),
+        ask: sp.ask ?? auto[g.key]?.ask ?? "", askSaved: !!sp.ask,
+        share: sp.share ?? auto[g.key]?.share ?? "", shareSaved: !!sp.share,
+      };
     });
   }
 
@@ -1485,16 +1497,17 @@ ${blogList || "_No recent posts yet._"}
 
   app.put("/api/admin/btl/cards", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const incoming = ((req.body ?? {}) as { cards?: Record<string, { title?: unknown; question?: unknown }> }).cards ?? {};
+      const incoming = ((req.body ?? {}) as { cards?: Record<string, { title?: unknown; ask?: unknown; share?: unknown }> }).cards ?? {};
       const raw = await storage.getSetting("btl.cards");
-      let cur: Record<string, { title?: string; question?: string }> = {};
+      let cur: Record<string, { title?: string; ask?: string; share?: string }> = {};
       try { const j = JSON.parse(raw || "{}"); if (j && typeof j === "object") cur = j; } catch { /* start fresh */ }
       for (const [email, v] of Object.entries(incoming)) {
         const key = email.toLowerCase().trim();
         const title = String(v?.title ?? "").trim().slice(0, 120);
-        const question = String(v?.question ?? "").trim().slice(0, 300);
-        if (!title && !question) delete cur[key];
-        else cur[key] = { ...(title ? { title } : {}), ...(question ? { question } : {}) };
+        const ask = String(v?.ask ?? "").trim().slice(0, 300);
+        const share = String(v?.share ?? "").trim().slice(0, 300);
+        if (!title && !ask && !share) delete cur[key];
+        else cur[key] = { ...(title ? { title } : {}), ...(ask ? { ask } : {}), ...(share ? { share } : {}) };
       }
       await storage.setSetting("btl.cards", JSON.stringify(cur));
       res.json({ saved: Object.keys(incoming).length });
