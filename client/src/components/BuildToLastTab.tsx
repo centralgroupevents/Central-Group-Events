@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS, normalizeInstagramHandle } from "@shared/schema";
 import { BTL_PAGE_FIELDS, BTL_PAGE_DEFAULTS } from "@shared/btl-page";
-import { CARD_CSS, CARD_FONT_IMPORT, cardFront, cardBack, cardsDocument, type CardFormat, type CardPageOrder } from "@/lib/btl-cards";
+import { CARD_CSS, CARD_FONT_IMPORT, cardFront, cardBack, cardsDocument, type CardFormat, type CardPageOrder, type CardSheetLayout } from "@/lib/btl-cards";
 import { Download, Loader2, Plus, Send, Upload, Eye, Check, Printer, Pencil, Trash2, X } from "lucide-react";
 
 type BtlRsvp = {
@@ -1978,6 +1978,7 @@ function CardsView() {
   const [format, setFormat] = useState<CardFormat>("two");
   const [who, setWho] = useState<"all" | "rsvped">("all");
   const [order, setOrder] = useState<CardPageOrder>("alternate");
+  const [layout, setLayout] = useState<CardSheetLayout>("shop");
   const [blanks, setBlanks] = useState(10);
   const [search, setSearch] = useState("");
   const [edits, setEdits] = useState<Record<string, { title?: string; ig?: string; about?: string; ask?: string; share?: string }>>({});
@@ -2003,7 +2004,7 @@ function CardsView() {
   const preview = guests.find((g) => g.key === previewKey) ?? printable[0] ?? null;
   const dirtyCount = Object.keys(edits).length;
   const total = printable.length + Math.max(0, blanks);
-  const sheets = Math.ceil(total / 10);
+  const sheets = Math.ceil(total / (layout === "shop" ? 8 : 10));
   const toCard = (g: CardGuestRow) => ({ name: g.name, title: effective(g).title, ig: normalizeInstagramHandle(effective(g).ig), ask: effective(g).ask, share: effective(g).share });
 
   function setEdit(key: string, field: "title" | "ig" | "about" | "ask" | "share", value: string) {
@@ -2131,7 +2132,7 @@ function CardsView() {
 
   function printCards() {
     if (dirtyCount > 0 && !window.confirm("You have unsaved edits. They will still print, but press Save changes to keep them. Print anyway?")) return;
-    const html = cardsDocument({ guests: printable.map(toCard), format, order, blanks, origin: window.location.origin });
+    const html = cardsDocument({ guests: printable.map(toCard), format, order, blanks, layout, origin: window.location.origin });
     const w = window.open("", "_blank");
     if (!w) {
       toast({ title: "Pop-up blocked", description: "Allow pop-ups for this site, then press Print again.", variant: "destructive" });
@@ -2159,13 +2160,16 @@ function CardsView() {
         <div>
           <h3 className="font-bold text-white">Name cards</h3>
           <p className="text-xs text-muted-foreground mt-1">
-            Business-card size (3.5 × 2 in), 10 per US Letter sheet. The QR code opens the guest's Instagram, or @centralgroupevents when we don't have one.
+            Business-card size (3.5 × 2 in). The QR code opens the guest's Instagram, or @centralgroupevents when we don't have one.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-white/50 mr-1">Format</span>
           <button type="button" className={pill(format === "one")} onClick={() => setFormat("one")} data-testid="button-btl-cards-one">One-sided</button>
           <button type="button" className={pill(format === "two")} onClick={() => setFormat("two")} data-testid="button-btl-cards-two">Two-sided</button>
+          <span className="text-xs text-white/50 ml-4 mr-1">Sheet</span>
+          <button type="button" className={pill(layout === "shop")} onClick={() => setLayout("shop")} data-testid="button-btl-cards-shop">Print shop (8 per sheet, bleed + crop marks)</button>
+          <button type="button" className={pill(layout === "ten")} onClick={() => setLayout("ten")} data-testid="button-btl-cards-ten">Card stock (10 per sheet)</button>
           <span className="text-xs text-white/50 ml-4 mr-1">Cards for</span>
           <button type="button" className={pill(who === "all")} onClick={() => setWho("all")}>Everyone ({guests.length})</button>
           <button type="button" className={pill(who === "rsvped")} onClick={() => setWho("rsvped")}>RSVP'd only ({guests.filter((g) => g.rsvped).length})</button>
@@ -2191,7 +2195,7 @@ function CardsView() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          {total} cards · {sheets} sheet{sheets === 1 ? "" : "s"}{format === "two" ? ` (${sheets * 2} pages, front and back)` : ""}. In the print dialog choose US Letter, Margins: None, Scale: 100%, and turn Background graphics on.
+          {total} cards · {sheets} sheet{sheets === 1 ? "" : "s"}{format === "two" ? ` (${sheets * 2} pages, front and back)` : ""}. In the print dialog choose US Letter, Margins: None, Scale: 100% (not “fit to page”), and turn Background graphics on. {layout === "shop" ? "To get a PDF for the shop, set Destination to “Save as PDF”. Take it in as: 100 lb cover stock, full colour, double-sided, flip on the long edge, guillotine cut on the crop marks, and ask for a one-sheet front/back test first." : ""}
           {format === "two" && order === "alternate" && " For a printer without two-sided printing, pick “All fronts, then all backs”: print the fronts, put the stack back in, and print the backs (flip on the long edge)."}
         </p>
       </div>
