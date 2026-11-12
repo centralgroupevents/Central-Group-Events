@@ -1962,7 +1962,7 @@ type CardGuestRow = {
   titleSource: "edited" | "rsvp" | "ai" | "category" | "none";
   igSaved: boolean;
   about: string;
-  aboutSource: "edited" | "scan" | "none";
+  aboutSource: "edited" | "none";
   promptSource: "ai" | "pool";
   basis: string;
   flag: string;
@@ -1982,7 +1982,6 @@ function CardsView() {
   const [search, setSearch] = useState("");
   const [edits, setEdits] = useState<Record<string, { title?: string; ig?: string; about?: string; ask?: string; share?: string }>>({});
   const [suggesting, setSuggesting] = useState(false);
-  const [scanning, setScanning] = useState(false);
   const [tailoring, setTailoring] = useState(false);
   const [pasteAbout, setPasteAbout] = useState("");
   const [previewKey, setPreviewKey] = useState<string | null>(null);
@@ -2050,23 +2049,6 @@ function CardsView() {
     }
   }
 
-  async function scanInstagram() {
-    setScanning(true);
-    try {
-      const res = await apiRequest("POST", "/api/admin/btl/cards/scan-instagram", {});
-      const body = await res.json();
-      toast({
-        title: body.scanned ? `Scanned ${body.scanned} profile${body.scanned === 1 ? "" : "s"}` : "Nothing new to scan",
-        description: body.scanned ? `${body.found} found, ${body.withBio} with a bio. Read them under each guest's background and fix anything off.` : "Every confirmed guest with an Instagram has already been scanned.",
-      });
-      qc.invalidateQueries({ queryKey: ["/api/admin/btl/cards"] });
-    } catch (err) {
-      toast({ title: "Couldn't scan Instagram", description: String((err as Error).message), variant: "destructive" });
-    } finally {
-      setScanning(false);
-    }
-  }
-
   async function tailorQuestions() {
     setTailoring(true);
     try {
@@ -2076,7 +2058,7 @@ function CardsView() {
         title: body.tailored ? `Tailored ${body.tailored} guest${body.tailored === 1 ? "" : "s"}` : "No guests to tailor",
         description: body.checked
           ? `${body.thin ? `${body.thin} flagged for a closer look. ` : ""}Each shows what it's based on. Check them, edit anything, then lock.`
-          : "Add a background note (or scan Instagram) first. Guests without one keep their role-based questions.",
+          : "Confirmed guests need at least a position or an Instagram handle to tailor from.",
       });
       qc.invalidateQueries({ queryKey: ["/api/admin/btl/cards"] });
     } catch (err) {
@@ -2237,9 +2219,6 @@ function CardsView() {
           <Button size="sm" onClick={() => save(false)} disabled={saving || dirtyCount === 0} className="bg-primary hover:bg-primary/90" data-testid="button-btl-cards-save">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Save changes${dirtyCount ? ` (${dirtyCount})` : ""}`}
           </Button>
-          <Button size="sm" variant="outline" onClick={scanInstagram} disabled={scanning} className="border-white/20 text-white/80" data-testid="button-btl-cards-scan">
-            {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Scan Instagram bios (${guests.filter((g) => g.rsvped && g.ig && g.aboutSource === "none").length})`}
-          </Button>
           <Button size="sm" variant="outline" onClick={tailorQuestions} disabled={tailoring} className="border-white/20 text-white/80" data-testid="button-btl-cards-tailor">
             {tailoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Tailor questions with AI"}
           </Button>
@@ -2251,7 +2230,7 @@ function CardsView() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Positions come from what the guest typed on the RSVP; if they didn't give one, press “Suggest missing positions” for a short AI guess from their name, handle and category (marked “AI suggested”: check it, and edit anything). Instagram handles come from the RSVP or the invite list. For questions that fit who someone is, press “Scan Instagram bios” (reads each confirmed guest's public bio into their background note) and then “Tailor questions with AI”: each tailored pair shows what it's based on, and anything the AI isn't sure about is flagged for you to check. Question 1 is the one used on a one-sided card; two-sided backs show both. Questions that are not locked are suggested from each guest's role and can shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
+          Positions come from what the guest typed on the RSVP; if they didn't give one, press “Suggest missing positions” for a short AI guess from their name, handle and category (marked “AI suggested”: check it, and edit anything). Instagram handles come from the RSVP or the invite list. For questions that fit who someone is, press “Tailor questions with AI”: it writes a pair from each confirmed guest's position, Instagram handle and any background note you add (nothing is looked up on Instagram). Each pair shows what it's based on, and anything the AI isn't sure about is flagged for you to check. A line in the Background box makes it far more accurate. Question 1 is the one used on a one-sided card; two-sided backs show both. Questions that are not locked are suggested from each guest's role and can shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
         </p>
         <details className="text-xs text-white/70">
           <summary className="cursor-pointer text-primary">Paste a list of questions</summary>
@@ -2289,7 +2268,6 @@ function CardsView() {
                   {edits[g.key]?.title === undefined && g.titleSource === "category" && <p className="text-[10px] text-white/40">from their category</p>}
                   <Input value={e.ig} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "ig", ev.target.value)} placeholder="@instagram" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-ig-${g.key}`} />
                   <Textarea value={e.about} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "about", ev.target.value)} rows={2} placeholder="Background (not printed)" className="bg-black/40 border-white/10 text-[11px] min-h-0" data-testid={`textarea-btl-card-about-${g.key}`} />
-                  {edits[g.key]?.about === undefined && g.aboutSource === "scan" && <p className="text-[10px] text-white/40">from their Instagram bio</p>}
                 </div>
                 <div className="md:col-span-6 space-y-1">
                   <Textarea value={e.ask} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "ask", ev.target.value)} rows={2} placeholder="Question 1" className="bg-black/40 border-white/10 text-xs min-h-0" data-testid={`textarea-btl-card-ask-${g.key}`} />

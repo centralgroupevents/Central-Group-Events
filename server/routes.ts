@@ -1455,9 +1455,7 @@ ${blogList || "_No recent posts yet._"}
     // AI-suggested positions for guests who gave none (see btl-ai.ts).
     let aiTitles: Record<string, string> = {};
     try { const j = JSON.parse((await storage.getSetting("btl.cardSuggestions")) || "{}"); if (j && typeof j === "object") aiTitles = j; } catch { /* ignore */ }
-    // Instagram bios we scanned, and AI-tailored question pairs awaiting review.
-    let scans: Record<string, { bio?: string }> = {};
-    try { const j = JSON.parse((await storage.getSetting("btl.cardScans")) || "{}"); if (j && typeof j === "object") scans = j; } catch { /* ignore */ }
+    // AI-tailored question pairs awaiting review.
     let aiPrompts: Record<string, { ask: string; share: string; basis?: string; flag?: string }> = {};
     try { const j = JSON.parse((await storage.getSetting("btl.cardAi")) || "{}"); if (j && typeof j === "object") aiPrompts = j; } catch { /* ignore */ }
     const { normalizePersonName, looksLikeBrandOrHandle } = await import("@shared/btl-names");
@@ -1510,11 +1508,11 @@ ${blogList || "_No recent posts yet._"}
       const sp = savedPrompts[g.key] ?? {};
       const ai = aiPrompts[g.key];
       const aboutEdited = (o.about ?? "").trim();
-      const about = aboutEdited || (scans[g.key]?.bio ?? "").trim();
+      const about = aboutEdited;
       const usesAi = !!ai && (!sp.ask || !sp.share);
       return {
         ...g, ig: igOverride || g.ig, igSaved: !!igOverride, title, titleSource, titleSaved: titleSource === "edited",
-        about, aboutSource: (aboutEdited ? "edited" : about ? "scan" : "none") as "edited" | "scan" | "none",
+        about, aboutSource: (aboutEdited ? "edited" : "none") as "edited" | "none",
         ask: sp.ask ?? ai?.ask ?? auto[g.key]?.ask ?? "", askSaved: !!sp.ask,
         share: sp.share ?? ai?.share ?? auto[g.key]?.share ?? "", shareSaved: !!sp.share,
         promptSource: (usesAi ? "ai" : "pool") as "ai" | "pool", basis: usesAi ? ai?.basis ?? "" : "", flag: usesAi ? ai?.flag ?? "" : "",
@@ -1676,61 +1674,14 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
-  // Scan the public Instagram bio of each confirmed guest who has a handle, so
-  // their questions can be written about who they actually are. Uses the
-  // admin's Apify account (APIFY_TOKEN secret); only the public bio, link and
-  // follower count are read, and they are shown to the admin as editable
-  // "background" notes — never printed on a card.
-  app.post("/api/admin/btl/cards/scan-instagram", requireAuth(), async (req: Request, res: Response) => {
-    try {
-      const token = process.env.APIFY_TOKEN;
-      if (!token) return res.status(503).json({ message: "Instagram scanning isn't set up: add an APIFY_TOKEN secret to the server." });
-      const force = !!(req.body as { force?: boolean } | undefined)?.force;
-      let scans: Record<string, { bio?: string; url?: string; followers?: number | null; at?: string }> = {};
-      try { const j = JSON.parse((await storage.getSetting("btl.cardScans")) || "{}"); if (j && typeof j === "object") scans = j; } catch { /* ignore */ }
-      const guests = (await loadCardGuests()).filter((g) => g.rsvped && g.ig && (force || !scans[g.key]));
-      if (guests.length === 0) return res.json({ scanned: 0, found: 0, withBio: 0 });
-      let found = 0, withBio = 0;
-      for (let i = 0; i < guests.length; i += 25) {
-        const chunk = guests.slice(i, i + 25);
-        const handles = chunk.map((g) => g.ig!.replace(/^@/, "").toLowerCase());
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 170_000);
-        let items: Array<{ username?: string; biography?: string | null; externalUrl?: string | null; followerCount?: number | null }> = [];
-        try {
-          const r = await fetch(`${process.env.APIFY_BASE_URL || "https://api.apify.com"}/v2/acts/seemuapps~instagram-user-search-scraper/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`, {
-            method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-            body: JSON.stringify({ queries: handles, enrichProfiles: true, maxItems: 0 }),
-          });
-          if (!r.ok) throw new Error(`Apify returned ${r.status}`);
-          items = (await r.json()) as typeof items;
-        } finally { clearTimeout(timer); }
-        for (const g of chunk) {
-          const handle = g.ig!.replace(/^@/, "").toLowerCase();
-          // Exact username only: the search also returns look-alike accounts.
-          const hit = items.find((x) => String(x.username ?? "").toLowerCase() === handle);
-          scans[g.key] = hit
-            ? { bio: String(hit.biography ?? "").trim().slice(0, 500), url: String(hit.externalUrl ?? ""), followers: hit.followerCount ?? null, at: new Date().toISOString() }
-            : { bio: "", at: new Date().toISOString() };
-          if (hit) { found++; if (scans[g.key].bio) withBio++; }
-        }
-      }
-      await storage.setSetting("btl.cardScans", JSON.stringify(scans));
-      res.json({ scanned: guests.length, found, withBio });
-    } catch (err) {
-      console.error("[btl/cards scan] error:", err);
-      res.status(500).json({ message: err instanceof Error ? err.message.slice(0, 200) : "Scan failed" });
-    }
-  });
-
   // Write tailored ask/share questions for guests who don't have locked ones,
   // from their position and background note. Stored as suggestions with the
   // fact each pair is based on and a flag when the clues are thin.
   app.post("/api/admin/btl/cards/tailor-questions", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const everyone = !!(req.body as { everyone?: boolean } | undefined)?.everyone;
       const all = await loadCardGuests();
-      const targets = all.filter((g) => g.rsvped && !(g.askSaved && g.shareSaved) && (everyone ? !!(g.title || g.about) : !!g.about));
+      // Everyone confirmed who has anything to go on (a position, an Instagram handle or a note).
+      const targets = all.filter((g) => g.rsvped && !(g.askSaved && g.shareSaved) && !!(g.title || g.ig || g.about));
       if (targets.length === 0) return res.json({ tailored: 0, thin: 0, checked: 0 });
       const { tailorQuestions } = await import("./btl-ai");
       let existing: Record<string, { ask: string; share: string; basis?: string; flag?: string }> = {};

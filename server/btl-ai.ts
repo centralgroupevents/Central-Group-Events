@@ -68,8 +68,7 @@ export interface TailoredPrompts { ask: string; share: string; basis: string; fl
 
 /**
  * Two conversation-card questions per guest, written from what we actually
- * know about them (position, Instagram handle, a background note such as
- * their bio). The model must stay inside those facts, say what it based each
+ * know about them (position, Instagram handle, a note typed by the admin). The model must stay inside those facts, say what it based each
  * pair on, and raise a flag when the clues are thin, so the admin can check
  * anything that doesn't fit before it's printed.
  */
@@ -108,10 +107,12 @@ export async function tailorQuestions(guests: TailorClue[]): Promise<Record<stri
     "Style examples: \"Which content strategy or platform recently outperformed your expectations?\" / \"What's the fastest way for a collaborator to win you over, or turn you off?\" / \"When the crowd isn't locking in, what's your go-to shift to turn the night around?\"",
     "Rules:",
     "- Under 95 characters each, plain and conversational, no preamble. Never reuse an opening across guests.",
-    "- Use ONLY the facts given (position, Instagram handle, background). Make each question specific to what they do or what their background says they are about.",
+    "- Use ONLY the facts given (position, Instagram handle, background). You cannot see their Instagram or the web, so never invent specifics about the person or their business (clients, events, awards, followers, history). Plain general knowledge about their kind of work in New Jersey is fine.",
+    "- The Instagram handle is only a hint. Use it when it plainly names their craft or brand (for example a handle with 'rnb' or 'catering' in it); otherwise ignore it.",
+    "- Make each question specific to what they do, as far as the given facts support it.",
     "- Do not assume how they operate. If the background does not say, do not assume invite-only or open, paid or free, large or small, a venue or a promoter. Write questions that still make sense if your assumption were wrong.",
-    "- Do not mention their Instagram, follower counts, or that you read their bio.",
-    "- basis: under 14 words, naming the fact you used (for example: bio says premier R&B event company). If only a generic position is known, write: role only.",
+    "- Do not mention their Instagram or that you looked anything up.",
+    "- basis: under 14 words, naming the fact you used (for example: handle suggests R&B events, role is promoter). If only a generic position is known, write: role only.",
     "- flag: leave empty when the background clearly supports the questions. If you only had a generic position, or a question might not fit, write a short note.",
     "- Echo each key exactly.",
     "",
