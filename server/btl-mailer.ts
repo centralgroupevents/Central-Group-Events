@@ -13,7 +13,7 @@ import path from "path";
 import { storage } from "./storage";
 import { signToken, encodeEmail } from "./email-compliance";
 import { btlShell, BTL_FROM_NAME, BTL_SLUG, CGE_LOGO_CID } from "./btl-emails";
-import { inlineImages, BTL_SPEAKER_DEFAULTS, setUploadedAssets, uploadedAssetsAgeMs } from "./btl-brand";
+import { inlineImages, BTL_SPEAKER_DEFAULTS, setUploadedAssets, uploadedAssetsAgeMs, hasUploadedAsset } from "./btl-brand";
 
 // The wordmark ships INSIDE each email as an inline (CID) attachment, so it
 // renders in Gmail & co. without depending on the live site hosting the
@@ -78,7 +78,7 @@ export async function deliverBtlEmail(
   }
   // Backs every cid: image (logos, speaker photos) with its file and drops
   // any whose file is missing.
-  await refreshUploadedPhotos();
+  await ensureEmailImages(tpl.body);
   const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email)));
   // Open-tracking pixel — signed per recipient, stamps emailOpenedAt on
   // first render (see GET /api/build-to-last/open).
@@ -134,7 +134,7 @@ export async function sendBtlTestEmail(
     return { ok: false, error: "GMAIL_USER / GMAIL_APP_PASSWORD are not set in the server's secrets — emails can't send until both are configured." };
   }
   try {
-    await refreshUploadedPhotos();
+    await ensureEmailImages(tpl.body);
     const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email)));
     await transporter.sendMail({
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
@@ -237,12 +237,20 @@ export async function refreshUploadedPhotos(force = false): Promise<void> {
     const map = new Map<string, Buffer>();
     const j = raw ? JSON.parse(raw) : {};
     if (j && typeof j === "object") for (const [rel, b64] of Object.entries(j as Record<string, unknown>)) {
-      if (typeof b64 === "string" && /^speakers\/[a-z0-9-]+\.jpg$/.test(rel)) map.set(rel, Buffer.from(b64, "base64"));
+      if (typeof b64 === "string" && /^(speakers|images)\/[a-z0-9-]+\.jpg$/.test(rel)) map.set(rel, Buffer.from(b64, "base64"));
     }
     setUploadedAssets(map);
   } catch (err) {
     console.error("[btl-mailer] could not load uploaded photos:", err instanceof Error ? err.message : err);
   }
+}
+
+/** Pictures pasted into an email (cid:btl-img-ID): if this instance hasn't
+ *  seen one yet (uploaded through another instance), reload before rendering. */
+export async function ensureEmailImages(html: string): Promise<void> {
+  const ids = Array.from(html.matchAll(/cid:btl-img-([a-z0-9]+)/g), (m) => m[1]);
+  if (ids.some((id) => !hasUploadedAsset(`images/${id}.jpg`))) await refreshUploadedPhotos(true);
+  else await refreshUploadedPhotos();
 }
 
 export async function getBtlSettings(): Promise<BtlSettings> {

@@ -104,6 +104,10 @@ export function setUploadedAssets(map: Map<string, Buffer>): void {
   uploadedLoadedAt = Date.now();
 }
 
+export function hasUploadedAsset(rel: string): boolean {
+  return uploadedAssets.has(rel);
+}
+
 export function uploadedAssetsAgeMs(): number {
   return uploadedLoadedAt ? Date.now() - uploadedLoadedAt : Infinity;
 }
@@ -122,6 +126,8 @@ export function cidToPublicPath(cid: string): string | null {
   if (cid === CGE_LOGO_CID) return "cge-logo.png";
   if (cid === AISLEGO_LOGO_CID) return "aislego-logo.png";
   if (cid === EQUAL_SPACE_LOGO_CID) return "equal-space-logo.png";
+  const img = /^btl-img-([a-z0-9]+)$/.exec(cid);
+  if (img) return `images/${img[1]}.jpg`;
   const m = /^speaker-([a-z0-9-]+)$/.exec(cid);
   if (m) return `speakers/${m[1]}.jpg`;
   return null;
