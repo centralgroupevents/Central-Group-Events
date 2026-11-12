@@ -1449,12 +1449,17 @@ ${blogList || "_No recent posts yet._"}
     const { assignQuestions } = await import("@shared/btl-card-questions");
     const [invitees, rsvps, rawSaved] = await Promise.all([storage.listBtlInvitees(slug), storage.listBtlRsvps(slug), storage.getSetting("btl.cards")]);
     // "question" is the earlier single-question field — it now means "ask".
-    type Saved = { title?: string; ig?: string; ask?: string; share?: string; question?: string };
+    type Saved = { title?: string; ig?: string; about?: string; ask?: string; share?: string; question?: string };
     let saved: Record<string, Saved> = {};
     try { const j = JSON.parse(rawSaved || "{}"); if (j && typeof j === "object") saved = j; } catch { /* ignore bad JSON */ }
     // AI-suggested positions for guests who gave none (see btl-ai.ts).
     let aiTitles: Record<string, string> = {};
     try { const j = JSON.parse((await storage.getSetting("btl.cardSuggestions")) || "{}"); if (j && typeof j === "object") aiTitles = j; } catch { /* ignore */ }
+    // Instagram bios we scanned, and AI-tailored question pairs awaiting review.
+    let scans: Record<string, { bio?: string }> = {};
+    try { const j = JSON.parse((await storage.getSetting("btl.cardScans")) || "{}"); if (j && typeof j === "object") scans = j; } catch { /* ignore */ }
+    let aiPrompts: Record<string, { ask: string; share: string; basis?: string; flag?: string }> = {};
+    try { const j = JSON.parse((await storage.getSetting("btl.cardAi")) || "{}"); if (j && typeof j === "object") aiPrompts = j; } catch { /* ignore */ }
     const { normalizePersonName, looksLikeBrandOrHandle } = await import("@shared/btl-names");
     type G = { key: string; name: string; email: string; position: string; category: string | null; ig: string | null; rsvped: boolean; invited: boolean; unsubscribed: boolean; notes: string | null };
     const byEmail = new Map<string, G>();
@@ -1483,9 +1488,15 @@ ${blogList || "_No recent posts yet._"}
       const share = (v?.share ?? "").trim();
       if (ask || share) savedPrompts[g.key] = { ask: ask || undefined, share: share || undefined };
     }
+    // Priority: locked/edited prompts > AI-tailored (from a background note) > role-based pool.
+    const preset: Record<string, { ask?: string; share?: string }> = { ...savedPrompts };
+    for (const g of guests) {
+      const a = aiPrompts[g.key];
+      if (a && !(savedPrompts[g.key]?.ask && savedPrompts[g.key]?.share)) preset[g.key] = { ask: savedPrompts[g.key]?.ask ?? a.ask, share: savedPrompts[g.key]?.share ?? a.share };
+    }
     const auto = assignQuestions(
       guests.map((g) => ({ key: g.key, name: g.name, position: saved[g.key]?.title?.trim() || g.position || aiTitles[g.key] || "", category: g.category })),
-      savedPrompts,
+      preset,
     );
     return guests.map((g) => {
       const o = saved[g.key] ?? {};
@@ -1497,10 +1508,16 @@ ${blogList || "_No recent posts yet._"}
       // Instagram: admin edit > RSVP > invite list (already merged above).
       const igOverride = normalizeInstagramHandle(o.ig);
       const sp = savedPrompts[g.key] ?? {};
+      const ai = aiPrompts[g.key];
+      const aboutEdited = (o.about ?? "").trim();
+      const about = aboutEdited || (scans[g.key]?.bio ?? "").trim();
+      const usesAi = !!ai && (!sp.ask || !sp.share);
       return {
         ...g, ig: igOverride || g.ig, igSaved: !!igOverride, title, titleSource, titleSaved: titleSource === "edited",
-        ask: sp.ask ?? auto[g.key]?.ask ?? "", askSaved: !!sp.ask,
-        share: sp.share ?? auto[g.key]?.share ?? "", shareSaved: !!sp.share,
+        about, aboutSource: (aboutEdited ? "edited" : about ? "scan" : "none") as "edited" | "scan" | "none",
+        ask: sp.ask ?? ai?.ask ?? auto[g.key]?.ask ?? "", askSaved: !!sp.ask,
+        share: sp.share ?? ai?.share ?? auto[g.key]?.share ?? "", shareSaved: !!sp.share,
+        promptSource: (usesAi ? "ai" : "pool") as "ai" | "pool", basis: usesAi ? ai?.basis ?? "" : "", flag: usesAi ? ai?.flag ?? "" : "",
       };
     });
   }
@@ -1517,18 +1534,19 @@ ${blogList || "_No recent posts yet._"}
   app.put("/api/admin/btl/cards", requireAuth(), async (req: Request, res: Response) => {
     try {
       const { normalizeInstagramHandle } = await import("@shared/schema");
-      const incoming = ((req.body ?? {}) as { cards?: Record<string, { title?: unknown; ig?: unknown; ask?: unknown; share?: unknown }> }).cards ?? {};
+      const incoming = ((req.body ?? {}) as { cards?: Record<string, { title?: unknown; ig?: unknown; about?: unknown; ask?: unknown; share?: unknown }> }).cards ?? {};
       const raw = await storage.getSetting("btl.cards");
-      let cur: Record<string, { title?: string; ig?: string; ask?: string; share?: string }> = {};
+      let cur: Record<string, { title?: string; ig?: string; about?: string; ask?: string; share?: string }> = {};
       try { const j = JSON.parse(raw || "{}"); if (j && typeof j === "object") cur = j; } catch { /* start fresh */ }
       for (const [email, v] of Object.entries(incoming)) {
         const key = email.toLowerCase().trim();
         const title = String(v?.title ?? "").trim().slice(0, 120);
         const ig = normalizeInstagramHandle(String(v?.ig ?? "")) ?? "";
+        const about = String(v?.about ?? "").trim().slice(0, 700);
         const ask = String(v?.ask ?? "").trim().slice(0, 300);
         const share = String(v?.share ?? "").trim().slice(0, 300);
-        if (!title && !ig && !ask && !share) delete cur[key];
-        else cur[key] = { ...(title ? { title } : {}), ...(ig ? { ig } : {}), ...(ask ? { ask } : {}), ...(share ? { share } : {}) };
+        if (!title && !ig && !about && !ask && !share) delete cur[key];
+        else cur[key] = { ...(title ? { title } : {}), ...(ig ? { ig } : {}), ...(about ? { about } : {}), ...(ask ? { ask } : {}), ...(share ? { share } : {}) };
       }
       await storage.setSetting("btl.cards", JSON.stringify(cur));
       res.json({ saved: Object.keys(incoming).length });
@@ -1655,6 +1673,89 @@ ${blogList || "_No recent posts yet._"}
     } catch (err) {
       console.error("[btl/rsvp-status] error:", err);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Scan the public Instagram bio of each confirmed guest who has a handle, so
+  // their questions can be written about who they actually are. Uses the
+  // admin's Apify account (APIFY_TOKEN secret); only the public bio, link and
+  // follower count are read, and they are shown to the admin as editable
+  // "background" notes — never printed on a card.
+  app.post("/api/admin/btl/cards/scan-instagram", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const token = process.env.APIFY_TOKEN;
+      if (!token) return res.status(503).json({ message: "Instagram scanning isn't set up: add an APIFY_TOKEN secret to the server." });
+      const force = !!(req.body as { force?: boolean } | undefined)?.force;
+      let scans: Record<string, { bio?: string; url?: string; followers?: number | null; at?: string }> = {};
+      try { const j = JSON.parse((await storage.getSetting("btl.cardScans")) || "{}"); if (j && typeof j === "object") scans = j; } catch { /* ignore */ }
+      const guests = (await loadCardGuests()).filter((g) => g.rsvped && g.ig && (force || !scans[g.key]));
+      if (guests.length === 0) return res.json({ scanned: 0, found: 0, withBio: 0 });
+      let found = 0, withBio = 0;
+      for (let i = 0; i < guests.length; i += 25) {
+        const chunk = guests.slice(i, i + 25);
+        const handles = chunk.map((g) => g.ig!.replace(/^@/, "").toLowerCase());
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 170_000);
+        let items: Array<{ username?: string; biography?: string | null; externalUrl?: string | null; followerCount?: number | null }> = [];
+        try {
+          const r = await fetch(`${process.env.APIFY_BASE_URL || "https://api.apify.com"}/v2/acts/seemuapps~instagram-user-search-scraper/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
+            body: JSON.stringify({ queries: handles, enrichProfiles: true, maxItems: 0 }),
+          });
+          if (!r.ok) throw new Error(`Apify returned ${r.status}`);
+          items = (await r.json()) as typeof items;
+        } finally { clearTimeout(timer); }
+        for (const g of chunk) {
+          const handle = g.ig!.replace(/^@/, "").toLowerCase();
+          // Exact username only: the search also returns look-alike accounts.
+          const hit = items.find((x) => String(x.username ?? "").toLowerCase() === handle);
+          scans[g.key] = hit
+            ? { bio: String(hit.biography ?? "").trim().slice(0, 500), url: String(hit.externalUrl ?? ""), followers: hit.followerCount ?? null, at: new Date().toISOString() }
+            : { bio: "", at: new Date().toISOString() };
+          if (hit) { found++; if (scans[g.key].bio) withBio++; }
+        }
+      }
+      await storage.setSetting("btl.cardScans", JSON.stringify(scans));
+      res.json({ scanned: guests.length, found, withBio });
+    } catch (err) {
+      console.error("[btl/cards scan] error:", err);
+      res.status(500).json({ message: err instanceof Error ? err.message.slice(0, 200) : "Scan failed" });
+    }
+  });
+
+  // Write tailored ask/share questions for guests who don't have locked ones,
+  // from their position and background note. Stored as suggestions with the
+  // fact each pair is based on and a flag when the clues are thin.
+  app.post("/api/admin/btl/cards/tailor-questions", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const everyone = !!(req.body as { everyone?: boolean } | undefined)?.everyone;
+      const all = await loadCardGuests();
+      const targets = all.filter((g) => g.rsvped && !(g.askSaved && g.shareSaved) && (everyone ? !!(g.title || g.about) : !!g.about));
+      if (targets.length === 0) return res.json({ tailored: 0, thin: 0, checked: 0 });
+      const { tailorQuestions } = await import("./btl-ai");
+      let existing: Record<string, { ask: string; share: string; basis?: string; flag?: string }> = {};
+      try { const j = JSON.parse((await storage.getSetting("btl.cardAi")) || "{}"); if (j && typeof j === "object") existing = j; } catch { /* ignore */ }
+      const used = new Set<string>();
+      for (const g of all) for (const q of [g.askSaved ? g.ask : "", g.shareSaved ? g.share : ""]) if (q) used.add(q.toLowerCase());
+      let tailored = 0, thin = 0;
+      for (let i = 0; i < targets.length; i += 15) {
+        const chunk = targets.slice(i, i + 15);
+        const got = await tailorQuestions(chunk.map((g) => ({ key: g.key, name: g.name, position: g.title, ig: g.ig, about: g.about })));
+        for (const [k, v] of Object.entries(got)) {
+          // Never repeat a question that's already on another card.
+          if (used.has(v.ask.toLowerCase()) || used.has(v.share.toLowerCase())) continue;
+          used.add(v.ask.toLowerCase()); used.add(v.share.toLowerCase());
+          existing[k] = v;
+          tailored++;
+          if (v.flag) thin++;
+        }
+      }
+      await storage.setSetting("btl.cardAi", JSON.stringify(existing));
+      res.json({ tailored, thin, checked: targets.length });
+    } catch (err) {
+      console.error("[btl/cards tailor] error:", err);
+      const msg = err instanceof Error ? err.message.slice(0, 200) : "unknown error";
+      res.status(/GEMINI_API_KEY/.test(msg) ? 503 : 500).json({ message: msg });
     }
   });
 
