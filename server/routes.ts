@@ -1312,6 +1312,65 @@ ${blogList || "_No recent posts yet._"}
     }
   });
 
+  // Panelist / founder photos. Uploads live in the database (setting
+  // "btl.photos") so they survive redeploys; they win over the built-in files.
+  // GET is public: the same photos already ship in every speaker email.
+  app.get("/api/btl/speaker-photo", async (req: Request, res: Response) => {
+    try {
+      const { speakerPhotoSlug, readAsset } = await import("./btl-brand");
+      const { refreshUploadedPhotos } = await import("./btl-mailer");
+      await refreshUploadedPhotos();
+      const name = String(req.query.name ?? "").slice(0, 120);
+      const buf = name.trim() ? readAsset(`speakers/${speakerPhotoSlug(name)}.jpg`) : null;
+      if (!buf) return res.status(404).end();
+      res.set({ "Content-Type": "image/jpeg", "Cache-Control": "no-cache" }).send(buf);
+    } catch {
+      res.status(500).end();
+    }
+  });
+
+  app.post("/api/admin/btl/speaker-photo", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { name, image } = (req.body ?? {}) as { name?: unknown; image?: unknown };
+      const nm = String(name ?? "").trim();
+      const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String(image ?? ""));
+      if (!nm || !m) return res.status(400).json({ message: "Enter the speaker's name and choose a photo." });
+      const buf = Buffer.from(m[1], "base64");
+      if (buf.length < 500 || buf.length > 1_500_000 || buf[0] !== 0xff || buf[1] !== 0xd8) {
+        return res.status(400).json({ message: "That image couldn't be read, or it's too large. Try a smaller photo." });
+      }
+      const { speakerPhotoSlug } = await import("./btl-brand");
+      const { refreshUploadedPhotos } = await import("./btl-mailer");
+      const slug = speakerPhotoSlug(nm);
+      if (!/^[a-z0-9-]{2,60}$/.test(slug)) return res.status(400).json({ message: "That name can't be used for a photo." });
+      let photos: Record<string, string> = {};
+      try { const j = JSON.parse((await storage.getSetting("btl.photos")) || "{}"); if (j && typeof j === "object") photos = j; } catch { /* ignore */ }
+      photos[`speakers/${slug}.jpg`] = buf.toString("base64");
+      await storage.setSetting("btl.photos", JSON.stringify(photos));
+      await refreshUploadedPhotos(true);
+      res.json({ saved: true, slug });
+    } catch (err) {
+      console.error("[btl/speaker-photo] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/btl/speaker-photo", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { speakerPhotoSlug } = await import("./btl-brand");
+      const { refreshUploadedPhotos } = await import("./btl-mailer");
+      const slug = speakerPhotoSlug(String(req.query.name ?? ""));
+      let photos: Record<string, string> = {};
+      try { const j = JSON.parse((await storage.getSetting("btl.photos")) || "{}"); if (j && typeof j === "object") photos = j; } catch { /* ignore */ }
+      delete photos[`speakers/${slug}.jpg`];
+      await storage.setSetting("btl.photos", JSON.stringify(photos));
+      await refreshUploadedPhotos(true);
+      res.json({ removed: true });
+    } catch {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.put("/api/admin/btl/settings", requireAuth(), async (req: Request, res: Response) => {
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;

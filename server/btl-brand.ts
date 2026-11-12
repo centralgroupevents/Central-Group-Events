@@ -91,6 +91,23 @@ export function ensureBrandAssets(): void {
   }
 }
 
+/**
+ * Photos uploaded in Admin → Settings (stored in the database so a redeploy
+ * or a missing file can never lose them). They win over the files in the
+ * public folder. Keyed by public-relative path, e.g. "speakers/kimberly-simone.jpg".
+ */
+let uploadedAssets = new Map<string, Buffer>();
+let uploadedLoadedAt = 0;
+
+export function setUploadedAssets(map: Map<string, Buffer>): void {
+  uploadedAssets = map;
+  uploadedLoadedAt = Date.now();
+}
+
+export function uploadedAssetsAgeMs(): number {
+  return uploadedLoadedAt ? Date.now() - uploadedLoadedAt : Infinity;
+}
+
 /** Absolute path of a file in the public folder, or null if it isn't there. */
 export function publicFile(rel: string): string | null {
   for (const root of ["dist/public", "client/public"]) {
@@ -113,6 +130,8 @@ export function cidToPublicPath(cid: string): string | null {
 /** Bytes of a brand image: the file in the public folder if there is one,
  *  otherwise the copy embedded in the code. null = we don't have it. */
 export function readAsset(rel: string): Buffer | null {
+  const up = uploadedAssets.get(rel);
+  if (up) return up;
   const file = publicFile(rel);
   if (file) {
     try { return fs.readFileSync(file); } catch { /* fall through to the embedded copy */ }
@@ -122,7 +141,7 @@ export function readAsset(rel: string): Buffer | null {
 }
 
 export function hasAsset(rel: string): boolean {
-  return !!publicFile(rel) || !!EMBEDDED_BRAND_ASSETS[rel];
+  return uploadedAssets.has(rel) || !!publicFile(rel) || !!EMBEDDED_BRAND_ASSETS[rel];
 }
 
 function mimeFor(rel: string): string {

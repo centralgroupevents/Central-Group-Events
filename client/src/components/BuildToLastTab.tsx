@@ -2377,6 +2377,46 @@ function SettingsView() {
     setDraft({ ...s, speakers });
   }
 
+  const [photoVer, setPhotoVer] = useState(1);
+  const [photoBusy, setPhotoBusy] = useState<number | null>(null);
+
+  // Center-crop to a 480px square JPEG in the browser, then store it server-side.
+  async function uploadPhoto(i: number, file: File | undefined) {
+    const name = (s?.speakers[i]?.name ?? "").trim();
+    if (!file || !name) { toast({ title: "Enter the speaker's name first", variant: "destructive" }); return; }
+    setPhotoBusy(i);
+    try {
+      const bmp = await createImageBitmap(file);
+      const side = Math.min(bmp.width, bmp.height);
+      const canvas = document.createElement("canvas");
+      canvas.width = 480; canvas.height = 480;
+      canvas.getContext("2d")!.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 480, 480);
+      const image = canvas.toDataURL("image/jpeg", 0.88);
+      await apiRequest("POST", "/api/admin/btl/speaker-photo", { name, image });
+      setPhotoVer((v) => v + 1);
+      toast({ title: "Photo saved", description: `${name}'s photo now shows in the emails.` });
+    } catch (err) {
+      toast({ title: "Couldn't save the photo", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setPhotoBusy(null);
+    }
+  }
+
+  async function removePhoto(i: number) {
+    const name = (s?.speakers[i]?.name ?? "").trim();
+    if (!name) return;
+    setPhotoBusy(i);
+    try {
+      await apiRequest("DELETE", `/api/admin/btl/speaker-photo?name=${encodeURIComponent(name)}`);
+      setPhotoVer((v) => v + 1);
+      toast({ title: "Uploaded photo removed", description: "The built-in photo (if any) is used again." });
+    } catch (err) {
+      toast({ title: "Couldn't remove it", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setPhotoBusy(null);
+    }
+  }
+
   async function save() {
     if (!s) return;
     setSaving(true);
@@ -2422,7 +2462,7 @@ function SettingsView() {
       <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-3">
         <h3 className="font-bold text-white">Speakers (unlocks the speaker-announcement email)</h3>
         <p className="text-xs text-muted-foreground">
-          Pre-filled with the Vol. 1 panel. Their photos and LinkedIn links are added to the emails automatically. Press Enter in a role box to put it on two lines (or type | between the lines).
+          Pre-filled with the Vol. 1 panel. Their photos and LinkedIn links are added to the emails automatically. Use “Upload photo” to replace or add one (saved in the database, so it can't go missing); upload after the name is final. TC Cuthbertson's photo is also the AisleGo founder photo. Press Enter in a role box to put it on two lines (or type | between the lines).
           {!s.speakersSaved && " Press Save settings below to confirm the panel and unlock the announcement."}
         </p>
         {[0, 1, 2, 3].map((i) => {
@@ -2431,7 +2471,17 @@ function SettingsView() {
             <div key={i} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Input placeholder={`Speaker ${i + 1} name`} value={sp.name} onChange={(e) => setSpeaker(i, "name", e.target.value)} className={inputCls} data-testid={`input-btl-speaker-name-${i}`} />
               <Textarea rows={2} placeholder={"Role / position — press Enter for a new line\n(e.g. Founder & CEO ⏎ AisleGo)"} value={sp.credential} onChange={(e) => setSpeaker(i, "credential", e.target.value)} className="bg-black/30 border-white/10 min-h-10 text-sm" data-testid={`input-btl-speaker-credential-${i}`} />
-              {sp.topic && <p className="text-xs text-muted-foreground sm:col-span-2">on {sp.topic}</p>}
+              <div className="sm:col-span-2 flex items-center gap-3">
+                {sp.name.trim() ? (
+                  <img key={`${sp.name}-${photoVer}`} src={`/api/btl/speaker-photo?name=${encodeURIComponent(sp.name)}&v=${photoVer}`} alt="" className="w-12 h-12 rounded-full object-cover bg-black/40 border border-white/10" onError={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "0.15"; }} data-testid={`img-btl-speaker-photo-${i}`} />
+                ) : <div className="w-12 h-12 rounded-full bg-black/40 border border-white/10" />}
+                <label className="text-xs text-primary cursor-pointer">
+                  {photoBusy === i ? "Saving…" : "Upload photo"}
+                  <input type="file" accept="image/*" className="hidden" disabled={photoBusy === i} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void uploadPhoto(i, f); }} data-testid={`input-btl-speaker-photo-${i}`} />
+                </label>
+                <button type="button" className="text-xs text-white/50 hover:text-white" onClick={() => removePhoto(i)} disabled={photoBusy === i}>Remove upload</button>
+                {sp.topic && <span className="text-xs text-muted-foreground">on {sp.topic}</span>}
+              </div>
             </div>
           );
         })}

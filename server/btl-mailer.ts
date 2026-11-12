@@ -13,7 +13,7 @@ import path from "path";
 import { storage } from "./storage";
 import { signToken, encodeEmail } from "./email-compliance";
 import { btlShell, BTL_FROM_NAME, BTL_SLUG, CGE_LOGO_CID } from "./btl-emails";
-import { inlineImages, BTL_SPEAKER_DEFAULTS } from "./btl-brand";
+import { inlineImages, BTL_SPEAKER_DEFAULTS, setUploadedAssets, uploadedAssetsAgeMs } from "./btl-brand";
 
 // The wordmark ships INSIDE each email as an inline (CID) attachment, so it
 // renders in Gmail & co. without depending on the live site hosting the
@@ -78,6 +78,7 @@ export async function deliverBtlEmail(
   }
   // Backs every cid: image (logos, speaker photos) with its file and drops
   // any whose file is missing.
+  await refreshUploadedPhotos();
   const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email)));
   // Open-tracking pixel — signed per recipient, stamps emailOpenedAt on
   // first render (see GET /api/build-to-last/open).
@@ -133,6 +134,7 @@ export async function sendBtlTestEmail(
     return { ok: false, error: "GMAIL_USER / GMAIL_APP_PASSWORD are not set in the server's secrets — emails can't send until both are configured." };
   }
   try {
+    await refreshUploadedPhotos();
     const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email)));
     await transporter.sendMail({
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
@@ -227,7 +229,24 @@ const BTL_DEFAULTS: BtlSettings = {
   contactSheetUrl: "",
 };
 
+/** Load the photos uploaded in admin (setting "btl.photos": {rel: base64 jpeg}). */
+export async function refreshUploadedPhotos(force = false): Promise<void> {
+  if (!force && uploadedAssetsAgeMs() < 60_000) return;
+  try {
+    const raw = await storage.getSetting("btl.photos");
+    const map = new Map<string, Buffer>();
+    const j = raw ? JSON.parse(raw) : {};
+    if (j && typeof j === "object") for (const [rel, b64] of Object.entries(j as Record<string, unknown>)) {
+      if (typeof b64 === "string" && /^speakers\/[a-z0-9-]+\.jpg$/.test(rel)) map.set(rel, Buffer.from(b64, "base64"));
+    }
+    setUploadedAssets(map);
+  } catch (err) {
+    console.error("[btl-mailer] could not load uploaded photos:", err instanceof Error ? err.message : err);
+  }
+}
+
 export async function getBtlSettings(): Promise<BtlSettings> {
+  await refreshUploadedPhotos();
   const out: BtlSettings = { ...BTL_DEFAULTS };
   const stringKeys: Array<keyof BtlSettings> = [
     "rsvpUrl", "venueName", "venueAddress", "venueEmail", "doorsTime", "programStartTime", "nightCapTime",
