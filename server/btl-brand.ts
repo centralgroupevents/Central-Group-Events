@@ -53,6 +53,25 @@ export function speakerSlug(name: string): string {
 }
 
 /**
+ * The photo slug for a panelist's name, forgiving of how it was typed in
+ * Settings ("Kimberly Simone, Esq.", "Kimberly McKoy-Simone", "Kim Simone"):
+ * exact slug first, then a unique first-name or last-name match against the
+ * panelists we hold a photo for. Falls back to the plain slug.
+ */
+export function speakerPhotoSlug(name: string): string {
+  const exact = speakerSlug(name);
+  if (hasAsset(`speakers/${exact}.jpg`)) return exact;
+  const known = Object.keys(SPEAKER_LINKEDIN).filter((k) => hasAsset(`speakers/${k}.jpg`));
+  const tokens = exact.split("-").filter(Boolean);
+  const hits = (idx: number) => known.filter((k) => k.split("-")[idx] !== undefined && tokens.includes(k.split("-")[idx]));
+  const byFirst = hits(0);
+  if (byFirst.length === 1) return byFirst[0];
+  const byLast = known.filter((k) => tokens.includes(k.split("-").slice(-1)[0]));
+  if (byLast.length === 1) return byLast[0];
+  return exact;
+}
+
+/**
  * Writes any embedded brand image that isn't already in the public folder
  * (so emails can attach it and the site can serve it). Run at server start.
  * A real file in client/public / dist/public is never overwritten.
@@ -70,6 +89,23 @@ export function ensureBrandAssets(): void {
       console.error(`[btl-brand] could not write ${rel}:`, err instanceof Error ? err.message : err);
     }
   }
+}
+
+/**
+ * Photos uploaded in Admin → Settings (stored in the database so a redeploy
+ * or a missing file can never lose them). They win over the files in the
+ * public folder. Keyed by public-relative path, e.g. "speakers/kimberly-simone.jpg".
+ */
+let uploadedAssets = new Map<string, Buffer>();
+let uploadedLoadedAt = 0;
+
+export function setUploadedAssets(map: Map<string, Buffer>): void {
+  uploadedAssets = map;
+  uploadedLoadedAt = Date.now();
+}
+
+export function uploadedAssetsAgeMs(): number {
+  return uploadedLoadedAt ? Date.now() - uploadedLoadedAt : Infinity;
 }
 
 /** Absolute path of a file in the public folder, or null if it isn't there. */
@@ -94,6 +130,8 @@ export function cidToPublicPath(cid: string): string | null {
 /** Bytes of a brand image: the file in the public folder if there is one,
  *  otherwise the copy embedded in the code. null = we don't have it. */
 export function readAsset(rel: string): Buffer | null {
+  const up = uploadedAssets.get(rel);
+  if (up) return up;
   const file = publicFile(rel);
   if (file) {
     try { return fs.readFileSync(file); } catch { /* fall through to the embedded copy */ }
@@ -103,7 +141,7 @@ export function readAsset(rel: string): Buffer | null {
 }
 
 export function hasAsset(rel: string): boolean {
-  return !!publicFile(rel) || !!EMBEDDED_BRAND_ASSETS[rel];
+  return uploadedAssets.has(rel) || !!publicFile(rel) || !!EMBEDDED_BRAND_ASSETS[rel];
 }
 
 function mimeFor(rel: string): string {
@@ -162,7 +200,7 @@ export function speakerCardsHtml(speakers: Array<{ name: string; credential: str
   const rows = speakers
     .filter((s) => s.name.trim())
     .map((s) => {
-      const slug = speakerSlug(s.name);
+      const slug = speakerPhotoSlug(s.name);
       const hasPhoto = hasAsset(`speakers/${slug}.jpg`);
       const linkedin = SPEAKER_LINKEDIN[slug];
       const initials = s.name.split(",")[0].trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
