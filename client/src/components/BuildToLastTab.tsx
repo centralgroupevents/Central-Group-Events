@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS } from "@shared/schema";
 import { BTL_PAGE_FIELDS, BTL_PAGE_DEFAULTS } from "@shared/btl-page";
+import { CARD_CSS, cardFront, cardBack, cardsDocument, type CardFormat, type CardPageOrder } from "@/lib/btl-cards";
 import { Download, Loader2, Plus, Send, Upload, Eye, Check, Printer, Pencil, Trash2, X } from "lucide-react";
 
 type BtlRsvp = {
@@ -112,7 +113,7 @@ function topicsOf(r: BtlRsvp): string[] {
   }
 }
 
-const VIEWS = ["RSVPs", "Invites", "Cadence", "Templates", "Page", "Questions", "Guest Book", "Check-in", "Settings"] as const;
+const VIEWS = ["RSVPs", "Invites", "Cadence", "Templates", "Page", "Questions", "Guest Book", "Name Cards", "Check-in", "Settings"] as const;
 type View = (typeof VIEWS)[number];
 
 export function BuildToLastTab() {
@@ -162,6 +163,7 @@ export function BuildToLastTab() {
       {view === "Templates" && <TemplatesView />}
       {view === "Questions" && <QuestionsView rsvps={rsvps} />}
       {view === "Guest Book" && <GuestBookView rsvps={rsvps} />}
+      {view === "Name Cards" && <CardsView />}
       {view === "Check-in" && <CheckinView rsvps={rsvps} />}
       {view === "Settings" && <SettingsView />}
     </div>
@@ -377,6 +379,104 @@ function etLabel(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " ET";
 }
 
+type NameFix = { kind: "invitee" | "rsvp"; id: number; before: string; after: string; brand: boolean };
+
+/** Preview → apply standard capitalization to invitee and RSVP names. */
+function NameCleanup({ onDone }: { onDone: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [fixes, setFixes] = useState<NameFix[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const keyOf = (f: NameFix) => `${f.kind}:${f.id}`;
+
+  async function openIt() {
+    setOpen(true);
+    setFixes(null);
+    try {
+      const res = await apiRequest("GET", "/api/admin/btl/names/preview");
+      const rows: NameFix[] = await res.json();
+      setFixes(rows);
+      // Brand-like names ("brwnbox") start unticked — they may be intentional.
+      setPicked(new Set(rows.filter((r) => !r.brand).map(keyOf)));
+    } catch (err) {
+      toast({ title: "Couldn't load names", description: String((err as Error).message), variant: "destructive" });
+      setOpen(false);
+    }
+  }
+
+  async function apply() {
+    if (!fixes) return;
+    setBusy(true);
+    try {
+      const items = fixes.filter((f) => picked.has(keyOf(f))).map((f) => ({ kind: f.kind, id: f.id }));
+      const res = await apiRequest("POST", "/api/admin/btl/names/apply", { items });
+      const body = await res.json();
+      toast({ title: `Cleaned ${body.invitees + body.rsvps} names`, description: `${body.invitees} on the invite list, ${body.rsvps} RSVPs.` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/invitees"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/rsvps"] });
+      setOpen(false);
+      onDone();
+    } catch (err) {
+      toast({ title: "Couldn't apply", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button variant="outline" onClick={openIt} className="border-white/20 text-white/80" data-testid="button-btl-clean-names">
+        <Pencil className="w-4 h-4 mr-1.5" /> Clean up names
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl bg-secondary border-white/10" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="text-white">Clean up names</DialogTitle>
+          </DialogHeader>
+          {fixes === null ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : fixes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">Every name already has standard capitalization.</p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Tick the changes to make. Names that look like a brand or handle (one lowercase word) start unticked. Names already in mixed case, like McKay or DeShawn, are never touched.
+              </p>
+              <div className="flex items-center gap-3 text-xs">
+                <button type="button" className="text-primary hover:underline" onClick={() => setPicked(new Set(fixes.map(keyOf)))}>Select all</button>
+                <button type="button" className="text-white/60 hover:underline" onClick={() => setPicked(new Set())}>Clear</button>
+                <span className="ml-auto text-white/60">{picked.size} of {fixes.length} selected</span>
+              </div>
+              <div className="max-h-80 overflow-y-auto rounded-lg border border-white/10 divide-y divide-white/5">
+                {fixes.map((f) => (
+                  <label key={keyOf(f)} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-white/5">
+                    <Checkbox
+                      checked={picked.has(keyOf(f))}
+                      onCheckedChange={() => { const n = new Set(picked); if (n.has(keyOf(f))) n.delete(keyOf(f)); else n.add(keyOf(f)); setPicked(n); }}
+                      data-testid={`checkbox-btl-namefix-${keyOf(f)}`}
+                    />
+                    <span className="text-white/50 line-through">{f.before}</span>
+                    <span className="text-white">→ {f.after}</span>
+                    <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60">{f.kind === "rsvp" ? "RSVP" : "invite list"}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={apply} disabled={busy || picked.size === 0} className="bg-primary hover:bg-primary/90" data-testid="button-btl-apply-names">
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Check className="w-4 h-4 mr-1.5" />}
+                  Apply {picked.size} {picked.size === 1 ? "change" : "changes"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function InvitesView() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -540,6 +640,7 @@ function InvitesView() {
             <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={busy !== ""} className="border-white/20 text-white/80">
               <Upload className="w-4 h-4 mr-1.5" /> Import CSV
             </Button>
+            <NameCleanup onDone={() => qc.invalidateQueries({ queryKey: ["/api/admin/btl/invitees"] })} />
             <Button onClick={sendInitial} disabled={busy !== "" || (selected.size === 0 && pendingInitial === 0)} className="bg-primary hover:bg-primary/90" data-testid="button-btl-send-initial">
               {busy === "initial" ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
               {selected.size > 0 ? `Send Invite to Selected (${selected.size})` : `Send Initial Invites (${pendingInitial})`}
@@ -1719,6 +1820,230 @@ function GuestBookView({ rsvps }: { rsvps: BtlRsvp[] }) {
             </div>
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Name cards ────────────────────────────────────────────────────────── */
+
+type CardGuestRow = {
+  key: string;
+  name: string;
+  email: string;
+  title: string;
+  ig: string | null;
+  question: string;
+  questionSaved: boolean;
+  titleSaved: boolean;
+  rsvped: boolean;
+  invited: boolean;
+  unsubscribed: boolean;
+};
+
+function CardsView() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: guests = [], isLoading } = useQuery<CardGuestRow[]>({ queryKey: ["/api/admin/btl/cards"] });
+  const [format, setFormat] = useState<CardFormat>("two");
+  const [who, setWho] = useState<"all" | "rsvped">("all");
+  const [order, setOrder] = useState<CardPageOrder>("alternate");
+  const [blanks, setBlanks] = useState(10);
+  const [search, setSearch] = useState("");
+  const [edits, setEdits] = useState<Record<string, { title?: string; question?: string }>>({});
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const [paste, setPaste] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const effective = (g: CardGuestRow) => ({
+    title: edits[g.key]?.title ?? g.title,
+    question: edits[g.key]?.question ?? g.question,
+  });
+  const printable = guests.filter((g) => who === "all" || g.rsvped);
+  const shown = printable.filter((g) => {
+    const t = search.trim().toLowerCase();
+    return !t || g.name.toLowerCase().includes(t) || g.email.includes(t) || g.title.toLowerCase().includes(t);
+  });
+  const preview = guests.find((g) => g.key === previewKey) ?? printable[0] ?? null;
+  const dirtyCount = Object.keys(edits).length;
+  const total = printable.length + Math.max(0, blanks);
+  const sheets = Math.ceil(total / 10);
+  const toCard = (g: CardGuestRow) => ({ name: g.name, title: effective(g).title, ig: g.ig, question: effective(g).question });
+
+  function setEdit(key: string, field: "title" | "question", value: string) {
+    setEdits((e) => ({ ...e, [key]: { ...e[key], [field]: value } }));
+  }
+
+  async function save(all: boolean) {
+    setSaving(true);
+    try {
+      const cards: Record<string, { title?: string; question?: string }> = {};
+      if (all) {
+        for (const g of guests) cards[g.key] = { title: g.titleSaved || edits[g.key]?.title !== undefined ? effective(g).title : "", question: effective(g).question };
+      } else {
+        for (const [key, v] of Object.entries(edits)) {
+          const g = guests.find((x) => x.key === key);
+          if (!g) continue;
+          cards[key] = { title: v.title ?? (g.titleSaved ? g.title : ""), question: v.question ?? (g.questionSaved ? g.question : "") };
+        }
+      }
+      await apiRequest("PUT", "/api/admin/btl/cards", { cards });
+      toast({ title: all ? "Questions locked in" : "Saved", description: all ? "Every card keeps its current question." : `${Object.keys(cards).length} card${Object.keys(cards).length === 1 ? "" : "s"} updated.` });
+      setEdits({});
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/cards"] });
+    } catch (err) {
+      toast({ title: "Save failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function applyPaste() {
+    const next = { ...edits };
+    let hit = 0, miss = 0;
+    for (const line of paste.split("\n")) {
+      const l = line.trim();
+      if (!l) continue;
+      const m = /^([^,\t]+)[,\t]\s*(.+)$/.exec(l);
+      if (!m) { miss++; continue; }
+      const who = m[1].trim().toLowerCase();
+      const g = guests.find((x) => x.email === who || x.name.toLowerCase() === who);
+      if (!g) { miss++; continue; }
+      next[g.key] = { ...next[g.key], question: m[2].trim().replace(/^"|"$/g, "") };
+      hit++;
+    }
+    setEdits(next);
+    setPaste("");
+    toast({ title: `Filled ${hit} question${hit === 1 ? "" : "s"}`, description: miss ? `${miss} line${miss === 1 ? "" : "s"} didn't match a guest.` : "Press Save changes to keep them.", variant: miss ? "destructive" : "default" });
+  }
+
+  function printCards() {
+    if (dirtyCount > 0 && !window.confirm("You have unsaved edits. They will still print, but press Save changes to keep them. Print anyway?")) return;
+    const html = cardsDocument({ guests: printable.map(toCard), format, order, blanks, origin: window.location.origin });
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast({ title: "Pop-up blocked", description: "Allow pop-ups for this site, then press Print again.", variant: "destructive" });
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    // Give the logo and font a moment to load before the print dialog opens.
+    w.addEventListener("load", () => setTimeout(() => w.print(), 700));
+  }
+
+  if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+
+  const pill = (active: boolean) => `px-3 py-1.5 rounded-full text-xs border ${active ? "bg-primary/20 border-primary/50 text-primary" : "border-white/15 text-white/60 hover:bg-white/5"}`;
+
+  return (
+    <div className="space-y-5">
+      <style>{CARD_CSS}</style>
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-4">
+        <div>
+          <h3 className="font-bold text-white">Name cards</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Business-card size (3.5 × 2 in), 10 per US Letter sheet. The QR code opens the guest's Instagram, or @centralgroupevents when we don't have one.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-white/50 mr-1">Format</span>
+          <button type="button" className={pill(format === "one")} onClick={() => setFormat("one")} data-testid="button-btl-cards-one">One-sided</button>
+          <button type="button" className={pill(format === "two")} onClick={() => setFormat("two")} data-testid="button-btl-cards-two">Two-sided</button>
+          <span className="text-xs text-white/50 ml-4 mr-1">Cards for</span>
+          <button type="button" className={pill(who === "all")} onClick={() => setWho("all")}>Everyone ({guests.length})</button>
+          <button type="button" className={pill(who === "rsvped")} onClick={() => setWho("rsvped")}>RSVP'd only ({guests.filter((g) => g.rsvped).length})</button>
+        </div>
+        <p className="text-xs text-white/60">
+          {format === "one"
+            ? "Front only: name, title and Instagram, with the QR code beside them."
+            : "Front: name, title and Instagram. Back: QR code and a conversation question."}
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label className="text-white/70 text-xs">Blank cards for walk-ins</Label>
+            <Input type="number" min={0} max={60} value={blanks} onChange={(e) => setBlanks(Math.max(0, Math.min(60, Number(e.target.value) || 0)))} className="bg-black/40 border-white/10 h-9 w-24" data-testid="input-btl-cards-blanks" />
+          </div>
+          {format === "two" && (
+            <div className="flex items-center gap-2">
+              <button type="button" className={pill(order === "alternate")} onClick={() => setOrder("alternate")}>Printer does both sides</button>
+              <button type="button" className={pill(order === "fronts-first")} onClick={() => setOrder("fronts-first")}>All fronts, then all backs</button>
+            </div>
+          )}
+          <Button onClick={printCards} disabled={total === 0} className="bg-primary hover:bg-primary/90 h-9 ml-auto" data-testid="button-btl-cards-print">
+            <Printer className="w-3.5 h-3.5 mr-1.5" /> Print / save as PDF
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {total} cards · {sheets} sheet{sheets === 1 ? "" : "s"}{format === "two" ? ` (${sheets * 2} pages, front and back)` : ""}. In the print dialog choose US Letter, Margins: None, Scale: 100%, and turn Background graphics on.
+          {format === "two" && order === "alternate" && " For a printer without two-sided printing, pick “All fronts, then all backs”: print the fronts, put the stack back in, and print the backs (flip on the long edge)."}
+        </p>
+      </div>
+
+      {preview && (
+        <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5">
+          <p className="text-xs text-muted-foreground mb-3">Preview — {preview.name} (click a row below to preview someone else)</p>
+          <div className="flex flex-wrap gap-6">
+            <div style={{ width: "5.25in", height: "3in" }}>
+              <div style={{ transform: "scale(1.5)", transformOrigin: "top left" }} dangerouslySetInnerHTML={{ __html: cardFront(toCard(preview), format, "/cge-logo.png") }} data-testid="preview-btl-card-front" />
+            </div>
+            {format === "two" && (
+              <div style={{ width: "5.25in", height: "3in" }}>
+                <div style={{ transform: "scale(1.5)", transformOrigin: "top left" }} dangerouslySetInnerHTML={{ __html: cardBack(toCard(preview), "/cge-logo.png") }} data-testid="preview-btl-card-back" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="font-bold text-white mr-auto">Titles and questions</h3>
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, title" className="bg-black/40 border-white/10 h-9 w-56" data-testid="input-btl-cards-search" />
+          <Button size="sm" onClick={() => save(false)} disabled={saving || dirtyCount === 0} className="bg-primary hover:bg-primary/90" data-testid="button-btl-cards-save">
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : `Save changes${dirtyCount ? ` (${dirtyCount})` : ""}`}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => save(true)} disabled={saving} className="border-white/20 text-white/80" data-testid="button-btl-cards-lock">
+            Lock all questions
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Titles come from the guest's RSVP position (or their category). Questions that are not locked are suggested from each guest's role and shift when the guest list changes; press “Lock all questions” once you like them. Edit any title or question directly.
+        </p>
+        <details className="text-xs text-white/70">
+          <summary className="cursor-pointer text-primary">Paste a list of questions</summary>
+          <div className="mt-2 space-y-2">
+            <Textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={4} placeholder={"jay@example.com, What's one thing from engineering you've borrowed to put on a better event?\nSir Moore, Which of your hats would you hand to someone else first?"} className="bg-black/40 border-white/10 text-xs" data-testid="textarea-btl-cards-paste" />
+            <Button size="sm" variant="outline" onClick={applyPaste} disabled={!paste.trim()} className="border-white/20 text-white/80">Fill in questions</Button>
+          </div>
+        </details>
+        <div className="max-h-[32rem] overflow-y-auto rounded-lg border border-white/10 divide-y divide-white/5">
+          {shown.length === 0 ? (
+            <p className="p-4 text-xs text-muted-foreground">No guests yet — import invitees in the Invites view or wait for RSVPs.</p>
+          ) : shown.map((g) => {
+            const e = effective(g);
+            const edited = edits[g.key] !== undefined;
+            return (
+              <div key={g.key} onClick={() => setPreviewKey(g.key)} className={`grid grid-cols-1 md:grid-cols-12 gap-2 px-3 py-2 text-sm cursor-pointer ${preview?.key === g.key ? "bg-primary/10" : "hover:bg-white/5"}`}>
+                <div className="md:col-span-3 min-w-0">
+                  <p className="text-white truncate">{g.name}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{g.ig ?? "no Instagram → ours"}</p>
+                  <p className="text-[10px] mt-0.5">
+                    {g.rsvped ? <span className="text-emerald-300">RSVP'd</span> : <span className="text-white/40">invited</span>}
+                    {edited && <span className="ml-2 text-amber-300">edited</span>}
+                  </p>
+                </div>
+                <div className="md:col-span-3">
+                  <Input value={e.title} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "title", ev.target.value)} placeholder="Title / role" className="bg-black/40 border-white/10 h-8 text-xs" data-testid={`input-btl-card-title-${g.key}`} />
+                </div>
+                <div className="md:col-span-6">
+                  <Textarea value={e.question} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdit(g.key, "question", ev.target.value)} rows={2} className={`bg-black/40 border-white/10 text-xs min-h-0 ${format === "one" ? "opacity-50" : ""}`} data-testid={`textarea-btl-card-question-${g.key}`} />
+                  {!g.questionSaved && edits[g.key]?.question === undefined && <p className="text-[10px] text-white/40 mt-0.5">suggested — not locked</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
