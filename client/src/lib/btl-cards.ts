@@ -54,15 +54,17 @@ function nameSize(name: string): string {
 }
 
 /** Rows of fixed-width C / G / E cells, each row shifted one cell, so every
- *  letter lines up on a diagonal (the "stacked CGE" background). */
+ *  letter lines up on a diagonal (the "stacked CGE" background). The whole
+ *  grid is tilted 15 degrees (Syne ExtraBold) and oversized so it still
+ *  covers the card corners. */
 function pattern(opacity: number): string {
-  let h = `<div class="bc-pat" style="opacity:${opacity}">`;
-  for (let r = 0; r < 9; r++) {
+  let h = `<div class="bc-pat" style="opacity:${opacity}"><div class="bc-patin">`;
+  for (let r = 0; r < 14; r++) {
     let row = "";
-    for (let c = 0; c < 16; c++) row += `<span>${"CGE"[(c + r) % 3]}</span>`;
+    for (let c = 0; c < 17; c++) row += `<span>${"CGE"[(c + r) % 3]}</span>`;
     h += `<div class="bc-prow">${row}</div>`;
   }
-  return h + "</div>";
+  return h + "</div></div>";
 }
 
 function footer(logo: string, right: string): string {
@@ -84,9 +86,9 @@ export function cardFront(g: CardGuest | null, format: CardFormat, logo: string)
     const q = (g ? g.ask.trim() : "") || (g ? "" : BLANK_ASK);
     const qSize = q.length > 120 ? "7.2pt" : q.length > 85 ? "7.8pt" : "8.6pt";
     const question = q ? `<div class="bc-q1"><p style="font-size:${qSize}">${esc(q)}</p></div>` : "";
-    return `<div class="bc bc-one">${pattern(0.085)}<div class="bc-top"><div class="bc-l">${nm}${title}${ig}</div><div class="bc-r">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div></div>${question}${foot}</div>`;
+    return `<div class="bc bc-one">${pattern(0.11)}<div class="bc-top"><div class="bc-l">${nm}${title}${ig}</div><div class="bc-r">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div></div>${question}${foot}</div>`;
   }
-  return `<div class="bc">${pattern(0.085)}<div class="bc-in2">${nm}${title}${ig}</div>${foot}</div>`;
+  return `<div class="bc">${pattern(0.11)}<div class="bc-in2">${nm}${title}${ig}</div>${foot}</div>`;
 }
 
 export function cardBack(g: CardGuest | null, logo: string): string {
@@ -98,14 +100,18 @@ export function cardBack(g: CardGuest | null, logo: string): string {
   const total = q1.length + q2.length;
   const size = q1 && q2 ? (total > 210 ? "6.9pt" : total > 160 ? "7.4pt" : "8pt") : (total > 120 ? "8.6pt" : "9.6pt");
   const one = (t: string) => (t ? `<p style="font-size:${size}">${esc(t)}</p>` : "");
-  return `<div class="bc">${pattern(0.055)}<div class="bc-in3"><div class="bc-qw">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div><div class="bc-q">${one(q1)}${q1 && q2 ? '<i class="bc-div"></i>' : ""}${one(q2)}</div></div>${footer(logo, "centralgroupevents.com")}</div>`;
+  return `<div class="bc">${pattern(0.08)}<div class="bc-in3"><div class="bc-qw">${qrSvg(qrUrl)}<div class="bc-cap">${esc(cap)}</div></div><div class="bc-q">${one(q1)}${q1 && q2 ? '<i class="bc-div"></i>' : ""}${one(q2)}</div></div>${footer(logo, "centralgroupevents.com")}</div>`;
 }
+
+/** Syne ExtraBold (800) for the stacked-letter background. */
+export const CARD_FONT_IMPORT = "@import url('https://fonts.googleapis.com/css2?family=Syne:wght@800&display=swap');";
 
 export const CARD_CSS = `
 .bc{position:relative;width:3.5in;height:2in;overflow:hidden;background:#0b0b0e;color:#f3ecdd;font-family:Inter,"Helvetica Neue",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .bc *{box-sizing:border-box}
-.bc-pat{position:absolute;inset:0;overflow:hidden;color:#f0a31a;font:900 .34in/.255in Inter,Arial,sans-serif;white-space:nowrap;pointer-events:none}
-.bc-prow{height:.255in;display:flex;margin-left:-.12in}.bc-prow span{display:block;width:.30in;text-align:center;height:.255in}
+.bc-pat{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.bc-patin{position:absolute;left:50%;top:50%;width:6.12in;height:3.92in;margin:-1.96in 0 0 -3.06in;transform:rotate(-15deg);transform-origin:center;color:#f0a31a;font-family:Syne,"Archivo","Helvetica Neue",Arial,sans-serif;font-weight:800;font-size:.27in;line-height:.28in;white-space:nowrap}
+.bc-prow{height:.28in;display:flex}.bc-prow span{display:block;width:.36in;text-align:center;height:.28in}
 .bc-top{position:absolute;left:.2in;right:.18in;top:.14in;height:.98in;display:flex;justify-content:space-between;align-items:flex-start}
 .bc-one .bc-r{width:.86in;height:auto}.bc-one .bc-qr{width:.74in;height:.74in;padding:.04in}.bc-one .bc-cap{font-size:4.4pt;max-width:.9in;margin-top:.03in}
 .bc-q1{position:absolute;left:.2in;right:.2in;top:1.16in;height:.5in;display:flex;align-items:center}.bc-q1 p{margin:0;font-weight:600;line-height:1.28;color:#f3ecdd;border-left:2px solid #f0a31a;padding-left:.09in}
@@ -163,6 +169,7 @@ export function cardsDocument(opts: {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Build to Last — name cards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
+${CARD_FONT_IMPORT}
 @page{size:8.5in 11in;margin:0}
 html,body{margin:0;background:#fff}
 .sheet{position:relative;width:8.5in;height:11in;overflow:hidden;page-break-after:always;break-after:page;background:#fff}

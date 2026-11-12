@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BTL_INTEREST_KEYS, BTL_INTEREST_LABELS, normalizeInstagramHandle } from "@shared/schema";
 import { BTL_PAGE_FIELDS, BTL_PAGE_DEFAULTS } from "@shared/btl-page";
-import { CARD_CSS, cardFront, cardBack, cardsDocument, type CardFormat, type CardPageOrder } from "@/lib/btl-cards";
+import { CARD_CSS, CARD_FONT_IMPORT, cardFront, cardBack, cardsDocument, type CardFormat, type CardPageOrder } from "@/lib/btl-cards";
 import { Download, Loader2, Plus, Send, Upload, Eye, Check, Printer, Pencil, Trash2, X } from "lucide-react";
 
 type BtlRsvp = {
@@ -2093,8 +2093,12 @@ function CardsView() {
     w.document.open();
     w.document.write(html);
     w.document.close();
-    // Give the logo and font a moment to load before the print dialog opens.
-    w.addEventListener("load", () => setTimeout(() => w.print(), 700));
+    // Wait for the logo and the Syne font before the print dialog opens.
+    w.addEventListener("load", () => {
+      const go = () => setTimeout(() => w.print(), 500);
+      if (w.document.fonts?.ready) w.document.fonts.ready.then(go, go);
+      else go();
+    });
   }
 
   if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
@@ -2103,7 +2107,7 @@ function CardsView() {
 
   return (
     <div className="space-y-5">
-      <style>{CARD_CSS}</style>
+      <style>{`${CARD_FONT_IMPORT}${CARD_CSS}`}</style>
       <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-4">
         <div>
           <h3 className="font-bold text-white">Name cards</h3>
