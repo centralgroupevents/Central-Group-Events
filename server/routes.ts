@@ -1244,6 +1244,8 @@ ${blogList || "_No recent posts yet._"}
       // Real sends embed the images as CID attachments; the browser preview
       // can't resolve cid:, so inline the same images as data URIs.
       const { cidsToDataUris } = await import("./btl-brand");
+      const { ensureEmailImages } = await import("./btl-mailer");
+      await ensureEmailImages(tpl.body);
       const html = cidsToDataUris(btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com")));
       res.json({ subject: tpl.subject, html });
     } catch (err) {
@@ -1351,6 +1353,30 @@ ${blogList || "_No recent posts yet._"}
       res.json({ saved: true, slug });
     } catch (err) {
       console.error("[btl/speaker-photo] error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // A picture pasted into an email body (e.g. a screenshot of the directions).
+  // Stored with the other photos; the body references it as [[image:ID]].
+  app.post("/api/admin/btl/email-image", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(String((req.body ?? {}).image ?? ""));
+      if (!m) return res.status(400).json({ message: "That image couldn't be read." });
+      const buf = Buffer.from(m[1], "base64");
+      if (buf.length < 500 || buf.length > 1_500_000 || buf[0] !== 0xff || buf[1] !== 0xd8) {
+        return res.status(400).json({ message: "That image is too large or couldn't be read. Try a smaller screenshot." });
+      }
+      const { refreshUploadedPhotos } = await import("./btl-mailer");
+      const id = crypto.randomBytes(6).toString("hex");
+      let photos: Record<string, string> = {};
+      try { const j = JSON.parse((await storage.getSetting("btl.photos")) || "{}"); if (j && typeof j === "object") photos = j; } catch { /* ignore */ }
+      photos[`images/${id}.jpg`] = buf.toString("base64");
+      await storage.setSetting("btl.photos", JSON.stringify(photos));
+      await refreshUploadedPhotos(true);
+      res.json({ id });
+    } catch (err) {
+      console.error("[btl/email-image] error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });

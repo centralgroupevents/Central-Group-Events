@@ -1385,7 +1385,7 @@ function TemplatesView() {
   const { data: templates = [], isLoading, error } = useQuery<BtlTemplate[]>({ queryKey: ["/api/admin/btl/templates"] });
   const [selectedKey, setSelectedKey] = useState<string>("initial_invite");
   const [draft, setDraft] = useState<{ key: string; subject: string; body: string } | null>(null);
-  const [busy, setBusy] = useState<"" | "save" | "reset" | "send">("");
+  const [busy, setBusy] = useState<"" | "save" | "reset" | "send" | "image">("");
   const [preview, setPreview] = useState<{ subject: string; html: string } | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   // "Send to…" — fire the selected template at one person (name + email).
@@ -1500,6 +1500,36 @@ function TemplatesView() {
     } else {
       navigator.clipboard?.writeText(token).catch(() => {});
       toast({ title: `${token} copied — paste it where you want it` });
+    }
+  }
+
+  // Paste, drop or pick a picture (e.g. a screenshot of the directions): it is
+  // shrunk, stored on the server, and a [[image:ID]] line goes in at the cursor.
+  async function addImage(file: File | undefined | null) {
+    if (!file || !file.type.startsWith("image/") || !selected) return;
+    setBusy("image");
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, 1100 / bmp.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bmp.width * scale);
+      canvas.height = Math.round(bmp.height * scale);
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const res = await apiRequest("POST", "/api/admin/btl/email-image", { image: canvas.toDataURL("image/jpeg", 0.85) });
+      const { id } = await res.json();
+      const token = `\n\n[[image:${id}]]\n\n`;
+      const el = bodyRef.current;
+      const start = el ? el.selectionStart ?? body.length : body.length;
+      const end = el ? el.selectionEnd ?? start : start;
+      setDraft({ key: selected.key, subject, body: body.slice(0, start) + token + body.slice(end) });
+      toast({ title: "Picture added", description: "It appears in the Preview and in the sent email. Move the [[image:…]] line to where you want it (keep it on its own line)." });
+    } catch (err) {
+      toast({ title: "Couldn't add the picture", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
     }
   }
 
@@ -1693,14 +1723,31 @@ function TemplatesView() {
         </div>
 
         <div>
-          <Label className="text-white/70 text-xs">Body (plain text — blank line = new paragraph, a “✦ TITLE” line becomes a gold section header)</Label>
+          <Label className="text-white/70 text-xs">Body (plain text — blank line = new paragraph, a “✦ TITLE” line becomes a gold section header). You can paste or drop a screenshot right into the box.</Label>
           <Textarea
             ref={bodyRef}
             value={body}
             onChange={(e) => setDraft({ key: selected.key, subject, body: e.target.value })}
+            onPaste={(e) => {
+              const f = Array.from(e.clipboardData?.files ?? []).find((x) => x.type.startsWith("image/"));
+              if (f) { e.preventDefault(); void addImage(f); }
+            }}
+            onDragOver={(e) => { if (Array.from(e.dataTransfer?.items ?? []).some((x) => x.type.startsWith("image/"))) e.preventDefault(); }}
+            onDrop={(e) => {
+              const f = Array.from(e.dataTransfer?.files ?? []).find((x) => x.type.startsWith("image/"));
+              if (f) { e.preventDefault(); void addImage(f); }
+            }}
             className="bg-black/30 border-white/10 min-h-[380px] font-mono text-[13px] leading-relaxed"
             data-testid="input-btl-template-body"
           />
+        </div>
+
+        <div className="flex gap-2 items-center">
+          <label className="px-3 py-1.5 rounded-md border border-primary/40 text-primary text-xs cursor-pointer hover:bg-primary/10" data-testid="button-btl-template-add-image">
+            {busy === "image" ? "Adding picture…" : "Add a picture"}
+            <input type="file" accept="image/*" className="hidden" disabled={busy !== ""} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void addImage(f); }} data-testid="input-btl-template-image" />
+          </label>
+          <span className="text-xs text-muted-foreground">or paste / drop a screenshot into the box. Keep the [[image:…]] line on its own line, between blank lines.</span>
         </div>
 
         <div className="flex gap-1.5 flex-wrap items-center">

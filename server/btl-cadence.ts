@@ -197,7 +197,10 @@ export function renderBtlFromTexts(
       .replace(/<p[^>]*>\[\[speaker_cards\]\]<\/p>/g, () => cards)
       .replace(/<p[^>]*>\[\[aislego_card\]\]<\/p>/g, () => aislegoCardHtml())
       .replace(/<p[^>]*>\[\[equal_space_card\]\]<\/p>/g, () => equalSpaceCardHtml())
-      .replace(/<p[^>]*>\[\[founder_card\]\]<\/p>/g, () => founderCardHtml()),
+      .replace(/<p[^>]*>\[\[founder_card\]\]<\/p>/g, () => founderCardHtml())
+      // A picture pasted into the template: [[image:ID]] alone in its paragraph.
+      .replace(/<p[^>]*>\[\[image:([a-z0-9]{6,20})\]\]<\/p>/g, (_m, id: string) =>
+        `<p style="margin:0 0 18px"><img src="cid:btl-img-${id}" alt="" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:4px" /></p>`),
   };
 }
 
