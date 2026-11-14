@@ -10,3 +10,8 @@ so tests and unfinished work do not affect the next production release.
 
 **How to apply:** Test unfinished work in an isolated staging project with separate
 data and credentials. Promote only approved changes, not the entire work in progress.
+
+While the assistant is withdrawn, keep the original pre-assistant homepage hero,
+not a calendar-only homepage.
+
+**Why:** The user explicitly corrected the temporary removal's empty hero area.
