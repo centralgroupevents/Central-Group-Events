@@ -1,7 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { registerAssistantRoutes } from "./assistant-routes";
 import { BASIC_FOLLOWUP_KIND, buildBasicFollowupEmail, runBasicFollowups } from "./basic-booking-followup";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -291,7 +290,12 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  registerAssistantRoutes(app);
+  // Temporarily withdrawn from public use. Keep the implementation for staging
+  // cleanup, but block all endpoints (including stale clients) before fallbacks.
+  app.use("/api/assistant", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.status(503).json({ message: "The event assistant is currently unavailable. Please browse the event calendar." });
+  });
   // ── Sitemap & Robots — registered FIRST, before any catch-alls ───────
   app.get("/sitemap.xml", async (_req: Request, res: Response) => {
     console.log("[sitemap] GET /sitemap.xml hit");

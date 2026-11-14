@@ -21,7 +21,6 @@ import { useSubscribeNewsletter } from "@/hooks/use-landing";
 import { Navigation } from "@/components/Navigation";
 import { SEO } from "@/components/SEO";
 import { EventBrowser } from "@/components/EventBrowser";
-import EventAssistant from "@/components/EventAssistant";
 import { EventsJsonLd } from "@/components/EventsJsonLd";
 import { SubscribeModal } from "@/components/SubscribeModal";
 import { HomepagePhotoStrip } from "@/components/HomepagePhotoStrip";
@@ -260,8 +259,6 @@ export default function Home() {
       />
       <EventsJsonLd maxItems={10} />
       <Navigation />
-
-      <EventAssistant />
 
       {/* EVENT CALENDAR SECTION */}
       <section id="events" className="py-12 md:py-16">
