@@ -8,6 +8,21 @@ It intentionally returns **503** until the sample Price ID and domain are
 configured. No payments have been tested against Stripe or enabled in the UI.
 Existing booking buttons, database tables and payment status behavior are unchanged.
 
+## Verified sandbox products
+
+Created with user approval on November 14, 2026. Stripe confirmed `livemode: false`
+for every product and price, with one-time USD prices. These are test-only resources;
+the existing live-account products were not changed. Checkout is not yet wired to them.
+
+| Package | Amount | Test Price ID | Test Product ID |
+|---|---|---|---|
+| Starter | $125 USD | `price_1UbuIuAR94PpJesws4E2Tf5b` | `prod_VdAeR0IlzPZqVN` |
+| Growth | $250 USD | `price_1UbuIuAR94PpJesw2YWAPq0A` | `prod_VdAeSz95hF4mJ1` |
+| Custom | $500 USD | `price_1UbuIvAR94PpJeswbfOTPxzs` | `prod_VdAeiFUKBozSq5` |
+
+Use these IDs only with this sandbox connection. Do not substitute the supplied
+live-account IDs into test checkout or enable live payments as part of testing.
+
 ## Values to Replace
 
 **Files containing placeholders:**
