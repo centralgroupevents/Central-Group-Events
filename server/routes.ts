@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
+import { createCheckoutHandler } from "./stripe-checkout";
 import { BASIC_FOLLOWUP_KIND, buildBasicFollowupEmail, runBasicFollowups } from "./basic-booking-followup";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -290,6 +291,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  app.post("/api/create-checkout-session", formLimiter, createCheckoutHandler());
   // Temporarily withdrawn from public use. Keep the implementation for staging
   // cleanup, but block all endpoints (including stale clients) before fallbacks.
   app.use("/api/assistant", (_req, res) => {
