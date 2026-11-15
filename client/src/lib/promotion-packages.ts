@@ -10,7 +10,7 @@ export const PACKAGES = [
   {
     id: "Starter",
     label: "Starter",
-    price: "$70",
+    price: "$125",
     badge: null,
     features: ["Event calendar listing", "Instagram story feature", "Newsletter mention", "Facebook post"],
     testId: "card-package-starter",
@@ -18,15 +18,15 @@ export const PACKAGES = [
   {
     id: "Growth",
     label: "Growth",
-    price: "$150",
+    price: "$250",
     badge: "Most Popular",
-    features: ["Everything in Starter", "Instagram reel feature", "Premium newsletter placement", "SMS blast to subscribers"],
+    features: ["Everything in Starter", "Instagram reel feature", "Premium newsletter placement"],
     testId: "card-package-growth",
   },
   {
     id: "Custom",
     label: "Custom",
-    price: "$300+",
+    price: "$500",
     badge: null,
     features: ["Everything in Growth", "Influencer reposts", "Strategy call included", "Custom campaign timeline"],
     testId: "card-package-custom",

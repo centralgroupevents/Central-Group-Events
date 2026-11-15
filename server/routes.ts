@@ -456,10 +456,10 @@ export async function registerRoutes(
     res.status(200).send(
 `# Central Group Events
 
-> New Jersey's #1 event discovery and promotion platform. We cover North, Central, and South NJ with curated weekly event listings, paid event promotion across newsletter, Instagram reels, paid ads, SMS blasts, and influencer campaigns.
+> New Jersey's #1 event discovery and promotion platform. We cover North, Central, and South NJ with curated weekly event listings, paid event promotion across newsletter, Instagram reels, paid ads, and influencer campaigns.
 
 ## About
-Central Group Events (CGE) is a New Jersey event promotion agency. We promote 100+ events weekly. Pricing tiers: Basic (free calendar listing), Starter ($70/event), Growth ($150/event with premium newsletter placement + SMS blast), and Custom ($300+/event with influencer reposts).
+Central Group Events (CGE) is a New Jersey event promotion agency. We promote 100+ events weekly. Pricing tiers: Basic (free calendar listing), Starter ($125/event), Growth ($250/event with premium newsletter placement), and Custom ($500/event with influencer reposts).
 
 ## Service area
 All of New Jersey — Newark, Jersey City, Hoboken, Paterson, Elizabeth, Montclair, Trenton, New Brunswick, Edison, Atlantic City, Cherry Hill, Camden, and surrounding areas.
@@ -492,7 +492,7 @@ Instagram: @centralgroupevents
 
       const faqText = [
         ["How do I submit my event?", "Use the Book Promotion form on our homepage or visit /book to pick a package and submit your details."],
-        ["What does NJ event promotion cost?", "Basic (free calendar listing), Starter ($70/event), Growth ($150/event with reels, premium newsletter placement, and SMS blast), Custom ($300+/event for influencer reposts and dedicated campaign timelines)."],
+        ["What does NJ event promotion cost?", "Basic (free calendar listing), Starter ($125/event), Growth ($250/event with reels and premium newsletter placement), Custom ($500/event for influencer reposts and dedicated campaign timelines)."],
         ["How far in advance should I book event promotion?", "At least 7 days before your event. For time-sensitive events (holidays, special weekends), 2 weeks in advance is recommended."],
         ["Which New Jersey regions do you cover?", "All of New Jersey — North NJ (Newark, Jersey City, Hoboken, Paterson, Elizabeth, Montclair), Central NJ (Trenton, New Brunswick, Edison, Plainfield), and South NJ (Atlantic City, Cherry Hill, Camden)."],
         ["What kinds of events do you promote?", "Club nights, concerts, day parties, brunches, festivals, comedy shows, pop-ups, networking events, and lounge events. Any public, attendee-facing event in New Jersey."],
@@ -514,7 +514,6 @@ Central Group Events (CGE) is a curated New Jersey event promotion agency operat
 - Weekly curated newsletter (free to subscribers)
 - Instagram reels and stories
 - Premium newsletter placement
-- SMS blasts to engaged subscribers
 - Targeted Meta ad campaigns
 - Influencer reposts via our content creator network
 - Calendar listings in our public event hub
@@ -524,19 +523,18 @@ Central Group Events (CGE) is a curated New Jersey event promotion agency operat
 ### Basic — Free
 Event calendar listing only. Best for organizers who want exposure without paying for promotion.
 
-### Starter — $70 per event
+### Starter — $125 per event
 - Event calendar listing
 - Instagram story feature
 - Newsletter mention
 - Facebook post
 
-### Growth — $150 per event ("Most Popular")
+### Growth — $250 per event ("Most Popular")
 - Everything in Starter
 - Instagram reel feature
 - Premium newsletter placement
-- SMS blast to engaged subscribers
 
-### Custom — $300+ per event
+### Custom — $500 per event
 - Everything in Growth
 - Influencer reposts
 - Strategy call included

@@ -43,7 +43,7 @@ const ORG_SCHEMA = {
   "description":
     "New Jersey's #1 event discovery and promotion platform covering North, Central, and South NJ.",
   "email": "centralgroupevents@gmail.com",
-  "priceRange": "$70-$300+",
+  "priceRange": "$125-$500",
   "serviceType": "Event Promotion",
   "areaServed": [
     { "@type": "State", "name": "New Jersey" },

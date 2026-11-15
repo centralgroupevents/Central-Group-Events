@@ -8176,7 +8176,7 @@ export default function Admin() {
                                   </span>
                                 </td>
                                 <td className="px-4 py-4 text-right whitespace-nowrap font-semibold text-white" data-testid={`text-dealvalue-${booking.id}`}>
-                                  {packageDealValue(booking.mode).label}
+                                  {booking.budgetRange || packageDealValue(booking.mode).label}
                                 </td>
                                 <td className="px-4 py-4 text-muted-foreground whitespace-nowrap" onClick={(e) => e.stopPropagation()} data-testid={`text-contact-${booking.id}`}>
                                   <div className="flex items-center gap-2">

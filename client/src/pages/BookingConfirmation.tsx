@@ -221,7 +221,6 @@ export default function BookingConfirmation() {
                 <ul className="list-disc list-inside space-y-2 text-xs text-white/75">
                   <li>Priority placement across our newsletter and event hub</li>
                   <li>Instagram reels, targeted social promotion, and ads</li>
-                  <li>SMS blasts to engaged subscribers</li>
                 </ul>
               </div>
             </div>

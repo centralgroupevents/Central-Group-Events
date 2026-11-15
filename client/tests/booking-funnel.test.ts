@@ -29,7 +29,7 @@ test("payment features expand every inherited tier without changing card copy or
     "Event calendar listing", "Instagram story feature", "Newsletter mention", "Facebook post",
   ];
   const growth = [
-    ...starter, "Instagram reel feature", "Premium newsletter placement", "SMS blast to subscribers",
+    ...starter, "Instagram reel feature", "Premium newsletter placement",
   ];
   assert.deepEqual(getIncludedPackageFeatures("Basic"), ["Event calendar listing"]);
   assert.deepEqual(getIncludedPackageFeatures("Starter"), starter);
@@ -37,7 +37,8 @@ test("payment features expand every inherited tier without changing card copy or
   assert.deepEqual(getIncludedPackageFeatures("Custom"), [
     ...growth, "Influencer reposts", "Strategy call included", "Custom campaign timeline",
   ]);
-  assert.deepEqual(PACKAGES.map(pkg => pkg.price), ["FREE", "$70", "$150", "$300+"]);
+  assert.deepEqual(PACKAGES.map(pkg => pkg.price), ["FREE", "$125", "$250", "$500"]);
+  assert.ok(PACKAGES.every(pkg => getIncludedPackageFeatures(pkg.id).every(feature => !/sms/i.test(feature))));
   assert.equal(PACKAGES[2].features[0], "Everything in Starter");
   assert.equal(PACKAGES[3].features[0], "Everything in Growth");
   assert.deepEqual(getIncludedPackageFeatures("unknown"), []);

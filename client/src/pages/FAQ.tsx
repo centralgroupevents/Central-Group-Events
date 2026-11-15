@@ -30,7 +30,7 @@ const FAQ_ITEMS = [
   {
     question: "What does NJ event promotion cost?",
     answer:
-      "We offer four tiers: Basic (free calendar listing), Starter ($70 per event), Growth ($150 per event with reels, premium newsletter placement, and SMS blasts), and Custom ($300+ per event for influencer reposts and dedicated campaign timelines).",
+      "We offer four tiers: Basic (free calendar listing), Starter ($125 per event), Growth ($250 per event with reels and premium newsletter placement), and Custom ($500 per event for influencer reposts and dedicated campaign timelines).",
   },
   {
     question: "How far in advance should I book event promotion?",

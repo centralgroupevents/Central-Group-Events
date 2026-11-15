@@ -46,11 +46,11 @@ const HOMEPAGE_FAQS = [
   },
   {
     q: "How do I submit my event or book promotion?",
-    a: "Visit /book to compare Packages and submit your event in the booking wizard. Packages range from a free calendar listing (Basic) through Starter ($70), Growth ($150 with reels + SMS blast), and Custom ($300+ with influencer reposts). Submit at least 7 days before your event so we have time to schedule slots.",
+    a: "Visit /book to compare Packages and submit your event in the booking wizard. Packages range from a free calendar listing (Basic) through Starter ($125), Growth ($250 with reels), and Custom ($500 with influencer reposts). Submit at least 7 days before your event so we have time to schedule slots.",
   },
   {
     q: "How much does event promotion in NJ cost?",
-    a: "Four tiers: Basic (free calendar listing), Starter ($70 per event), Growth ($150 per event with Instagram reel, premium newsletter placement, and SMS blast), and Custom ($300+ per event with influencer reposts, strategy call, and dedicated campaign timeline). Compare Packages in the booking wizard at /book.",
+    a: "Four tiers: Basic (free calendar listing), Starter ($125 per event), Growth ($250 per event with Instagram reel and premium newsletter placement), and Custom ($500 per event with influencer reposts, strategy call, and dedicated campaign timeline). Compare Packages in the booking wizard at /book.",
   },
   {
     q: "How fast will my event get posted after I book?",
@@ -173,9 +173,9 @@ export default function Home() {
             },
             "image": "https://centralgroupevents.com/og-image.jpg",
             "description":
-              "New Jersey's #1 event discovery and promotion platform covering North, Central, and South NJ. We promote 100+ events weekly through newsletter, reels, paid ads, SMS blasts, and influencer campaigns.",
+              "New Jersey's #1 event discovery and promotion platform covering North, Central, and South NJ. We promote 100+ events weekly through newsletter, reels, paid ads, and influencer campaigns.",
             "email": "centralgroupevents@gmail.com",
-            "priceRange": "$70-$300+",
+            "priceRange": "$125-$500",
             "serviceType": "Event Promotion",
             "areaServed": [
               { "@type": "State", "name": "New Jersey" },
@@ -210,7 +210,7 @@ export default function Home() {
                 {
                   "@type": "Offer",
                   "name": "Starter",
-                  "price": "70",
+                  "price": "125",
                   "priceCurrency": "USD",
                   "description":
                     "Event calendar listing, Instagram story feature, newsletter mention, and Facebook post",
@@ -219,16 +219,16 @@ export default function Home() {
                 {
                   "@type": "Offer",
                   "name": "Growth",
-                  "price": "150",
+                  "price": "250",
                   "priceCurrency": "USD",
                   "description":
-                    "Everything in Starter plus Instagram reel feature, premium newsletter placement, and SMS blast to subscribers",
+                    "Everything in Starter plus Instagram reel feature and premium newsletter placement",
                   "url": "https://centralgroupevents.com/book?package=growth",
                 },
                 {
                   "@type": "Offer",
                   "name": "Custom",
-                  "price": "300",
+                  "price": "500",
                   "priceCurrency": "USD",
                   "description":
                     "Everything in Growth plus influencer reposts, strategy call, and custom campaign timeline",
@@ -575,7 +575,7 @@ export default function Home() {
             {[
               { num: "01", title: "Submit Details", desc: "Fill out the booking form. Takes 3 minutes. Tell us your event, date, region, and budget." },
               { num: "02", title: "Strategy Call", desc: "We jump on a quick 15-minute call to align on your vision, goals, and promotion timeline." },
-              { num: "03", title: "Promotion Rollout", desc: "We execute across newsletter, Instagram reels, Meta ads, SMS blasts, and influencer reposts — all timed strategically." },
+              { num: "03", title: "Promotion Rollout", desc: "We execute across newsletter, Instagram reels, Meta ads, and influencer reposts — all timed strategically." },
               { num: "04", title: "Packed Event", desc: "Your venue fills up. Doors are packed. You focus on the experience — we handle the crowd." }
             ].map((step, i) => (
               <motion.div 

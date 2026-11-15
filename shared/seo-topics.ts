@@ -311,7 +311,7 @@ function buildComboTopic(city: CityProfile, type: TypeProfile): TopicConfig {
       },
       {
         q: `How do I list my ${t} event in ${city.name}, NJ?`,
-        a: `Submit your event through the Central Group Events promotion booking form at /book. Basic calendar listings are free; paid packages (Starter $70, Growth $150, Custom $300+) include Instagram reels, premium newsletter placement, SMS blasts, and influencer reposts. For best results, submit at least 7 days before your event.`,
+        a: `Submit your event through the Central Group Events promotion booking form at /book. Basic calendar listings are free; paid packages (Starter $125, Growth $250, Custom $500) include Instagram reels, premium newsletter placement, and influencer reposts. For best results, submit at least 7 days before your event.`,
       },
       {
         q: `What's the best night for ${ts} in ${city.name}?`,

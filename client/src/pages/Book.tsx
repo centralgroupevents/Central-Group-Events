@@ -145,11 +145,8 @@ function FieldError({ msg }: { msg?: string }) {
 
 function getPackageFromParam(): { mode: string; budgetRange: string } {
   const param = new URLSearchParams(window.location.search).get("package")?.toLowerCase();
-  if (param === "basic") return { mode: "Basic", budgetRange: "FREE" };
-  if (param === "starter") return { mode: "Starter", budgetRange: "$70" };
-  if (param === "growth") return { mode: "Growth", budgetRange: "$150" };
-  if (param === "custom") return { mode: "Custom", budgetRange: "$300+" };
-  return { mode: "", budgetRange: "" };
+  const pkg = PACKAGES.find(item => item.id.toLowerCase() === param);
+  return pkg ? { mode: pkg.id, budgetRange: pkg.price } : { mode: "", budgetRange: "" };
 }
 
 export default function Book() {
@@ -165,10 +162,13 @@ export default function Book() {
       : position < 4 ? { step: 2, subStep: position === 2 ? "a" : "b" }
       : { step: 3, subStep: "a" };
   });
-  const [data, setData] = useState<WizardData>(() => ({
-    ...INITIAL_DATA,
-    ...(recovery?.data ?? getPackageFromParam()),
-  }));
+  const [data, setData] = useState<WizardData>(() => {
+    const initial = { ...INITIAL_DATA, ...(recovery?.data ?? getPackageFromParam()) };
+    // Refresh an unsubmitted draft's quote, never an already attempted booking.
+    const pkg = PACKAGES.find(item => item.id === initial.mode);
+    if (!recovery?.attempt && pkg) initial.budgetRange = pkg.price;
+    return initial;
+  });
   const [errors, setErrors] = useState<Partial<Record<keyof WizardData, string>>>({});
   const [touched, setTouched] = useState<Set<keyof WizardData>>(new Set());
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -1053,7 +1053,6 @@ export default function Book() {
                           <ul className="list-disc list-inside space-y-2 text-xs text-white/75">
                             <li>Priority event placement across our calendar and newsletter</li>
                             <li>Instagram reels, targeted social promotion, and ads</li>
-                            <li>SMS blasts to engaged subscribers</li>
                             <li>Faster confirmation and campaign support</li>
                           </ul>
                         </div>
