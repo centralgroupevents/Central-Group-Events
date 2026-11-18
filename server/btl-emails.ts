@@ -91,7 +91,11 @@ export function renderBtlText(text: string, vars: Record<string, string>): strin
 // no marketing footer bars. The logo references a CID inline attachment
 // (see cgeLogoAttachment in btl-mailer) so it displays without depending
 // on the website hosting the image; previews swap the cid: for a URL.
-export function btlShell(bodyHtml: string, unsubscribeUrl: string | null): string {
+/** Templates that go to people who weren't at Build to Last (new sponsors,
+ *  blank emails): the footer must not claim they signed up for it. */
+export const BTL_NEUTRAL_FOOTER_KEYS = new Set(["sponsor_outreach", "custom_1", "custom_2", "custom_3"]);
+
+export function btlShell(bodyHtml: string, unsubscribeUrl: string | null, neutralFooter = false): string {
   return `
   <div style="background:#faf8f4;padding:28px 16px">
     <div style="max-width:560px;margin:0 auto;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.75;color:#262118">
@@ -100,7 +104,9 @@ export function btlShell(bodyHtml: string, unsubscribeUrl: string | null): strin
       ${partnersFooterHtml()}
       <p style="margin:26px 0 0;color:#9a917f;font-size:12px;font-family:Georgia,serif">
         ${unsubscribeUrl
-          ? `You're getting this because of Build to Last Vol. 1. <a href="${unsubscribeUrl}" style="color:#9a917f">Unsubscribe from these emails</a>.`
+          ? (neutralFooter
+            ? `Sent by Central Group Events. <a href="${unsubscribeUrl}" style="color:#9a917f">Unsubscribe</a> if you'd rather not hear from us.`
+            : `You're getting this because of Build to Last Vol. 1. <a href="${unsubscribeUrl}" style="color:#9a917f">Unsubscribe from these emails</a>.`)
           : "Sent by Central Group Events."}
       </p>
     </div>
@@ -622,6 +628,49 @@ Arrive a little early, look around, and say thank you to the team. We're proud t
 
 — The Central Group Events team`,
   },
+  // ── Follow-ups and outreach: drafts to edit, never sent automatically. ──
+  {
+    key: "sponsor_followup",
+    label: "Thank-you follow-up — sponsors & venue",
+    placeholders: ["name", "first_name", "photo_gallery_url", "recap_video_url"],
+    subject: "Thank you — Build to Last Vol. 1",
+    body: `Hey {{first_name}},
+
+Thank you. Build to Last Vol. 1 happened because of you, and the whole Central Group Events team is grateful.
+
+✦ THE RECAP
+
+The edited photos from the night are up. Use them anywhere you like, and tag @centralgroupevents so we can share you back.
+
+[See the photos]({{photo_gallery_url}})
+
+✦ WHAT'S NEXT
+
+Build to Last Vol. 2 is already in motion, and we'd love to build it with you again. If it's useful, I'm happy to send a short summary of what worked and where we can make your visibility even stronger. If there's anything you'd like us to do differently, reply and tell me.
+
+Thank you again for believing in this room.
+
+— The Central Group Events team`,
+  },
+  {
+    key: "sponsor_outreach",
+    label: "New sponsor outreach (attach your package)",
+    placeholders: ["name", "first_name"],
+    subject: "Partnering on the next Build to Last",
+    body: `Hi {{first_name}},
+
+I'm Anthony, founder of Central Group Events. We promote events across New Jersey, and our latest, Build to Last, brought planners, venue owners and creators together in Newark for an evening of moderated conversation and real networking.
+
+We're building the next one and looking for a small number of partners who want to be in front of that room. I've attached our sponsorship package. It covers what each partnership includes and how it works.
+
+A short call is the easiest way to see whether it's a fit. Reply with a couple of times that suit you and I'll make it work.
+
+— Anthony
+Founder, Central Group Events`,
+  },
+  { key: "custom_1", label: "Blank email 1 (write your own)", placeholders: ["name", "first_name"], subject: "Subject goes here", body: "Hey {{first_name}},\n\nWrite your message here.\n\n— Anthony\nFounder, Central Group Events" },
+  { key: "custom_2", label: "Blank email 2 (write your own)", placeholders: ["name", "first_name"], subject: "Subject goes here", body: "Hey {{first_name}},\n\nWrite your message here.\n\n— Anthony\nFounder, Central Group Events" },
+  { key: "custom_3", label: "Blank email 3 (write your own)", placeholders: ["name", "first_name"], subject: "Subject goes here", body: "Hey {{first_name}},\n\nWrite your message here.\n\n— Anthony\nFounder, Central Group Events" },
 ];
 
 export function btlTemplateDef(key: string): BtlTemplateDef | undefined {

@@ -1236,7 +1236,7 @@ ${blogList || "_No recent posts yet._"}
   app.get("/api/admin/btl/cadence/:key/preview", requireAuth(), async (req: Request, res: Response) => {
     try {
       const { renderBtlTemplate, buildBtlRenderCtx } = await import("./btl-cadence");
-      const { btlShell } = await import("./btl-emails");
+      const { btlShell, BTL_NEUTRAL_FOOTER_KEYS } = await import("./btl-emails");
       const { btlUnsubscribeUrl } = await import("./btl-mailer");
       const ctx = await buildBtlRenderCtx();
       const tpl = await renderBtlTemplate(String(req.params.key), { name: "Jordan", email: "preview@example.com", contactSheetOptin: true }, ctx);
@@ -1246,7 +1246,7 @@ ${blogList || "_No recent posts yet._"}
       const { cidsToDataUris } = await import("./btl-brand");
       const { ensureEmailImages } = await import("./btl-mailer");
       await ensureEmailImages(tpl.body);
-      const html = cidsToDataUris(btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com")));
+      const html = cidsToDataUris(btlShell(tpl.body, btlUnsubscribeUrl("preview@example.com"), BTL_NEUTRAL_FOOTER_KEYS.has(String(req.params.key))));
       res.json({ subject: tpl.subject, html });
     } catch (err) {
       res.status(500).json({ message: "Internal server error" });
@@ -1279,7 +1279,7 @@ ${blogList || "_No recent posts yet._"}
       const to = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) ? raw : "centralgroupevents@gmail.com";
       const ctx = await buildBtlRenderCtx();
       const tpl = renderBtlFromTexts(texts, { name: "Anthony", email: to }, ctx);
-      const result = await sendBtlTestEmail(to, tpl);
+      const result = await sendBtlTestEmail(to, tpl, key);
       if (!result.ok) return res.status(502).json({ message: result.error, to });
       res.json({ sent: true, to });
     } catch (err) {
@@ -1503,20 +1503,68 @@ ${blogList || "_No recent posts yet._"}
       const key = String(req.params.key);
       const { btlTemplateDef } = await import("./btl-emails");
       if (!btlTemplateDef(key)) return res.status(404).json({ message: `Unknown template "${key}"` });
-      const { name, email, cc } = (req.body ?? {}) as { name?: string; email?: string; cc?: string };
+      const { name, email, cc, bcc, fileIds } = (req.body ?? {}) as { name?: string; email?: string; cc?: string; bcc?: string; fileIds?: unknown };
       const to = String(email || "").trim().toLowerCase();
       const who = String(name || "").trim();
       if (!EMAIL_RE.test(to)) return res.status(400).json({ message: "Enter a valid email" });
       if (!who) return res.status(400).json({ message: "Enter their name" });
-      let ccList: string[];
-      try { ccList = parseCcList(cc); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
-      const r = await sendTemplateToPerson(key, who, to, ccList);
+      const { parseFileIds } = await import("./btl-scheduled");
+      const { checkFileIds } = await import("./btl-files");
+      let ccList: string[], bccList: string[];
+      try { ccList = parseCcList(cc); bccList = parseCcList(bcc, "BCC"); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+      const ids = parseFileIds(fileIds);
+      const fileErr = await checkFileIds(ids);
+      if (fileErr) return res.status(400).json({ message: fileErr });
+      const r = await sendTemplateToPerson(key, who, to, ccList, { bcc: bccList, fileIds: ids });
       if (!r.ok) return res.status(502).json({ message: r.error, to });
-      res.json({ sent: true, to, cc: ccList });
+      res.json({ sent: true, to, cc: ccList, bcc: bccList.length, files: ids.length });
     } catch (err) {
       console.error("[btl/template send] error:", err);
       const detail = err instanceof Error ? err.message.slice(0, 300) : "unknown";
       res.status(500).json({ message: `Send failed: ${detail}` });
+    }
+  });
+
+  // ── Email file library (attachments) ───────────────────────────────────
+  const emailFileUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } });
+
+  app.get("/api/admin/btl/files", requireAuth(), async (_req: Request, res: Response) => {
+    try {
+      const { listBtlFiles } = await import("./btl-files");
+      res.json(await listBtlFiles());
+    } catch {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/btl/files", requireAuth(), (req: Request, res: Response) => {
+    emailFileUpload.single("file")(req, res, async (err: unknown) => {
+      try {
+        if (err) {
+          const tooBig = (err as { code?: string }).code === "LIMIT_FILE_SIZE";
+          return res.status(400).json({ message: tooBig ? "That file is over 15 MB. Send it as a link instead." : "Upload failed." });
+        }
+        const f = (req as Request & { file?: { originalname: string; mimetype: string; buffer: Buffer } }).file;
+        if (!f || f.buffer.length === 0) return res.status(400).json({ message: "Choose a file." });
+        const { checkUploadName, saveBtlFile } = await import("./btl-files");
+        const bad = checkUploadName(f.originalname);
+        if (bad) return res.status(400).json({ message: bad });
+        res.status(201).json(await saveBtlFile(f.originalname, f.mimetype, f.buffer));
+      } catch (e) {
+        console.error("[btl/files] error:", e);
+        res.status(500).json({ message: "Internal server error" });
+      }
+    });
+  });
+
+  app.delete("/api/admin/btl/files/:id", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      const { deleteBtlFile } = await import("./btl-files");
+      const ok = await deleteBtlFile(String(req.params.id).replace(/[^a-f0-9]/g, ""));
+      if (!ok) return res.status(404).json({ message: "Not found" });
+      res.json({ deleted: true });
+    } catch {
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -1880,16 +1928,20 @@ ${blogList || "_No recent posts yet._"}
   // short — use a send time for bigger lists.
   app.post("/api/admin/btl/templates/:key/send-many", requireAuth(), async (req: Request, res: Response) => {
     try {
-      const { sendTemplateToPerson, parseCcList, EMAIL_RE } = await import("./btl-scheduled");
+      const { sendTemplateToPerson, parseCcList, parseFileIds, EMAIL_RE } = await import("./btl-scheduled");
       const { BTL_SLUG: slug, btlTemplateDef } = await import("./btl-emails");
       const { btlSendPause } = await import("./btl-mailer");
       const { etToUtc } = await import("./btl-cadence");
+      const { checkFileIds, loadMailFiles, saveSendExtras } = await import("./btl-files");
       const key = String(req.params.key);
       if (!btlTemplateDef(key)) return res.status(404).json({ message: `Unknown template "${key}"` });
-      const b = (req.body ?? {}) as { recipients?: Array<{ name?: string; email?: string }>; cc?: string; sendAtEt?: string };
+      const b = (req.body ?? {}) as { recipients?: Array<{ name?: string; email?: string }>; cc?: string; bcc?: string; fileIds?: unknown; sendAtEt?: string };
       if (!Array.isArray(b.recipients) || b.recipients.length === 0) return res.status(400).json({ message: "Pick at least one person" });
-      let ccList: string[];
-      try { ccList = parseCcList(b.cc); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+      let ccList: string[], bccList: string[];
+      try { ccList = parseCcList(b.cc); bccList = parseCcList(b.bcc, "BCC"); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+      const fileIds = parseFileIds(b.fileIds);
+      const fileErr = await checkFileIds(fileIds);
+      if (fileErr) return res.status(400).json({ message: fileErr });
 
       // Clean + de-duplicate, then drop anyone who unsubscribed.
       const seen = new Set<string>();
@@ -1922,7 +1974,8 @@ ${blogList || "_No recent posts yet._"}
         if (sendAt.getTime() > Date.now() + 366 * 24 * 3600_000) return res.status(400).json({ message: "Pick a time within the next year" });
         if (targets.length > 100) return res.status(400).json({ message: "Schedule up to 100 people at a time" });
         for (const t of targets) {
-          await storage.createBtlScheduledSend({ kind: "person", templateKey: key, recipientName: t.name, recipientEmail: t.email, cc: ccList.join(", ") || null, inviteeIds: null, sendAt });
+          const row = await storage.createBtlScheduledSend({ kind: "person", templateKey: key, recipientName: t.name, recipientEmail: t.email, cc: ccList.join(", ") || null, inviteeIds: null, sendAt });
+          await saveSendExtras(row.id, { bcc: bccList, fileIds });
         }
         return res.status(201).json({ scheduled: targets.length, skipped });
       }
@@ -1930,8 +1983,9 @@ ${blogList || "_No recent posts yet._"}
       if (targets.length > 40) return res.status(400).json({ message: "Send up to 40 people at once, or pick a send time to schedule more" });
       let sent = 0;
       const failed: Array<{ email: string; error: string }> = [];
+      const files = await loadMailFiles(fileIds);
       for (const t of targets) {
-        const r = await sendTemplateToPerson(key, t.name, t.email, ccList);
+        const r = await sendTemplateToPerson(key, t.name, t.email, ccList, { bcc: bccList, fileIds }, files);
         if (r.ok) { sent++; await btlSendPause(); }
         else failed.push({ email: t.email, error: r.error });
       }
@@ -1967,9 +2021,15 @@ ${blogList || "_No recent posts yet._"}
         const who = String(b.name || "").trim();
         if (!EMAIL_RE.test(to)) return res.status(400).json({ message: "Enter a valid email" });
         if (!who) return res.status(400).json({ message: "Enter their name" });
-        let ccList: string[];
-        try { ccList = parseCcList(b.cc); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+        let ccList: string[], bccList: string[];
+        try { ccList = parseCcList(b.cc); bccList = parseCcList((b as { bcc?: string }).bcc, "BCC"); } catch (e) { return res.status(400).json({ message: (e as Error).message }); }
+        const { parseFileIds } = await import("./btl-scheduled");
+        const { checkFileIds, saveSendExtras } = await import("./btl-files");
+        const ids = parseFileIds((b as { fileIds?: unknown }).fileIds);
+        const fileErr = await checkFileIds(ids);
+        if (fileErr) return res.status(400).json({ message: fileErr });
         const row = await storage.createBtlScheduledSend({ kind: "person", templateKey: key, recipientName: who, recipientEmail: to, cc: ccList.join(", ") || null, inviteeIds: null, sendAt });
+        await saveSendExtras(row.id, { bcc: bccList, fileIds: ids });
         return res.status(201).json(row);
       }
 
