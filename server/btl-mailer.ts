@@ -12,7 +12,7 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { signToken, encodeEmail } from "./email-compliance";
-import { btlShell, BTL_FROM_NAME, BTL_SLUG, CGE_LOGO_CID } from "./btl-emails";
+import { btlShell, BTL_FROM_NAME, BTL_SLUG, CGE_LOGO_CID, BTL_NEUTRAL_FOOTER_KEYS } from "./btl-emails";
 import { inlineImages, BTL_SPEAKER_DEFAULTS, setUploadedAssets, uploadedAssetsAgeMs, hasUploadedAsset } from "./btl-brand";
 
 // The wordmark ships INSIDE each email as an inline (CID) attachment, so it
@@ -68,7 +68,7 @@ export async function deliverBtlEmail(
   recipient: BtlRecipient,
   templateKey: string,
   tpl: { subject: string; body: string },
-  opts?: { force?: boolean; cc?: string[]; errorOut?: { message?: string } },
+  opts?: { force?: boolean; cc?: string[]; bcc?: string[]; files?: Array<{ filename: string; content: Buffer; contentType: string }>; errorOut?: { message?: string } },
 ): Promise<"sent" | "skipped" | "failed"> {
   const email = recipient.email.toLowerCase().trim();
   // force skips the dedup gate — used by the admin "Resend" action so a
@@ -79,7 +79,7 @@ export async function deliverBtlEmail(
   // Backs every cid: image (logos, speaker photos) with its file and drops
   // any whose file is missing.
   await ensureEmailImages(tpl.body);
-  const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email)));
+  const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email), BTL_NEUTRAL_FOOTER_KEYS.has(templateKey)));
   // Open-tracking pixel — signed per recipient, stamps emailOpenedAt on
   // first render (see GET /api/build-to-last/open).
   const pixel = `<img src="${btlSiteBase()}/api/build-to-last/open?e=${encodeEmail(email)}&t=${signToken(email)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0" />`;
@@ -89,10 +89,11 @@ export async function deliverBtlEmail(
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
       to: email,
       cc: opts?.cc && opts.cc.length > 0 ? opts.cc : undefined,
+      bcc: opts?.bcc && opts.bcc.length > 0 ? opts.bcc : undefined,
       replyTo: "centralgroupevents@gmail.com",
       subject: tpl.subject,
       html,
-      attachments: shell.attachments.length > 0 ? shell.attachments : undefined,
+      attachments: [...shell.attachments, ...(opts?.files ?? [])].length > 0 ? [...shell.attachments, ...(opts?.files ?? [])] : undefined,
     });
     await storage.recordBtlEmailSend({
       eventSlug: BTL_SLUG,
@@ -128,6 +129,7 @@ export async function deliverBtlEmail(
 export async function sendBtlTestEmail(
   to: string,
   tpl: { subject: string; body: string },
+  templateKey?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const email = to.toLowerCase().trim();
   if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
@@ -135,7 +137,7 @@ export async function sendBtlTestEmail(
   }
   try {
     await ensureEmailImages(tpl.body);
-    const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email)));
+    const shell = inlineImages(btlShell(tpl.body, btlUnsubscribeUrl(email), !!templateKey && BTL_NEUTRAL_FOOTER_KEYS.has(templateKey)));
     await transporter.sendMail({
       from: `"${BTL_FROM_NAME}" <${process.env.GMAIL_USER}>`,
       to: email,

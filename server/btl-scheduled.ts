@@ -6,16 +6,22 @@ import { storage } from "./storage";
 import { BTL_SLUG } from "./btl-emails";
 import { getBtlTemplateTexts, renderBtlFromTexts, buildBtlRenderCtx } from "./btl-cadence";
 import { deliverBtlEmail, btlSendPause } from "./btl-mailer";
+import { loadMailFiles, loadSendExtras, type SendExtras } from "./btl-files";
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Parse a comma/semicolon/space separated CC string. Throws on a bad address. */
-export function parseCcList(raw: string | null | undefined): string[] {
+export function parseCcList(raw: string | null | undefined, label = "CC"): string[] {
   const list = Array.from(new Set(String(raw || "").split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean)));
   const bad = list.find((c) => !EMAIL_RE.test(c));
-  if (bad) throw new Error(`"${bad}" isn't a valid CC email`);
-  if (list.length > 5) throw new Error("CC up to 5 people");
+  if (bad) throw new Error(`"${bad}" isn't a valid ${label} email`);
+  if (list.length > 5) throw new Error(`${label} up to 5 people`);
   return list;
+}
+
+/** Parse the optional file ids sent with a send (de-duplicated, max 10). */
+export function parseFileIds(raw: unknown): string[] {
+  return Array.from(new Set((Array.isArray(raw) ? raw : []).map((x) => String(x)).filter((x) => /^[a-f0-9]{12}$/.test(x)))).slice(0, 10);
 }
 
 /** One template → one person (+ optional CC). Real subject, no dedup. */
@@ -24,13 +30,17 @@ export async function sendTemplateToPerson(
   name: string,
   email: string,
   cc: string[],
+  extras?: SendExtras,
+  /** Already-loaded attachments, so a mass send reads each file once. */
+  preloaded?: Array<{ filename: string; content: Buffer; contentType: string }>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const texts = await getBtlTemplateTexts(key);
   if (!texts) return { ok: false, error: `Unknown template "${key}"` };
   const ctx = await buildBtlRenderCtx();
   const tpl = renderBtlFromTexts(texts, { name, email }, ctx);
   const errorOut: { message?: string } = {};
-  const outcome = await deliverBtlEmail({ email }, key, tpl, { force: true, cc, errorOut });
+  const files = preloaded ?? (extras ? await loadMailFiles(extras.fileIds) : []);
+  const outcome = await deliverBtlEmail({ email }, key, tpl, { force: true, cc, bcc: extras?.bcc ?? [], files, errorOut });
   return outcome === "sent" ? { ok: true } : { ok: false, error: errorOut.message || "Send failed" };
 }
 
@@ -73,7 +83,7 @@ export async function runDueScheduledSends(): Promise<Array<{ id: number; kind: 
   for (const row of due) {
     try {
       if (row.kind === "person") {
-        const r = await sendTemplateToPerson(row.templateKey, row.recipientName || "", row.recipientEmail || "", parseCcList(row.cc));
+        const r = await sendTemplateToPerson(row.templateKey, row.recipientName || "", row.recipientEmail || "", parseCcList(row.cc), await loadSendExtras(row.id));
         if (r.ok) {
           await storage.finishBtlScheduledSend(row.id, "sent", `Sent to ${row.recipientEmail}`);
           out.push({ id: row.id, kind: row.kind, status: "sent", message: `Sent to ${row.recipientEmail}` });

@@ -1289,6 +1289,87 @@ function parseExtraRecipients(text: string): Array<{ name: string; email: string
 }
 
 /** Tick the people a template should go to — invitees and RSVPs in one list. */
+interface EmailFile { id: string; name: string; size: number; type: string; at: string }
+
+/** BCC + attachments for a send. Files are uploaded once to a small library and ticked per send. */
+function SendExtras({ bcc, setBcc, fileIds, setFileIds }: {
+  bcc: string;
+  setBcc: (v: string) => void;
+  fileIds: string[];
+  setFileIds: (v: string[]) => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: files = [] } = useQuery<EmailFile[]>({ queryKey: ["/api/admin/btl/files"] });
+  const [uploading, setUploading] = useState(false);
+  const mb = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+  const total = files.filter((f) => fileIds.includes(f.id)).reduce((a, f) => a + f.size, 0);
+
+  async function upload(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(list)) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/admin/btl/files", { method: "POST", body: fd, credentials: "include" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.message || `Couldn't upload ${file.name}`);
+        setFileIds([...fileIds, body.id]);
+      }
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/files"] });
+    } catch (err) {
+      toast({ title: "Upload failed", description: String((err as Error).message), variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function remove(f: EmailFile) {
+    if (!window.confirm(`Delete "${f.name}" from the library?`)) return;
+    try {
+      await apiRequest("DELETE", `/api/admin/btl/files/${f.id}`);
+      setFileIds(fileIds.filter((x) => x !== f.id));
+      qc.invalidateQueries({ queryKey: ["/api/admin/btl/files"] });
+    } catch (err) {
+      toast({ title: "Couldn't delete", description: String((err as Error).message), variant: "destructive" });
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <Label className="text-white/70 text-xs">BCC (optional, up to 5: each recipient gets their own copy and never sees these)</Label>
+        <Input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="you@…, team@…" className="bg-black/40 border-white/10 h-9" data-testid="input-btl-send-bcc" />
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-3">
+          <Label className="text-white/70 text-xs">Attachments (any file type, up to 15 MB each, about 18 MB per email)</Label>
+          <label className="px-2.5 py-1 rounded-md border border-primary/40 text-primary text-xs cursor-pointer hover:bg-primary/10" data-testid="button-btl-send-upload">
+            {uploading ? "Uploading…" : "Upload a file"}
+            <input type="file" multiple className="hidden" disabled={uploading} onChange={(e) => { const l = e.target.files; void upload(l).then(() => { e.target.value = ""; }); }} data-testid="input-btl-send-file" />
+          </label>
+        </div>
+        {files.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No files yet. Upload a sponsorship package, deck, spreadsheet, image or zip, then tick it for this send.</p>
+        ) : (
+          <div className="rounded-lg border border-white/10 divide-y divide-white/5 max-h-44 overflow-y-auto">
+            {files.map((f) => (
+              <div key={f.id} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                <input type="checkbox" checked={fileIds.includes(f.id)} onChange={(e) => setFileIds(e.target.checked ? [...fileIds, f.id] : fileIds.filter((x) => x !== f.id))} data-testid={`checkbox-btl-file-${f.id}`} />
+                <span className="text-white truncate flex-1">{f.name}</span>
+                <span className="text-white/40">{mb(f.size)}</span>
+                <button type="button" onClick={() => remove(f)} className="text-white/40 hover:text-red-300">Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {fileIds.length > 0 && <p className={`text-xs ${total > 18 * 1048576 ? "text-red-300" : "text-white/50"}`}>{fileIds.length} attached · {mb(total)}{total > 18 * 1048576 ? ": too large for one email, send a link instead" : ""}</p>}
+      </div>
+    </div>
+  );
+}
+
 function RecipientPicker({ templateKey, sel, setSel, extra, setExtra }: {
   templateKey: string;
   sel: Record<string, string>;
@@ -1394,6 +1475,8 @@ function TemplatesView() {
   const [sendName, setSendName] = useState("");
   const [sendEmail, setSendEmail] = useState("");
   const [sendCc, setSendCc] = useState("");
+  const [sendBcc, setSendBcc] = useState("");
+  const [sendFileIds, setSendFileIds] = useState<string[]>([]);
   const [sendWhen, setSendWhen] = useState(""); // "" = now, else ET datetime-local
   // "Pick people" mode: tick several recipients from invitees + RSVPs.
   const [sendMode, setSendMode] = useState<"one" | "pick">("one");
@@ -1407,7 +1490,7 @@ function TemplatesView() {
       return;
     }
     const scheduling = sendWhen !== "";
-    const ccPart = sendCc.trim() ? ` (cc: ${sendCc.trim()})` : "";
+    const ccPart = `${sendCc.trim() ? ` (cc: ${sendCc.trim()})` : ""}${sendBcc.trim() ? ` (bcc: ${sendBcc.trim()})` : ""}${sendFileIds.length ? ` with ${sendFileIds.length} attachment${sendFileIds.length === 1 ? "" : "s"}` : ""}`;
     const confirmMsg = scheduling
       ? `Schedule "${selected.label}" to ${sendName.trim()} <${sendEmail.trim()}>${ccPart} for ${sendWhen.replace("T", " ")} ET? You can cancel it from the Cadence view until it fires.`
       : `Send "${selected.label}" to ${sendName.trim()} <${sendEmail.trim()}>${ccPart} now? It comes from centralgroupevents@gmail.com as Anthony.`;
@@ -1415,11 +1498,11 @@ function TemplatesView() {
     setBusy("send");
     try {
       if (scheduling) {
-        await apiRequest("POST", "/api/admin/btl/scheduled", { kind: "person", templateKey: selected.key, name: sendName.trim(), email: sendEmail.trim(), cc: sendCc.trim(), sendAtEt: sendWhen });
+        await apiRequest("POST", "/api/admin/btl/scheduled", { kind: "person", templateKey: selected.key, name: sendName.trim(), email: sendEmail.trim(), cc: sendCc.trim(), bcc: sendBcc.trim(), fileIds: sendFileIds, sendAtEt: sendWhen });
         toast({ title: "Send scheduled", description: `Fires ${sendWhen.replace("T", " ")} ET — see the Cadence view to cancel.` });
         qc.invalidateQueries({ queryKey: ["/api/admin/btl/scheduled"] });
       } else {
-        const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send`, { name: sendName.trim(), email: sendEmail.trim(), cc: sendCc.trim() });
+        const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send`, { name: sendName.trim(), email: sendEmail.trim(), cc: sendCc.trim(), bcc: sendBcc.trim(), fileIds: sendFileIds });
         const body = await res.json();
         toast({ title: `Sent to ${body.to}${body.cc?.length ? ` (cc: ${body.cc.join(", ")})` : ""}` });
       }
@@ -1427,6 +1510,8 @@ function TemplatesView() {
       setSendName("");
       setSendEmail("");
       setSendCc("");
+      setSendBcc("");
+      setSendFileIds([]);
       setSendWhen("");
     } catch (err) {
       toast({ title: scheduling ? "Couldn't schedule" : "Send failed", description: String((err as Error).message), variant: "destructive" });
@@ -1450,14 +1535,14 @@ function TemplatesView() {
       return;
     }
     const scheduling = sendWhen !== "";
-    const ccPart = sendCc.trim() ? ` (cc: ${sendCc.trim()})` : "";
+    const ccPart = `${sendCc.trim() ? ` (cc: ${sendCc.trim()})` : ""}${sendBcc.trim() ? ` (bcc: ${sendBcc.trim()})` : ""}${sendFileIds.length ? ` with ${sendFileIds.length} attachment${sendFileIds.length === 1 ? "" : "s"}` : ""}`;
     const confirmMsg = scheduling
       ? `Schedule "${selected.label}" to ${recipients.length} ${recipients.length === 1 ? "person" : "people"}${ccPart} for ${sendWhen.replace("T", " ")} ET? You can cancel each one from the Cadence view until it fires.`
       : `Send "${selected.label}" to ${recipients.length} ${recipients.length === 1 ? "person" : "people"}${ccPart} now? Each gets their own email from centralgroupevents@gmail.com as Anthony.`;
     if (!window.confirm(confirmMsg)) return;
     setBusy("send");
     try {
-      const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send-many`, { recipients, cc: sendCc.trim(), sendAtEt: sendWhen || undefined });
+      const res = await apiRequest("POST", `/api/admin/btl/templates/${selected.key}/send-many`, { recipients, cc: sendCc.trim(), bcc: sendBcc.trim(), fileIds: sendFileIds, sendAtEt: sendWhen || undefined });
       const body = await res.json();
       const skipNote = body.skipped?.length ? ` · skipped ${body.skipped.length} (${body.skipped.map((x: { email: string; reason: string }) => `${x.email}: ${x.reason}`).join(", ")})` : "";
       if (scheduling) {
@@ -1470,6 +1555,8 @@ function TemplatesView() {
       }
       setPickSel({});
       setPickExtra("");
+      setSendBcc("");
+      setSendFileIds([]);
       setSendWhen("");
     } catch (err) {
       toast({ title: scheduling ? "Couldn't schedule" : "Send failed", description: String((err as Error).message), variant: "destructive" });
@@ -1680,6 +1767,7 @@ function TemplatesView() {
                     {sendWhen ? "Schedule send" : `Send to ${Object.keys(pickSel).length + parseExtraRecipients(pickExtra).filter((r) => pickSel[r.email] === undefined).length || ""}`.trim()}
                   </Button>
                 </div>
+                <SendExtras bcc={sendBcc} setBcc={setSendBcc} fileIds={sendFileIds} setFileIds={setSendFileIds} />
                 <WhenPicker value={sendWhen} onChange={setSendWhen} />
               </>
             ) : (
@@ -1706,6 +1794,7 @@ function TemplatesView() {
                 {sendWhen ? "Schedule send" : "Send now"}
               </Button>
             </div>
+            <SendExtras bcc={sendBcc} setBcc={setSendBcc} fileIds={sendFileIds} setFileIds={setSendFileIds} />
             <WhenPicker value={sendWhen} onChange={setSendWhen} />
               </>
             )}
